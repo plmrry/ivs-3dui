@@ -7,7 +7,7 @@ start = ->
   CAMERA_RADIUS = 1000
   INITIAL_THETA = degToRad 80 # longitude
   INITIAL_PHI = degToRad 45 # 90 - latitude
-  INITIAL_ZOOM = 20
+  INITIAL_ZOOM = 40
  
   # theta = longitude
   # phi = latitude
@@ -19,12 +19,7 @@ start = ->
     length: 10
     height: 3
     
-  buttons = [
-    { name: "up" }
-    { name: "camera", html: '<i class="material-icons" style="display: block">3d_rotation</i>' }
-    { name: "zoomIn", html: '<i class="material-icons" style="display: block">zoom_in</i>' }
-    { name: "zoomOut", html: '<i class="material-icons" style="display: block">zoom_out</i>' }
-  ]
+  DEFAULT_OBJECT_RADIUS = room.width * 0.1
   
   # ---------------------------------------------- DOM Init
   
@@ -36,6 +31,13 @@ start = ->
       
   canvas = main.append('canvas').node()
   
+  sceneControls = main
+    .append('div').classed 'container', true
+    .style
+      position: 'absolute'
+      right: '0'
+      top: '1%'
+  
   # ---------------------------------------------- Mode Buttons
   
   modeButtons = do ->
@@ -44,29 +46,39 @@ start = ->
       { name: 'zone' }
       { name: 'trajectory' }
     ]
-    return main.append 'div'
-      .classed 'btn-group mode', true
-      .style
-        position: 'absolute'
-        right: '1%'
-        top: '1%'
+    return sceneControls
+      .append('div').classed 'row', true
+      .append('div').classed 'col-xs-12', true
+      .append('div').classed 'btn-group mode', true
       .call (group) ->
         group.selectAll('button').data butts
           .enter().append('button')
           .classed 'btn btn-secondary', true
-          .attr 'disabled', true
+          .property 'disabled', true
+          .attr 'id', (d) -> d.name
           .html (d) -> d.html ? d.name
   
   # ---------------------------------------------- Camera Controls
   
   CONTROLS_MARGIN = right: '10%', bottom: '10%'
       
-  cameraControls = main.append "div"
-    .classed "controls", true
+  cameraControls = main
+    .append('div').classed 'container', true
     .style
       position: 'absolute'
-      right: '1%'
+      right: '0'
       bottom: '1%'
+    .append('div').classed 'row', true
+    .append('div').classed 'col-xs-12', true
+    .append('div').classed "controls", true
+      
+  buttons = [
+    { name: "north" }, { name: "top" }
+    { name: "phi_45", html: '45' }
+    { name: "camera", html: '<i class="material-icons" style="display: block">3d_rotation</i>' }
+    { name: "zoomIn", html: '<i class="material-icons" style="display: block">zoom_in</i>' }
+    { name: "zoomOut", html: '<i class="material-icons" style="display: block">zoom_out</i>' }
+  ]
       
   butts = cameraControls.selectAll("button").data(buttons)
   butts.enter().append("button")
@@ -79,6 +91,8 @@ start = ->
     
   # ---------------------------------------------- Three.js Init
   
+  raycaster = new THREE.Raycaster()
+  
   gridHelper = new THREE.GridHelper 100, 10
   axisHelper = new THREE.AxisHelper 5
   mainObject = new THREE.Object3D()
@@ -86,8 +100,10 @@ start = ->
   mainObject.add axisHelper
   
   geometry = new THREE.BoxGeometry room.width, room.height, room.length
-  material = new THREE.MeshBasicMaterial color: 0x00ff00, transparent: true, opacity: 0.1
+  material = new THREE.MeshBasicMaterial 
+    color: 0x00ff00, transparent: true, opacity: 0.1
   roomObject = new THREE.Mesh( geometry, material );
+  roomObject.name = 'room'
   edges = new THREE.EdgesHelper( roomObject, 0x00ff00 )
   mainObject.add( roomObject );
   mainObject.add( edges );
@@ -114,11 +130,30 @@ start = ->
     c.updateProjectionMatrix()
     return c
   
-  # ---------------------------------------------- Streams
+  # ------------------------------------------------------------- Streams
   
   animation = Rx.Observable.create (observer) ->
     d3.timer -> observer.onNext()
   .timestamp()
+  
+  # ---------------------------------------------- Objects
+  
+  canvasClick = stream.create (observer) ->
+    d3.select(canvas).on 'click', -> observer.onNext()
+  
+  newObject = do ->
+    node = modeButtons.select('#object').node()
+    stream.fromEvent node, 'click'
+    
+  # TODO: Stateful
+  newObject.subscribe ->
+    room = roomObject
+    sphere = new THREE.SphereGeometry DEFAULT_OBJECT_RADIUS
+    material = new THREE.MeshBasicMaterial
+      color: 0x0000ff, wireframe: true
+    object = new THREE.Mesh( sphere, material )
+    room.add object
+
   
   # ---------------------------------------------- Resize
   
@@ -154,19 +189,31 @@ start = ->
       camera.lookAt new THREE.Vector3()
       camera
       
-  up = stream.fromEvent d3.select('#up').node(), 'click'
+  cameraPolarTween = (end) ->
+    stream.just (camera) ->
+      polarStart = camera.position._polar
+      camera._interpolator = d3.interpolate polarStart, end
+      camera._update = (t) -> (c) ->
+        c.position._polar = c._interpolator t
+        c.position.copy polarToVector c.position._polar
+        c.lookAt c._lookAt
+        return c
+      return camera
+      
+  north = stream.fromEvent d3.select('#north').node(), 'click'
     .flatMap ->
-      stream.just (camera) ->
-        end = theta: 0
-        polarStart = camera.position._polar
-        camera._interpolator = d3.interpolate polarStart, end
-        camera._update = (t) -> (c) ->
-          c.position._polar = c._interpolator t
-          c.position.copy polarToVector c.position._polar
-          c.lookAt c._lookAt
-          return c
-        return camera
-      .concat getTweenUpdateStream(1000)
+      cameraPolarTween theta: 0
+        .concat getTweenUpdateStream(1000)
+      
+  top = stream.fromEvent d3.select('#top').node(), 'click'
+    .flatMap ->
+      cameraPolarTween phi: MIN_PHI
+        .concat getTweenUpdateStream(1000)
+      
+  phi_45 = stream.fromEvent d3.select('#phi_45').node(), 'click'
+    .flatMap ->
+      cameraPolarTween phi: degToRad 45
+        .concat getTweenUpdateStream(1000)
       
   # ---------------------------------------------- Camera Zoom
   
@@ -189,7 +236,14 @@ start = ->
       
   # ---------------------------------------------- Camera
   
-  cameraUpdateStreams = [ cameraPosition, cameraZoom, cameraSize, up ]
+  cameraUpdateStreams = [ 
+    cameraPosition, 
+    cameraZoom, 
+    cameraSize, 
+    north, 
+    top,
+    phi_45
+  ]
   
   # A stream that emits camera updaters
   # @emits (camera) => camera
@@ -206,6 +260,31 @@ start = ->
     .bufferWithCount 2, 1
     .filter (a) -> a[0] isnt a[1]
     .map (a) -> a[1]
+    
+  canvasClick.withLatestFrom camera
+    .subscribe (arr) ->
+      camera = arr[1]
+      
+      # FIXME
+      NDC = [
+        d3.scale.linear().range [-1, 1]
+        d3.scale.linear().range [1, -1]
+      ]
+      _c = d3.select canvas
+      NDC[0].domain [0, _c.attr('width')]
+      NDC[1].domain [0, _c.attr('height')]
+      
+      mouse = d3.mouse canvas
+        .map (d, i) -> NDC[i] d
+      
+      raycaster.setFromCamera { x: mouse[0], y: mouse[1] }, camera
+      intersects = raycaster.intersectObjects roomObject.children, false
+      first = intersects[0]
+      console.log first
+      
+      sceneControls.selectAll('#objectView').data(Array(1))
+        .enter().append('div').classed('card', true)
+        .attr id: 'objectView'
   
   animation.withLatestFrom renderer, camera
     .subscribe (arr) ->
@@ -215,23 +294,6 @@ start = ->
   aboveSwitch.subscribe (isAbove) -> 
     main.select('.mode').selectAll('button')
       .property 'disabled', not isAbove
-  
-  #<div class="card">
-    #<img class="card-img-top" data-src="holder.js/100%x180/?text=Image cap" alt="Card image cap">
-    #<div class="card-block">
-      #<h4 class="card-title">Card title</h4>
-      #<p class="card-text">Some quick example text to build on the card title and make up the bulk of the card's content.</p>
-    #</div>
-    #<ul class="list-group list-group-flush">
-      #<li class="list-group-item">Cras justo odio</li>
-      #<li class="list-group-item">Dapibus ac facilisis in</li>
-      #<li class="list-group-item">Vestibulum at eros</li>
-    #</ul>
-    #<div class="card-block">
-      #<a href="#" class="card-link">Card link</a>
-      #<a href="#" class="card-link">Another link</a>
-    #</div>
-  #</div>
   
 # ------------------------------------------------------- Functions
 
