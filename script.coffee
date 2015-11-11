@@ -8,9 +8,9 @@ INITIAL_ZOOM = 40
 MIN_PHI = 0.01
 MAX_PHI = Math.PI * 0.5
 
-start = ->
-  stream = Rx.Observable
+stream = Rx.Observable
 
+start = ->
   room =
     width: 15
     length: 10
@@ -41,31 +41,7 @@ start = ->
 
   # ---------------------------------------------- Camera Controls
 
-  CONTROLS_MARGIN = right: '10%', bottom: '10%'
-
-  cameraControls = main
-    .append('div').classed 'container', true
-    .style
-      position: 'absolute'
-      right: '0'
-      bottom: '1%'
-    .append('div').classed 'row', true
-    .append('div').classed 'col-xs-12', true
-    .append('div').classed "controls", true
-
-  buttons = [
-    { name: "north" }, { name: "top" }
-    { name: "phi_45", html: '45' }
-    { name: "camera", html: '<i class="material-icons" style="display: block">3d_rotation</i>' }
-    { name: "zoomIn", html: '<i class="material-icons" style="display: block">zoom_in</i>' }
-    { name: "zoomOut", html: '<i class="material-icons" style="display: block">zoom_out</i>' }
-  ]
-
-  butts = cameraControls.selectAll("button").data(buttons)
-  butts.enter().append("button")
-    .classed("btn btn-secondary", true)
-    .attr "id", (d) -> d.name
-    .html (d) -> d.html ? d.name
+  main.call addCameraControls
 
   # ---------------------------------------------- Three.js Init
 
@@ -163,22 +139,24 @@ start = ->
 
   # ---------------------------------------------- Camera Zoom
 
-  zooms = [['In',2],['Out',.5]].map (a) ->
-    node = d3.select("#zoom#{a[0]}").node()
-    stream.fromEvent node, 'click'
-      .map -> a[1]
+  cameraZoom = getCameraZoomStream()
 
-  cameraZoom = stream.merge zooms
-    .flatMap (dz) ->
-      stream.just (cam) ->
-        end = cam.zoom * dz
-        cam._interpolator = d3.interpolate cam.zoom, end
-        cam._update = (t) -> (c) ->
-          c.zoom = c._interpolator t
-          c.updateProjectionMatrix()
-          return c
-        return cam
-      .concat getTweenUpdateStream 500
+  # zooms = [['In',2],['Out',.5]].map (a) ->
+  #   node = d3.select("#zoom#{a[0]}").node()
+  #   stream.fromEvent node, 'click'
+  #     .map -> a[1]
+  #
+  # cameraZoom = stream.merge zooms
+  #   .flatMap (dz) ->
+  #     stream.just (cam) ->
+  #       end = cam.zoom * dz
+  #       cam._interpolator = d3.interpolate cam.zoom, end
+  #       cam._update = (t) -> (c) ->
+  #         c.zoom = c._interpolator t
+  #         c.updateProjectionMatrix()
+  #         return c
+  #       return cam
+  #     .concat getTweenUpdateStream 500
 
   # ---------------------------------------------- Camera
 
@@ -222,6 +200,51 @@ start = ->
       .property 'disabled', not isAbove
 
 # ------------------------------------------------------- Functions
+
+getCameraZoomStream = ->
+  zooms = [['In',2],['Out',.5]].map (a) ->
+    node = d3.select("#zoom#{a[0]}").node()
+    stream.fromEvent node, 'click'
+      .map -> a[1]
+
+  return stream.merge zooms
+    .flatMap (dz) ->
+      stream.just (cam) ->
+        end = cam.zoom * dz
+        cam._interpolator = d3.interpolate cam.zoom, end
+        cam._update = (t) -> (c) ->
+          c.zoom = c._interpolator t
+          c.updateProjectionMatrix()
+          return c
+        return cam
+      .concat getTweenUpdateStream 500
+
+addCameraControls = (main) ->
+  cameraControls = main
+    .append('div').classed 'container', true
+    .style
+      position: 'absolute'
+      right: '0'
+      bottom: '1%'
+    .append('div').classed 'row', true
+    .append('div').classed 'col-xs-12', true
+    .append('div').classed "controls", true
+
+  buttons = [
+    { name: "north" }, { name: "top" }
+    { name: "phi_45", html: '45' }
+    { name: "camera", html: '<i class="material-icons" style="display: block">3d_rotation</i>' }
+    { name: "zoomIn", html: '<i class="material-icons" style="display: block">zoom_in</i>' }
+    { name: "zoomOut", html: '<i class="material-icons" style="display: block">zoom_out</i>' }
+  ]
+
+  butts = cameraControls.selectAll("button").data(buttons)
+  butts.enter().append("button")
+    .classed("btn btn-secondary", true)
+    .attr "id", (d) -> d.name
+    .html (d) -> d.html ? d.name
+
+  return null
 
 getModeButtons = (sceneControls) ->
   butts = [
