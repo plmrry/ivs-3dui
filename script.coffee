@@ -48,8 +48,10 @@ start = ->
   raycaster = new THREE.Raycaster()
 
   roomObject = getRoomObject room
+
   mainObject = getMainObject()
   mainObject.add roomObject
+
   scene = new THREE.Scene()
   scene.add mainObject
 
@@ -71,7 +73,6 @@ start = ->
     node = modeButtons.select('#object').node()
     stream.fromEvent node, 'click'
 
-  # TODO: Stateful
   newObject.subscribe ->
     room = roomObject
     sphere = new THREE.SphereGeometry DEFAULT_OBJECT_RADIUS
@@ -99,33 +100,24 @@ start = ->
       c.updateProjectionMatrix()
       return c
 
+  # Normalized device coordinates
+  NDC = do ->
+    _ndc =
+      x: d3.scale.linear().range [-1, 1]
+      y: d3.scale.linear().range [1, -1]
+    return resize
+      .map (s) ->
+        (d) ->
+          d.x.domain [0, s.width]
+          d.y.domain [0, s.height]
+          return d
+      .scan apply, _ndc
+
+  # NDC.subscribe (d) -> console.log d.x.domain()
+
   # ---------------------------------------------- Camera Position
 
-  cameraDrag = d3.behavior.drag()
-  d3.select('#camera').call cameraDrag
-  cameraPosition = Rx.Observable.create (observer) ->
-    cameraDrag.on 'drag', -> observer.onNext d3.event
-  .map (e) ->
-    (camera) ->
-      polar = camera.position._polar
-      polar.phi += degToRad e.dy
-      polar.theta += degToRad e.dx
-      polar.phi = MIN_PHI if polar.phi < MIN_PHI
-      polar.phi = MAX_PHI if polar.phi > MAX_PHI
-      camera.position.copy polarToVector polar
-      camera.lookAt new THREE.Vector3()
-      camera
-
-  cameraPolarTween = (end) ->
-    stream.just (camera) ->
-      polarStart = camera.position._polar
-      camera._interpolator = d3.interpolate polarStart, end
-      camera._update = (t) -> (c) ->
-        c.position._polar = c._interpolator t
-        c.position.copy polarToVector c.position._polar
-        c.lookAt c._lookAt
-        return c
-      return camera
+  cameraPosition = getCameraPositionStream()
 
   cameraButtonStreams = stream.merge [
     [ 'north', theta: 0 ]
@@ -140,23 +132,6 @@ start = ->
   # ---------------------------------------------- Camera Zoom
 
   cameraZoom = getCameraZoomStream()
-
-  # zooms = [['In',2],['Out',.5]].map (a) ->
-  #   node = d3.select("#zoom#{a[0]}").node()
-  #   stream.fromEvent node, 'click'
-  #     .map -> a[1]
-  #
-  # cameraZoom = stream.merge zooms
-  #   .flatMap (dz) ->
-  #     stream.just (cam) ->
-  #       end = cam.zoom * dz
-  #       cam._interpolator = d3.interpolate cam.zoom, end
-  #       cam._update = (t) -> (c) ->
-  #         c.zoom = c._interpolator t
-  #         c.updateProjectionMatrix()
-  #         return c
-  #       return cam
-  #     .concat getTweenUpdateStream 500
 
   # ---------------------------------------------- Camera
 
@@ -180,14 +155,9 @@ start = ->
   sceneDragHandler = d3.behavior.drag()
   d3.select(canvas).call sceneDragHandler
 
-  NDC =
-    x: d3.scale.linear().range [-1, 1]
-    y: d3.scale.linear().range [1, -1]
-
   stream.create (observer) ->
     sceneDragHandler.on 'drag', -> observer.onNext d3.event
   .subscribe (event) ->
-    console.log event.x, event.y
     console.log d3.mouse canvas
 
   animation.withLatestFrom renderer, camera
@@ -201,12 +171,38 @@ start = ->
 
 # ------------------------------------------------------- Functions
 
+cameraPolarTween = (end) ->
+  return stream.just (camera) ->
+    polarStart = camera.position._polar
+    camera._interpolator = d3.interpolate polarStart, end
+    camera._update = (t) -> (c) ->
+      c.position._polar = c._interpolator t
+      c.position.copy polarToVector c.position._polar
+      c.lookAt c._lookAt
+      return c
+    return camera
+
+getCameraPositionStream = ->
+  cameraDrag = d3.behavior.drag()
+  d3.select('#camera').call cameraDrag
+  return Rx.Observable.create (observer) ->
+    cameraDrag.on 'drag', -> observer.onNext d3.event
+  .map (e) ->
+    (camera) ->
+      polar = camera.position._polar
+      polar.phi += degToRad e.dy
+      polar.theta += degToRad e.dx
+      polar.phi = MIN_PHI if polar.phi < MIN_PHI
+      polar.phi = MAX_PHI if polar.phi > MAX_PHI
+      camera.position.copy polarToVector polar
+      camera.lookAt new THREE.Vector3()
+      camera
+
 getCameraZoomStream = ->
   zooms = [['In',2],['Out',.5]].map (a) ->
     node = d3.select("#zoom#{a[0]}").node()
     stream.fromEvent node, 'click'
       .map -> a[1]
-
   return stream.merge zooms
     .flatMap (dz) ->
       stream.just (cam) ->
@@ -229,7 +225,6 @@ addCameraControls = (main) ->
     .append('div').classed 'row', true
     .append('div').classed 'col-xs-12', true
     .append('div').classed "controls", true
-
   buttons = [
     { name: "north" }, { name: "top" }
     { name: "phi_45", html: '45' }
@@ -237,13 +232,11 @@ addCameraControls = (main) ->
     { name: "zoomIn", html: '<i class="material-icons" style="display: block">zoom_in</i>' }
     { name: "zoomOut", html: '<i class="material-icons" style="display: block">zoom_out</i>' }
   ]
-
   butts = cameraControls.selectAll("button").data(buttons)
   butts.enter().append("button")
     .classed("btn btn-secondary", true)
     .attr "id", (d) -> d.name
     .html (d) -> d.html ? d.name
-
   return null
 
 getModeButtons = (sceneControls) ->
