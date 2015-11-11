@@ -85,13 +85,24 @@ start = ->
     .map (e) -> e.target
     .map -> getClientSize main.node()
 
-  firstRenderer = new THREE.WebGLRenderer canvas: canvas
-  firstRenderer.setClearColor "white"
+  renderers = [
+    new THREE.WebGLRenderer canvas: canvas
+    new THREE.WebGLRenderer
+  ].map (r) -> r.setClearColor "white"; r
 
-  renderer = resize.scan (renderer, r) ->
-    renderer.setSize r.width, r.height
-    return renderer
-  , firstRenderer
+  mainRenderer = do ->
+    start = new THREE.WebGLRenderer canvas: canvas
+    start.setClearColor "white"
+    resize.scan (renderer, s) ->
+      renderer.setSize s.width, s.height
+      return renderer
+    , start
+
+  altRenderers = [
+    new THREE.WebGLRenderer
+  ]
+
+  renderers = stream.combineLatest mainRenderer
 
   cameraSize = resize
     .map (s) -> (c) ->
@@ -157,10 +168,11 @@ start = ->
     .subscribe (arr) ->
       console.log arr
 
-  animation.withLatestFrom renderer, camera
+  animation.withLatestFrom renderers, camera
     .subscribe (arr) ->
-      [time, renderer, camera] = arr
-      renderer.render scene, camera
+      [time, renderers, camera] = arr
+      renderers.forEach (r) ->
+        r.render scene, camera
 
   aboveSwitch.subscribe (isAbove) ->
     main.select('.mode').selectAll('button')
