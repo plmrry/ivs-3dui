@@ -30,6 +30,7 @@ start = ->
 
   sceneControls = main
     .append('div').classed 'container', true
+    .attr id: 'sceneControls'
     .style
       position: 'absolute'
       right: '0'
@@ -76,6 +77,8 @@ start = ->
     material = new THREE.MeshBasicMaterial
       color: 0x0000ff, wireframe: true
     object = new THREE.Mesh( sphere, material )
+    i = room.children.length
+    object.name = "Object#{i}"
     room.add object
 
   # ---------------------------------------------- Resize
@@ -85,11 +88,6 @@ start = ->
     .map (e) -> e.target
     .map -> getClientSize main.node()
 
-  renderers = [
-    new THREE.WebGLRenderer canvas: canvas
-    new THREE.WebGLRenderer
-  ].map (r) -> r.setClearColor "white"; r
-
   mainRenderer = do ->
     start = new THREE.WebGLRenderer canvas: canvas
     start.setClearColor "white"
@@ -97,10 +95,6 @@ start = ->
       renderer.setSize s.width, s.height
       return renderer
     , start
-
-  altRenderers = [
-    new THREE.WebGLRenderer
-  ]
 
   renderers = stream.combineLatest mainRenderer
 
@@ -165,8 +159,61 @@ start = ->
   canvasClick = getCanvasClick canvas
     .withLatestFrom NDC, combineNdc(canvas)
     .withLatestFrom camera, getIntersects(roomObject, raycaster)
+    
+  clickedArray = canvasClick
+    .map (a) -> a.slice(0,1)
+    
+  objectCard = clickedArray
+    .map updateHud
+    .flatMap (selection) ->
+      if selection.size() > 0 
+        return stream.just selection.node()
+      else
+        return stream.empty()
+    #.share()
+    
+  hudCanvas = objectCard.map (node) ->
+    return d3.select(node).select('canvas').node()
+    
+  hudCanvas.combineLatest animation
     .subscribe (arr) ->
-      console.log arr
+      [canvas] = arr
+      canvas._renderer.render canvas._scene, canvas._camera
+  
+  # Get streams!!
+  #objectCard.subscribe (node) ->
+    #div = d3.select(node)
+    #object = div.datum().object
+    #clone = object.clone()
+    
+    #hudCamera = new THREE.OrthographicCamera()
+    #hudScene = new THREE.Scene()
+    #hudRenderer = new THREE.WebGLRenderer()
+    #
+    #console.log hudScene.children.length
+    #console.log clone.name
+    #
+     #FIXME
+    #hudScene.add clone
+    #
+    #console.log clone
+    
+  #clickedObject = canvasClick
+    #.filter (a) -> a[0] instanceof Object
+    #.map (a) -> a[0]
+    #.do (o) -> console.log 'clicked', o
+    #.subscribe (o) -> showHud o
+  #
+  #clickedNothing = canvasClick
+    #.filter (arr) -> arr.length is 0
+    #.subscribe -> console.log 'clicked background'
+
+      
+  # ------------------------------------------------------- HUD
+  
+  #hudCamera = new THREE.OrthographicCamera()
+  #hudScene = new THREE.Scene()
+  #hudRenderer = new THREE.WebGLRenderer()
 
   animation.withLatestFrom renderers, camera
     .subscribe (arr) ->
@@ -179,6 +226,41 @@ start = ->
       .property 'disabled', not isAbove
 
 # ------------------------------------------------------- Functions
+
+updateHud = (a) ->
+  card = d3.select('#sceneControls').selectAll('#objectCard').data a
+  card.enter().append('div')
+    .classed 'card', true
+    .attr id: 'objectCard'
+    .each (d) ->
+      console.log 'called'
+      _card = d3.select this
+      _card.append('div').classed('card-block', true)
+        .append 'canvas'
+        .each addHudScene
+      _card.append('div').classed('card-block', true)
+        .append('button').classed('btn btn-secondary', true)
+        .text 'add cone'
+  card.exit()
+    .each (d) ->
+      can = d3.select(this).select('canvas').node()
+      can._renderer.dispose()
+    .remove()
+  return card
+  
+addHudScene = (d) ->
+  c = d3.select this
+  canvas = c.node()
+  geometry = new THREE.BoxGeometry( 1, 1, 1 );
+  material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } )
+	#cube = new THREE.Mesh( geometry, material );
+	
+  canvas._scene = new THREE.Scene()
+  #canvas._scene.add cube
+  
+  canvas._camera = new THREE.OrthographicCamera()
+  canvas._camera.position.z = 5
+  canvas._renderer = new THREE.WebGLRenderer canvas: canvas
 
 combineNdc = (canvas) ->
   (event, ndc) ->
@@ -202,7 +284,7 @@ getIntersects = (object, raycaster) ->
 
 getCanvasClick = (canvas) ->
   return stream.create (observer) ->
-    d3.select(canvas).on 'click', -> observer.onNext()
+    d3.select(canvas).on 'click', => observer.onNext()
 
 getCanvasDrag = (canvas) ->
   canvasDragHandler = d3.behavior.drag()
@@ -263,7 +345,7 @@ addCameraControls = (main) ->
       bottom: '1%'
     .append('div').classed 'row', true
     .append('div').classed 'col-xs-12', true
-    .append('div').classed "controls", true
+    .append('div').classed "cameraControls", true
   buttons = [
     { name: "north" }, { name: "top" }
     { name: "phi_45", html: '45' }
