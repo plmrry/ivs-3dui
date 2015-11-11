@@ -1,7 +1,6 @@
-
-
-  
 start = ->
+  stream = Rx.Observable
+  
   MIN_PHI = 0.01
   MAX_PHI = Math.PI * 0.5
   CAMERA_RADIUS = 1000
@@ -11,8 +10,6 @@ start = ->
  
   # theta = longitude
   # phi = latitude
-  
-  stream = Rx.Observable
   
   room =
     width: 15
@@ -49,7 +46,7 @@ start = ->
     return sceneControls
       .append('div').classed 'row', true
       .append('div').classed 'col-xs-12', true
-      .append('div').classed 'btn-group mode', true
+      .append('div').classed 'btn-group mode pull-right', true
       .call (group) ->
         group.selectAll('button').data butts
           .enter().append('button')
@@ -86,9 +83,6 @@ start = ->
     .attr "id", (d) -> d.name
     .html (d) -> d.html ? d.name
     
-  cameraDrag = d3.behavior.drag()
-  d3.select('#camera').call cameraDrag
-    
   # ---------------------------------------------- Three.js Init
   
   raycaster = new THREE.Raycaster()
@@ -112,7 +106,6 @@ start = ->
   scene.add mainObject
   
   firstRenderer = new THREE.WebGLRenderer canvas: canvas
-  firstRenderer.setPixelRatio window.devicePixelRatio
   firstRenderer.setClearColor "white"
   
   # ---------------------------------------------- Initial Camera
@@ -154,7 +147,6 @@ start = ->
     object = new THREE.Mesh( sphere, material )
     room.add object
 
-  
   # ---------------------------------------------- Resize
   
   resize = Rx.Observable.fromEvent window, 'resize'
@@ -175,7 +167,9 @@ start = ->
       return c
   
   # ---------------------------------------------- Camera Position
-    
+  
+  cameraDrag = d3.behavior.drag()
+  d3.select('#camera').call cameraDrag
   cameraPosition = Rx.Observable.create (observer) ->
     cameraDrag.on 'drag', -> observer.onNext d3.event
   .map (e) ->
@@ -261,30 +255,57 @@ start = ->
     .filter (a) -> a[0] isnt a[1]
     .map (a) -> a[1]
     
-  canvasClick.withLatestFrom camera
-    .subscribe (arr) ->
-      camera = arr[1]
-      
-      # FIXME
-      NDC = [
-        d3.scale.linear().range [-1, 1]
-        d3.scale.linear().range [1, -1]
-      ]
-      _c = d3.select canvas
-      NDC[0].domain [0, _c.attr('width')]
-      NDC[1].domain [0, _c.attr('height')]
-      
-      mouse = d3.mouse canvas
-        .map (d, i) -> NDC[i] d
-      
-      raycaster.setFromCamera { x: mouse[0], y: mouse[1] }, camera
-      intersects = raycaster.intersectObjects roomObject.children, false
-      first = intersects[0]
-      console.log first
-      
-      sceneControls.selectAll('#objectView').data(Array(1))
-        .enter().append('div').classed('card', true)
-        .attr id: 'objectView'
+  sceneDragHandler = d3.behavior.drag()
+  d3.select(canvas).call sceneDragHandler
+  
+  NDC =
+    x: d3.scale.linear().range [-1, 1]
+    y: d3.scale.linear().range [1, -1]
+  
+  stream.create (observer) ->
+    sceneDragHandler.on 'drag', -> observer.onNext d3.event
+  .subscribe (event) -> 
+    console.log event.x, event.y
+    console.log d3.mouse canvas
+    
+  #canvasClick.withLatestFrom camera
+    #.subscribe (arr) ->
+      #camera = arr[1]
+      #
+       #FIXME
+      #NDC = [
+        #d3.scale.linear().range [-1, 1]
+        #d3.scale.linear().range [1, -1]
+      #]
+      #_c = d3.select canvas
+      #NDC[0].domain [0, _c.attr('width')]
+      #NDC[1].domain [0, _c.attr('height')]
+      #
+      #mouse = d3.mouse canvas
+        #.map (d, i) -> NDC[i] d
+      #
+      #raycaster.setFromCamera { x: mouse[0], y: mouse[1] }, camera
+      #intersects = raycaster.intersectObjects roomObject.children, false
+      #first = intersects[0].object
+      #clone = first.clone()
+      #
+      #console.log first
+      #
+      #sceneControls.selectAll('#objectView').data(Array(1))
+        #.enter().append('div').classed('card', true)
+        #.attr id: 'objectView'
+        #.append 'canvas'
+        #.call ->
+          #_wid = 300
+          #_camera = new THREE.OrthographicCamera()
+          #_camera.left = _camera.bottom = -_wid/2
+          #_camera.right = _camera.top = _wid/2
+          #_renderer = new THREE.WebGLRenderer canvas: this.node()
+          #_renderer.setSize _wid, _wid
+          #_renderer.setClearColor "white"
+          #_scene = new THREE.Scene()
+          #_scene.add clone
+          #d3.timer -> _renderer.render _scene, _camera
   
   animation.withLatestFrom renderer, camera
     .subscribe (arr) ->
