@@ -1,21 +1,15 @@
-degToRad = d3.scale.linear().domain [0, 360]
-  .range [0, 2*Math.PI]
+degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
 
 CAMERA_RADIUS = 1000
 INITIAL_THETA = degToRad 80 # longitude
 INITIAL_PHI = degToRad 45 # 90 - latitude
 INITIAL_ZOOM = 40
 
+MIN_PHI = 0.01
+MAX_PHI = Math.PI * 0.5
+
 start = ->
   stream = Rx.Observable
-
-  MIN_PHI = 0.01
-  MAX_PHI = Math.PI * 0.5
-  ``
-
-
-  # theta = longitude
-  # phi = latitude
 
   room =
     width: 15
@@ -43,23 +37,7 @@ start = ->
 
   # ---------------------------------------------- Mode Buttons
 
-  modeButtons = do ->
-    butts = [
-      { name: 'object' }
-      { name: 'zone' }
-      { name: 'trajectory' }
-    ]
-    return sceneControls
-      .append('div').classed 'row', true
-      .append('div').classed 'col-xs-12', true
-      .append('div').classed 'btn-group mode pull-right', true
-      .call (group) ->
-        group.selectAll('button').data butts
-          .enter().append('button')
-          .classed 'btn btn-secondary', true
-          .property 'disabled', true
-          .attr 'id', (d) -> d.name
-          .html (d) -> d.html ? d.name
+  modeButtons = getModeButtons sceneControls
 
   # ---------------------------------------------- Camera Controls
 
@@ -173,20 +151,15 @@ start = ->
         return c
       return camera
 
-  north = stream.fromEvent d3.select('#north').node(), 'click'
-    .flatMap ->
-      cameraPolarTween theta: 0
-        .concat getTweenUpdateStream(1000)
-
-  top = stream.fromEvent d3.select('#top').node(), 'click'
-    .flatMap ->
-      cameraPolarTween phi: MIN_PHI
-        .concat getTweenUpdateStream(1000)
-
-  phi_45 = stream.fromEvent d3.select('#phi_45').node(), 'click'
-    .flatMap ->
-      cameraPolarTween phi: degToRad 45
-        .concat getTweenUpdateStream(1000)
+  cameraButtonStreams = stream.merge [
+    [ 'north', theta: 0 ]
+    [ 'top', phi: MIN_PHI ]
+    [ 'phi_45', phi: degToRad 45 ]
+  ].map (arr) ->
+    return stream.fromEvent d3.select("##{arr[0]}").node(), 'click'
+      .flatMap ->
+        cameraPolarTween arr[1]
+          .concat getTweenUpdateStream(1000)
 
   # ---------------------------------------------- Camera Zoom
 
@@ -213,9 +186,7 @@ start = ->
     cameraPosition
     cameraZoom
     cameraSize
-    north
-    top
-    phi_45
+    cameraButtonStreams
   ]
 
   camera = stream.just getFirstCamera()
@@ -241,45 +212,6 @@ start = ->
     console.log event.x, event.y
     console.log d3.mouse canvas
 
-  #canvasClick.withLatestFrom camera
-    #.subscribe (arr) ->
-      #camera = arr[1]
-      #
-       #FIXME
-      #NDC = [
-        #d3.scale.linear().range [-1, 1]
-        #d3.scale.linear().range [1, -1]
-      #]
-      #_c = d3.select canvas
-      #NDC[0].domain [0, _c.attr('width')]
-      #NDC[1].domain [0, _c.attr('height')]
-      #
-      #mouse = d3.mouse canvas
-        #.map (d, i) -> NDC[i] d
-      #
-      #raycaster.setFromCamera { x: mouse[0], y: mouse[1] }, camera
-      #intersects = raycaster.intersectObjects roomObject.children, false
-      #first = intersects[0].object
-      #clone = first.clone()
-      #
-      #console.log first
-      #
-      #sceneControls.selectAll('#objectView').data(Array(1))
-        #.enter().append('div').classed('card', true)
-        #.attr id: 'objectView'
-        #.append 'canvas'
-        #.call ->
-          #_wid = 300
-          #_camera = new THREE.OrthographicCamera()
-          #_camera.left = _camera.bottom = -_wid/2
-          #_camera.right = _camera.top = _wid/2
-          #_renderer = new THREE.WebGLRenderer canvas: this.node()
-          #_renderer.setSize _wid, _wid
-          #_renderer.setClearColor "white"
-          #_scene = new THREE.Scene()
-          #_scene.add clone
-          #d3.timer -> _renderer.render _scene, _camera
-
   animation.withLatestFrom renderer, camera
     .subscribe (arr) ->
       [time, renderer, camera] = arr
@@ -290,6 +222,24 @@ start = ->
       .property 'disabled', not isAbove
 
 # ------------------------------------------------------- Functions
+
+getModeButtons = (sceneControls) ->
+  butts = [
+    { name: 'object' }
+    { name: 'zone' }
+    { name: 'trajectory' }
+  ]
+  return sceneControls
+    .append('div').classed 'row', true
+    .append('div').classed 'col-xs-12', true
+    .append('div').classed 'btn-group mode pull-right', true
+    .call (group) ->
+      group.selectAll('button').data butts
+        .enter().append('button')
+        .classed 'btn btn-secondary', true
+        .property 'disabled', true
+        .attr 'id', (d) -> d.name
+        .html (d) -> d.html ? d.name
 
 getFirstCamera = ->
   c = new THREE.OrthographicCamera()
@@ -363,3 +313,43 @@ getClientSize = (element) ->
 apply = (last, func) -> func last
 
 do start
+
+
+  #canvasClick.withLatestFrom camera
+    #.subscribe (arr) ->
+      #camera = arr[1]
+      #
+       #FIXME
+      #NDC = [
+        #d3.scale.linear().range [-1, 1]
+        #d3.scale.linear().range [1, -1]
+      #]
+      #_c = d3.select canvas
+      #NDC[0].domain [0, _c.attr('width')]
+      #NDC[1].domain [0, _c.attr('height')]
+      #
+      #mouse = d3.mouse canvas
+        #.map (d, i) -> NDC[i] d
+      #
+      #raycaster.setFromCamera { x: mouse[0], y: mouse[1] }, camera
+      #intersects = raycaster.intersectObjects roomObject.children, false
+      #first = intersects[0].object
+      #clone = first.clone()
+      #
+      #console.log first
+      #
+      #sceneControls.selectAll('#objectView').data(Array(1))
+        #.enter().append('div').classed('card', true)
+        #.attr id: 'objectView'
+        #.append 'canvas'
+        #.call ->
+          #_wid = 300
+          #_camera = new THREE.OrthographicCamera()
+          #_camera.left = _camera.bottom = -_wid/2
+          #_camera.right = _camera.top = _wid/2
+          #_renderer = new THREE.WebGLRenderer canvas: this.node()
+          #_renderer.setSize _wid, _wid
+          #_renderer.setClearColor "white"
+          #_scene = new THREE.Scene()
+          #_scene.add clone
+          #d3.timer -> _renderer.render _scene, _camera
