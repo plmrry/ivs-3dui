@@ -55,9 +55,6 @@ start = ->
   scene = new THREE.Scene()
   scene.add mainObject
 
-  firstRenderer = new THREE.WebGLRenderer canvas: canvas
-  firstRenderer.setClearColor "white"
-
   # ------------------------------------------------------------- Streams
 
   animation = Rx.Observable.create (observer) ->
@@ -88,6 +85,9 @@ start = ->
     .map (e) -> e.target
     .map -> getClientSize main.node()
 
+  firstRenderer = new THREE.WebGLRenderer canvas: canvas
+  firstRenderer.setClearColor "white"
+
   renderer = resize.scan (renderer, r) ->
     renderer.setSize r.width, r.height
     return renderer
@@ -115,10 +115,10 @@ start = ->
 
   # NDC.subscribe (d) -> console.log d.x.domain()
 
-  # ---------------------------------------------- Camera Position
+  # ---------------------------------------------- Camera Update Streams
 
   cameraPosition = getCameraPositionStream()
-
+  cameraZoom = getCameraZoomStream()
   cameraButtonStreams = stream.merge [
     [ 'north', theta: 0 ]
     [ 'top', phi: MIN_PHI ]
@@ -128,12 +128,6 @@ start = ->
       .flatMap ->
         cameraPolarTween arr[1]
           .concat getTweenUpdateStream(1000)
-
-  # ---------------------------------------------- Camera Zoom
-
-  cameraZoom = getCameraZoomStream()
-
-  # ---------------------------------------------- Camera
 
   cameraUpdates = stream.merge [
     cameraPosition
@@ -152,13 +146,17 @@ start = ->
     .filter (a) -> a[0] isnt a[1]
     .map (a) -> a[1]
 
-  sceneDragHandler = d3.behavior.drag()
-  d3.select(canvas).call sceneDragHandler
+  combineNDC = (event, ndc) ->
+    mouse = d3.mouse canvas
+    return {
+      x: ndc.x mouse[0]
+      y: ndc.y mouse[1]
+    }
 
-  stream.create (observer) ->
-    sceneDragHandler.on 'drag', -> observer.onNext d3.event
-  .subscribe (event) ->
-    console.log d3.mouse canvas
+  getCanvasDrag canvas
+    .withLatestFrom NDC, combineNDC
+    .subscribe (arr) ->
+      console.log arr
 
   animation.withLatestFrom renderer, camera
     .subscribe (arr) ->
@@ -170,6 +168,19 @@ start = ->
       .property 'disabled', not isAbove
 
 # ------------------------------------------------------- Functions
+
+combineNDC = (event, ndc) ->
+  mouse = d3.mouse canvas
+  return {
+    x: ndc.x mouse[0]
+    y: ndc.y mouse[1]
+  }
+
+getCanvasDrag = (canvas) ->
+  canvasDragHandler = d3.behavior.drag()
+  d3.select(canvas).call canvasDragHandler
+  return stream.create (observer) ->
+    canvasDragHandler.on 'drag', -> observer.onNext d3.event
 
 cameraPolarTween = (end) ->
   return stream.just (camera) ->
