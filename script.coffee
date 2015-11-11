@@ -49,8 +49,11 @@ start = ->
 
   roomObject = getRoomObject room
 
+  edges = new THREE.EdgesHelper( roomObject, 0x00ff00 )
+
   mainObject = getMainObject()
   mainObject.add roomObject
+  mainObject.add edges
 
   scene = new THREE.Scene()
   scene.add mainObject
@@ -62,9 +65,6 @@ start = ->
   .timestamp()
 
   # ---------------------------------------------- Objects
-
-  canvasClick = stream.create (observer) ->
-    d3.select(canvas).on 'click', -> observer.onNext()
 
   newObject = do ->
     node = modeButtons.select('#object').node()
@@ -146,15 +146,14 @@ start = ->
     .filter (a) -> a[0] isnt a[1]
     .map (a) -> a[1]
 
-  combineNDC = (event, ndc) ->
-    mouse = d3.mouse canvas
-    return {
-      x: ndc.x mouse[0]
-      y: ndc.y mouse[1]
-    }
-
   getCanvasDrag canvas
-    .withLatestFrom NDC, combineNDC
+    .withLatestFrom NDC, combineNdc(canvas)
+    .subscribe (arr) ->
+      console.log arr
+
+  canvasClick = getCanvasClick canvas
+    .withLatestFrom NDC, combineNdc(canvas)
+    .withLatestFrom camera, getIntersects(roomObject, raycaster)
     .subscribe (arr) ->
       console.log arr
 
@@ -169,12 +168,29 @@ start = ->
 
 # ------------------------------------------------------- Functions
 
+combineNdc = (canvas) ->
+  (event, ndc) ->
+    mouse = d3.mouse canvas
+    return {
+      x: ndc.x mouse[0]
+      y: ndc.y mouse[1]
+    }
+
 combineNDC = (event, ndc) ->
   mouse = d3.mouse canvas
   return {
     x: ndc.x mouse[0]
     y: ndc.y mouse[1]
   }
+
+getIntersects = (object, raycaster) ->
+  (mouse, camera) ->
+    raycaster.setFromCamera mouse, camera
+    return raycaster.intersectObjects object.children, false
+
+getCanvasClick = (canvas) ->
+  return stream.create (observer) ->
+    d3.select(canvas).on 'click', -> observer.onNext()
 
 getCanvasDrag = (canvas) ->
   canvasDragHandler = d3.behavior.drag()
@@ -287,8 +303,6 @@ getRoomObject = (room) ->
   material = new THREE.MeshBasicMaterial
     color: 0x00ff00, transparent: true, opacity: 0.1
   roomObject = new THREE.Mesh( geometry, material );
-  edges = new THREE.EdgesHelper( roomObject, 0x00ff00 )
-  roomObject.add edges
   roomObject.name = 'room'
   return roomObject
 
