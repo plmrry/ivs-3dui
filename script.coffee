@@ -1,12 +1,18 @@
+degToRad = d3.scale.linear().domain [0, 360]
+  .range [0, 2*Math.PI]
+
+CAMERA_RADIUS = 1000
+INITIAL_THETA = degToRad 80 # longitude
+INITIAL_PHI = degToRad 45 # 90 - latitude
+INITIAL_ZOOM = 40
+
 start = ->
   stream = Rx.Observable
 
   MIN_PHI = 0.01
   MAX_PHI = Math.PI * 0.5
-  CAMERA_RADIUS = 1000
-  INITIAL_THETA = degToRad 80 # longitude
-  INITIAL_PHI = degToRad 45 # 90 - latitude
-  INITIAL_ZOOM = 40
+  ``
+
 
   # theta = longitude
   # phi = latitude
@@ -95,21 +101,6 @@ start = ->
 
   firstRenderer = new THREE.WebGLRenderer canvas: canvas
   firstRenderer.setClearColor "white"
-
-  # ---------------------------------------------- Initial Camera
-
-  initialCamera = (c) ->
-    c.zoom = INITIAL_ZOOM
-    c.position._polar =
-      radius: CAMERA_RADIUS
-      theta: INITIAL_THETA
-      phi: INITIAL_PHI
-    c.position.copy polarToVector c.position._polar
-    c._lookAt = new THREE.Vector3()
-    c.lookAt c._lookAt
-    c.up.copy new THREE.Vector3 0, 1, 0
-    c.updateProjectionMatrix()
-    return c
 
   # ------------------------------------------------------------- Streams
 
@@ -218,24 +209,18 @@ start = ->
 
   # ---------------------------------------------- Camera
 
-  cameraUpdateStreams = [
-    cameraPosition,
-    cameraZoom,
-    cameraSize,
-    north,
-    top,
+  cameraUpdates = stream.merge [
+    cameraPosition
+    cameraZoom
+    cameraSize
+    north
+    top
     phi_45
   ]
 
-  # A stream that emits camera updaters
-  # @emits (camera) => camera
-  cameraUpdates = stream
-    .merge cameraUpdateStreams
-    .startWith initialCamera
-
-  # Scan over the camera update functions
-  camera = cameraUpdates
-    .scan apply, new THREE.OrthographicCamera()
+  camera = stream.just getFirstCamera()
+    .concat cameraUpdates
+    .scan apply
 
   aboveSwitch = camera
     .map (c) -> c.position._polar.phi is MIN_PHI
@@ -306,6 +291,20 @@ start = ->
 
 # ------------------------------------------------------- Functions
 
+getFirstCamera = ->
+  c = new THREE.OrthographicCamera()
+  c.zoom = INITIAL_ZOOM
+  c.position._polar =
+    radius: CAMERA_RADIUS
+    theta: INITIAL_THETA
+    phi: INITIAL_PHI
+  c.position.copy polarToVector c.position._polar
+  c._lookAt = new THREE.Vector3()
+  c.lookAt c._lookAt
+  c.up.copy new THREE.Vector3 0, 1, 0
+  c.updateProjectionMatrix()
+  return c
+
 getRoomObject = (room) ->
   geometry = new THREE.BoxGeometry room.width, room.height, room.length
   material = new THREE.MeshBasicMaterial
@@ -354,9 +353,8 @@ vectorToPolar = (vector) ->
   theta	= Math.atan _y/_x
   return { radius, theta, phi }
 
-degToRad = d3.scale.linear()
-  .domain [0, 360]
-  .range [0, 2*Math.PI]
+# degToRad = d3.scale.linear().domain [0, 360]
+#   .range [0, 2*Math.PI]
 
 getClientSize = (element) ->
   width: element.clientWidth
