@@ -10,13 +10,24 @@ MAX_PHI = Math.PI * 0.5
 
 stream = Rx.Observable
 
-start = ->
-  room =
+room =
     width: 15
     length: 10
     height: 3
 
-  DEFAULT_OBJECT_RADIUS = room.width * 0.1
+DEFAULT_OBJECT_RADIUS = room.width * 0.1
+
+DEFAULT_VOLUME = DEFAULT_OBJECT_RADIUS
+CONE_TOP = 0.01
+DEFAULT_SPREAD = 0.3
+
+start = ->
+  #room =
+    #width: 15
+    #length: 10
+    #height: 3
+#
+  #DEFAULT_OBJECT_RADIUS = room.width * 0.1
 
   # ---------------------------------------------- DOM Init
 
@@ -170,10 +181,141 @@ start = ->
         return stream.just selection.node()
       else
         return stream.empty()
-    #.share()
+    .share()
+    
+  coneZ = objectCard.flatMap (node) ->
+    slider = d3.select(node).select('#coneZ').node()
+    return stream.fromEvent slider, 'change'
+      .map (event) -> [event, node]
+      
+  coneY = objectCard.flatMap (node) ->
+    slider = d3.select(node).select('#coneY').node()
+    return stream.fromEvent slider, 'change'
+      .map (event) -> [event, node]
+      
+  coneHeight = objectCard.flatMap (node) ->
+    slider = d3.select(node).select('#coneHeight').node()
+    return stream.fromEvent slider, 'change'
+      .map (event) -> [event, node]
+      
+  coneSpread = objectCard.flatMap (node) ->
+    slider = d3.select(node).select('#coneSpread').node()
+    return stream.fromEvent slider, 'change'
+      .map (event) -> [event, node]
+    
+  addConeButton = objectCard.flatMap (node) ->
+    button = d3.select(node).select('#addCone').node()
+    return stream.fromEvent button, 'click'
+      .map (event) -> node
+  
+  newConeSelection = addConeButton.map (node) ->
+    obj = d3.select(node).datum().object
+    i = obj.children.length
+    coneName = "cone#{i}"
+    objName = d3.select(node).datum().object.name
+    selection = { coneName, objName }
+    return selection
+  .share()
+    
+  zUpdate = coneZ.withLatestFrom newConeSelection
+    .map (arr) ->
+      [[event, card], selection] = arr
+      value = parseFloat event.target.value
+      console.log value, selection
+      return (scene) ->
+        obj = scene.getObjectByName selection.objName
+        cone = obj.getObjectByName selection.coneName
+        cone.rotation.z = value
+        return scene
+        
+  yUpdate = coneY.withLatestFrom newConeSelection
+    .map (arr) ->
+      [[event, card], selection] = arr
+      value = parseFloat event.target.value
+      console.log value, selection
+      return (scene) ->
+        obj = scene.getObjectByName selection.objName
+        cone = obj.getObjectByName selection.coneName
+        cone.rotation.y = value
+        return scene
+        
+  heightUpdate = coneHeight.withLatestFrom newConeSelection
+    .map (arr) ->
+      [[event, card], selection] = arr
+      value = parseFloat event.target.value
+      return (scene) ->
+        obj = scene.getObjectByName selection.objName
+        coneParent = obj.getObjectByName selection.coneName
+        cone = coneParent.children[0]
+        currentGeom = cone.geometry
+        p = currentGeom.parameters
+        newHeight = value
+        newGeom = new THREE.CylinderGeometry(
+          p.radiusTop,
+          p.radiusBottom,
+          newHeight
+        )
+        cone.geometry.dispose()
+        cone.geometry = newGeom
+        cone.position.y = -cone.geometry.parameters.height/2
+        return scene
+        
+  spreadUpdate = coneSpread.withLatestFrom newConeSelection
+    .map (arr) ->
+      [[event, card], selection] = arr
+      value = parseFloat event.target.value
+      return (scene) ->
+        obj = scene.getObjectByName selection.objName
+        coneParent = obj.getObjectByName selection.coneName
+        cone = coneParent.children[0]
+        currentGeom = cone.geometry
+        p = currentGeom.parameters
+        newRadius = value
+        newGeom = new THREE.CylinderGeometry(
+          p.radiusTop,
+          newRadius,
+          p.height
+        )
+        cone.geometry.dispose()
+        cone.geometry = newGeom
+        cone.position.y = -cone.geometry.parameters.height/2
+        return scene
+    
+  #sceneUpdates = addConeButton.map (node) ->
+    #obj = d3.select(node).datum().object
+    #i = obj.children.length
+    #coneName = "cone#{i}"
+    #objName = d3.select(node).datum().object.name
+    #selection = { coneName, objName }
+    #return selection
+  
+  newConeUpdate = newConeSelection
+    .map (selection) ->  
+      sceneUpdater = (scene) ->
+        obj = scene.getObjectByName selection.objName
+        addCone obj, selection.coneName
+        return scene
+      return sceneUpdater
+  
+  sceneUpdates = stream.merge newConeUpdate, zUpdate, yUpdate, heightUpdate, spreadUpdate
     
   hudCanvas = objectCard.map (node) ->
     return d3.select(node).select('canvas').node()
+    
+  scenesUpdated = sceneUpdates
+    .withLatestFrom hudCanvas
+    .subscribe (arr) ->
+      [updater, canvas] = arr
+      updater scene
+      updater canvas._scene
+  
+  #scenesUpdated.withLatestFrom newConeSelection  #scenesUpdated.withLatestFrom newConeSelection
+    #.subscribe (arr) ->    #.subscribe (arr) ->
+      #[updates, selection] = a      #[updates, selection] = arr
+      #
+      
+  #newConeSelection.subscribe (selection) ->
+    #debugger
     
   hudCanvas.combineLatest animation
     .subscribe (arr) ->
@@ -227,20 +369,49 @@ start = ->
 
 # ------------------------------------------------------- Functions
 
+addCone = (obj) ->
+  i = obj.children.length
+  console.log "cone#{i}"
+  coneParent = new THREE.Object3D()
+  coneParent.name = "cone#{i}"
+  obj.add coneParent
+  height = DEFAULT_VOLUME
+  geometry = new THREE.CylinderGeometry CONE_TOP, DEFAULT_SPREAD, height
+  material = new THREE.MeshBasicMaterial
+    color: 0xff0000, wireframe: true
+  cone = new THREE.Mesh geometry, material
+  cone.name = "cone#{i}"
+  cone.position.y = -cone.geometry.parameters.height/2
+  coneParent.add cone
+
 updateHud = (a) ->
   card = d3.select('#sceneControls').selectAll('#objectCard').data a
   card.enter().append('div')
     .classed 'card', true
     .attr id: 'objectCard'
     .each (d) ->
-      console.log 'called'
       _card = d3.select this
       _card.append('div').classed('card-block', true)
         .append 'canvas'
         .each addHudScene
+      btns = _card.append('div').classed('card-block', true)
+      btns.append('button').classed('btn btn-secondary', true)
+        .attr id: 'addCone'
+        .text 'add cone'
+      btns.append('button').classed('btn btn-secondary', true)
+        .attr id: 'removeCone'
+        .property disabled: true
+        .text 'remove cone'
       _card.append('div').classed('card-block', true)
         .append('button').classed('btn btn-secondary', true)
-        .text 'add cone'
+        .attr id: 'coneFile'
+        .property disabled: true
+        .text 'file'
+      addCardSlider _card, 'coneZ', 0, Math.PI, 0.01
+      addCardSlider _card, 'coneY', 0, Math.PI * 2, 0.01
+      addCardSlider _card, 'coneHeight', 0.01, 5, 0.01
+      addCardSlider _card, 'coneSpread', 0.01, 5, 0.01
+  card.each updateCard
   card.exit()
     .each (d) ->
       can = d3.select(this).select('canvas').node()
@@ -248,19 +419,47 @@ updateHud = (a) ->
     .remove()
   return card
   
+addCardSlider = (selection, name, min, max, step) ->
+  selection.append('div').classed('card-block', true)
+    .call (s) ->
+      s.append 'input'
+        .attr 
+          type: 'range', id: name
+          min: min, max: max, step: step
+      s.append('span').text " #{name}"
+  
+updateCard = (d) ->
+  _card = d3.select this
+  canvas = _card.select('canvas')
+  thisName = d.object.name
+  exists = canvas.node()._scene.getObjectByName thisName
+  console.log exists
+  
 addHudScene = (d) ->
+  clone = d.object.clone()
   c = d3.select this
   canvas = c.node()
-  geometry = new THREE.BoxGeometry( 1, 1, 1 );
+  geometry = new THREE.BoxGeometry( 1, 1, 1 )
   material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } )
-	#cube = new THREE.Mesh( geometry, material );
+  cube = new THREE.Mesh( geometry, material )
 	
   canvas._scene = new THREE.Scene()
-  #canvas._scene.add cube
+  canvas._scene.add clone
   
   canvas._camera = new THREE.OrthographicCamera()
+  canvas._camera.zoom = 3
+  canvas._camera.left = -10
+  canvas._camera.right = 10
+  canvas._camera.bottom = -10
+  canvas._camera.top = 10
+  canvas._camera.updateProjectionMatrix()
+  
+  #canvas._camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 )
   canvas._camera.position.z = 5
+  
   canvas._renderer = new THREE.WebGLRenderer canvas: canvas
+  canvas._renderer.setSize 200, 200
+  canvas._renderer.setClearColor "white"
 
 combineNdc = (canvas) ->
   (event, ndc) ->
