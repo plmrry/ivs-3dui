@@ -24,27 +24,17 @@ start = ->
   canvas = main.append('canvas').node()
   sceneControls = addSceneControls main
   modeButtons = getModeButtons sceneControls
-  main.call addCameraControls
+  cameraControls = addCameraControls main
 
   # ---------------------------------------------- Three.js Init
-
   raycaster = new THREE.Raycaster()
-
   roomObject = getRoomObject room
-
-  edges = new THREE.EdgesHelper( roomObject, 0x00ff00 )
-
+  edges = new THREE.EdgesHelper roomObject, 0x00ff00 
   mainObject = getMainObject()
   mainObject.add roomObject
   mainObject.add edges
-
   scene = new THREE.Scene()
   scene.add mainObject
-
-
-  animation = Rx.Observable.create (observer) ->
-    d3.timer -> observer.onNext()
-  .timestamp()
 
   # ---------------------------------------------- Sound Objects
 
@@ -77,8 +67,6 @@ start = ->
       return renderer
     , start
 
-  renderers = stream.combineLatest mainRenderer
-
   cameraSize = resize
     .map (s) -> (c) ->
       [ c.left, c.right ] = [-1, 1].map (d) -> d * s.width/2
@@ -101,14 +89,14 @@ start = ->
 
   # ---------------------------------------------- Camera Update Streams
 
-  cameraPosition = getCameraPositionStream()
+  cameraPosition = getCameraPositionStream cameraControls.select('#camera')
   cameraZoom = getCameraZoomStream()
   cameraButtonStreams = stream.merge [
     [ 'north', theta: 0 ]
     [ 'top', phi: MIN_PHI ]
     [ 'phi_45', phi: degToRad 45 ]
   ].map (arr) ->
-    return stream.fromEvent d3.select("##{arr[0]}").node(), 'click'
+    return stream.fromEvent cameraControls.select("##{arr[0]}").node(), 'click'
       .flatMap ->
         cameraPolarTween arr[1]
           .concat getTweenUpdateStream(1000)
@@ -123,45 +111,12 @@ start = ->
   camera = stream.just getFirstCamera()
     .concat cameraUpdates
     .scan apply
-
-  aboveSwitch = camera
-    .map (c) -> c.position._polar.phi is MIN_PHI
-    .bufferWithCount 2, 1
-    .filter (a) -> a[0] isnt a[1]
-    .map (a) -> a[1]
-
-  getCanvasDrag canvas
-    .withLatestFrom NDC, combineNdc(canvas)
-    .subscribe (arr) ->
-      console.log arr
-
-  canvasClick = getCanvasClick canvas
-    .withLatestFrom NDC, combineNdc(canvas)
-    .withLatestFrom camera, getIntersects(roomObject, raycaster)
-    
-  clickedArray = canvasClick
-    .map (a) -> a.slice(0,1)
-    
-  objectCard = clickedArray
-    .map updateHud sceneControls
-    .flatMap (selection) ->
-      if selection.size() > 0 
-        return stream.just selection.node()
-      else
-        return stream.empty()
-    .share()
       
-  # ------------------------------------------------------- HUD
-
-  animation.withLatestFrom renderers, camera
+  camera.withLatestFrom mainRenderer
     .subscribe (arr) ->
-      [time, renderers, camera] = arr
-      renderers.forEach (r) ->
-        r.render scene, camera
+      [camera, renderer] = arr
+      renderer.render scene, camera
 
-  aboveSwitch.subscribe (isAbove) ->
-    modeButtons.selectAll('button')
-      .property 'disabled', not isAbove
 
 # ------------------------------------------------------- Functions
 
@@ -315,9 +270,9 @@ cameraPolarTween = (end) ->
       return c
     return camera
 
-getCameraPositionStream = ->
+getCameraPositionStream = (selection) ->
   cameraDrag = d3.behavior.drag()
-  d3.select('#camera').call cameraDrag
+  selection.call cameraDrag
   return Rx.Observable.create (observer) ->
     cameraDrag.on 'drag', -> observer.onNext d3.event
   .map (e) ->
@@ -370,7 +325,7 @@ addCameraControls = (main) ->
     .classed("btn btn-secondary", true)
     .attr "id", (d) -> d.name
     .html (d) -> d.html ? d.name
-  return null
+  return cameraControls
 
 getModeButtons = (sceneControls) ->
   butts = [
