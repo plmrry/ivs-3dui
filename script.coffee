@@ -1,8 +1,6 @@
-degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
-
 CAMERA_RADIUS = 1000
-INITIAL_THETA = degToRad 80 # longitude
-INITIAL_PHI = degToRad 45 # 90 - latitude
+INITIAL_THETA = 80 # longitude
+INITIAL_PHI = 45 # 90 - latitude
 INITIAL_ZOOM = 40
 
 MIN_PHI = 0.01
@@ -22,12 +20,6 @@ CONE_TOP = 0.01
 DEFAULT_SPREAD = 0.3
 
 start = ->
-  #room =
-    #width: 15
-    #length: 10
-    #height: 3
-#
-  #DEFAULT_OBJECT_RADIUS = room.width * 0.1
 
   # ---------------------------------------------- DOM Init
 
@@ -46,8 +38,6 @@ start = ->
       position: 'absolute'
       right: '0'
       top: '1%'
-
-  # ---------------------------------------------- Mode Buttons
 
   modeButtons = getModeButtons sceneControls
 
@@ -175,7 +165,7 @@ start = ->
     .map (a) -> a.slice(0,1)
     
   objectCard = clickedArray
-    .map updateHud
+    .map updateHud sceneControls
     .flatMap (selection) ->
       if selection.size() > 0 
         return stream.just selection.node()
@@ -364,7 +354,7 @@ start = ->
         r.render scene, camera
 
   aboveSwitch.subscribe (isAbove) ->
-    main.select('.mode').selectAll('button')
+    modeButtons.selectAll('button')
       .property 'disabled', not isAbove
 
 # ------------------------------------------------------- Functions
@@ -384,40 +374,41 @@ addCone = (obj) ->
   cone.position.y = -cone.geometry.parameters.height/2
   coneParent.add cone
 
-updateHud = (a) ->
-  card = d3.select('#sceneControls').selectAll('#objectCard').data a
-  card.enter().append('div')
-    .classed 'card', true
-    .attr id: 'objectCard'
-    .each (d) ->
-      _card = d3.select this
-      _card.append('div').classed('card-block', true)
-        .append 'canvas'
-        .each addHudScene
-      btns = _card.append('div').classed('card-block', true)
-      btns.append('button').classed('btn btn-secondary', true)
-        .attr id: 'addCone'
-        .text 'add cone'
-      btns.append('button').classed('btn btn-secondary', true)
-        .attr id: 'removeCone'
-        .property disabled: true
-        .text 'remove cone'
-      _card.append('div').classed('card-block', true)
-        .append('button').classed('btn btn-secondary', true)
-        .attr id: 'coneFile'
-        .property disabled: true
-        .text 'file'
-      addCardSlider _card, 'coneZ', 0, Math.PI, 0.01
-      addCardSlider _card, 'coneY', 0, Math.PI * 2, 0.01
-      addCardSlider _card, 'coneHeight', 0.01, 5, 0.01
-      addCardSlider _card, 'coneSpread', 0.01, 5, 0.01
-  card.each updateCard
-  card.exit()
-    .each (d) ->
-      can = d3.select(this).select('canvas').node()
-      can._renderer.dispose()
-    .remove()
-  return card
+updateHud = (sceneControls) ->
+  (a) ->
+    card = d3.select('#sceneControls').selectAll('#objectCard').data a
+    card.enter().append('div')
+      .classed 'card', true
+      .attr id: 'objectCard'
+      .each (d) ->
+        _card = d3.select this
+        _card.append('div').classed('card-block', true)
+          .append 'canvas'
+          .each addHudScene
+        btns = _card.append('div').classed('card-block', true)
+        btns.append('button').classed('btn btn-secondary', true)
+          .attr id: 'addCone'
+          .text 'add cone'
+        btns.append('button').classed('btn btn-secondary', true)
+          .attr id: 'removeCone'
+          .property disabled: true
+          .text 'remove cone'
+        _card.append('div').classed('card-block', true)
+          .append('button').classed('btn btn-secondary', true)
+          .attr id: 'coneFile'
+          .property disabled: true
+          .text 'file'
+        addCardSlider _card, 'coneZ', 0, Math.PI, 0.01
+        addCardSlider _card, 'coneY', 0, Math.PI * 2, 0.01
+        addCardSlider _card, 'coneHeight', 0.01, 5, 0.01
+        addCardSlider _card, 'coneSpread', 0.01, 5, 0.01
+    card.each updateCard
+    card.exit()
+      .each (d) ->
+        can = d3.select(this).select('canvas').node()
+        can._renderer.dispose()
+      .remove()
+    return card
   
 addCardSlider = (selection, name, min, max, step) ->
   selection.append('div').classed('card-block', true)
@@ -568,7 +559,7 @@ getModeButtons = (sceneControls) ->
   return sceneControls
     .append('div').classed 'row', true
     .append('div').classed 'col-xs-12', true
-    .append('div').classed 'btn-group mode pull-right', true
+    .append('div').classed 'btn-group modes pull-right', true
     .call (group) ->
       group.selectAll('button').data butts
         .enter().append('button')
@@ -582,8 +573,8 @@ getFirstCamera = ->
   c.zoom = INITIAL_ZOOM
   c.position._polar =
     radius: CAMERA_RADIUS
-    theta: INITIAL_THETA
-    phi: INITIAL_PHI
+    theta: degToRad INITIAL_THETA
+    phi: degToRad INITIAL_PHI
   c.position.copy polarToVector c.position._polar
   c._lookAt = new THREE.Vector3()
   c.lookAt c._lookAt
@@ -636,15 +627,14 @@ vectorToPolar = (vector) ->
   phi = Math.acos _z/radius
   theta	= Math.atan _y/_x
   return { radius, theta, phi }
-
-# degToRad = d3.scale.linear().domain [0, 360]
-#   .range [0, 2*Math.PI]
-
+  
 getClientSize = (element) ->
   width: element.clientWidth
   height: element.clientHeight
 
 apply = (last, func) -> func last
+
+degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
 
 do start
 
