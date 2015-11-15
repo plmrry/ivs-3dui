@@ -66,7 +66,7 @@ start = ->
     d3.timer -> observer.onNext()
   .timestamp()
 
-  # ---------------------------------------------- Objects
+  # ---------------------------------------------- Sound Objects
 
   newObject = do ->
     node = modeButtons.select('#object').node()
@@ -118,8 +118,6 @@ start = ->
           d.y.domain [0, s.height]
           return d
       .scan apply, _ndc
-
-  # NDC.subscribe (d) -> console.log d.x.domain()
 
   # ---------------------------------------------- Camera Update Streams
 
@@ -271,14 +269,6 @@ start = ->
         cone.position.y = -cone.geometry.parameters.height/2
         return scene
     
-  #sceneUpdates = addConeButton.map (node) ->
-    #obj = d3.select(node).datum().object
-    #i = obj.children.length
-    #coneName = "cone#{i}"
-    #objName = d3.select(node).datum().object.name
-    #selection = { coneName, objName }
-    #return selection
-  
   newConeUpdate = newConeSelection
     .map (selection) ->  
       sceneUpdater = (scene) ->
@@ -298,14 +288,6 @@ start = ->
       [updater, canvas] = arr
       updater scene
       updater canvas._scene
-  
-  #scenesUpdated.withLatestFrom newConeSelection  #scenesUpdated.withLatestFrom newConeSelection
-    #.subscribe (arr) ->    #.subscribe (arr) ->
-      #[updates, selection] = a      #[updates, selection] = arr
-      #
-      
-  #newConeSelection.subscribe (selection) ->
-    #debugger
     
   hudCanvas.combineLatest animation
     .subscribe (arr) ->
@@ -342,10 +324,6 @@ start = ->
 
       
   # ------------------------------------------------------- HUD
-  
-  #hudCamera = new THREE.OrthographicCamera()
-  #hudScene = new THREE.Scene()
-  #hudRenderer = new THREE.WebGLRenderer()
 
   animation.withLatestFrom renderers, camera
     .subscribe (arr) ->
