@@ -91,8 +91,19 @@ start = ->
 
   cameraPosition = getCameraPositionStream cameraControls.select('#camera')
   cameraZoom = getCameraZoomStream()
+  
+  goToNorth = (camera) ->
+    _theta = camera.position._polar.theta
+    circle = (Math.PI * 2)
+    over = _theta % circle
+    under = circle - over
+    if (over < under) 
+      return theta: _theta - over
+    else
+      return theta: _theta + under
+  
   cameraButtonStreams = stream.merge [
-    [ 'north', -> theta: 0 ]
+    [ 'north', goToNorth ]
     [ 'top', -> phi: MIN_PHI ]
     [ 'phi_45', -> phi: degToRad 45 ]
   ].map (arr) ->
