@@ -92,9 +92,9 @@ start = ->
   cameraPosition = getCameraPositionStream cameraControls.select('#camera')
   cameraZoom = getCameraZoomStream()
   cameraButtonStreams = stream.merge [
-    [ 'north', theta: 0 ]
-    [ 'top', phi: MIN_PHI ]
-    [ 'phi_45', phi: degToRad 45 ]
+    [ 'north', -> theta: 0 ]
+    [ 'top', -> phi: MIN_PHI ]
+    [ 'phi_45', -> phi: degToRad 45 ]
   ].map (arr) ->
     return stream.fromEvent cameraControls.select("##{arr[0]}").node(), 'click'
       .flatMap ->
@@ -259,9 +259,10 @@ getCanvasDrag = (canvas) ->
   return stream.create (observer) ->
     canvasDragHandler.on 'drag', -> observer.onNext d3.event
 
-cameraPolarTween = (end) ->
+cameraPolarTween = (endFunc) ->
   return stream.just (camera) ->
     polarStart = camera.position._polar
+    end = endFunc camera
     camera._interpolator = d3.interpolate polarStart, end
     camera._update = (t) -> (c) ->
       c.position._polar = c._interpolator t
