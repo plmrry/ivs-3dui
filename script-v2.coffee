@@ -5,6 +5,7 @@ INITIAL_ZOOM = 40
 MIN_PHI = 0.01
 MAX_PHI = Math.PI * 0.5
 
+Rx.config.longStackSupport = true
 stream = Rx.Observable
 raycaster = new THREE.Raycaster()
 
@@ -79,39 +80,44 @@ start = ->
   canvasDragHandler = d3.behavior.drag()
   d3.select(canvas).call canvasDragHandler
   
-  #Emit a model update
-  canvasDragStart = fromD3event canvasDragHandler, 'dragstart'
+  canvasDrag = fromD3drag canvasDragHandler
     .map getMouse
     .withLatestFrom mainNDC, getNdcFromMouse
-    .map (mouse) ->
+    .shareReplay()
+  
+  canvasDragStart = canvasDrag
+    .filter (event) -> event.type is 'dragstart'
+    .map (event) ->
       (m) -> 
+        mouse = event.ndc
         raycaster.setFromCamera mouse, m.camera
         m.roomIntersects = raycaster.intersectObjects m.room.children, false
         m.sceneIntersects = raycaster.intersectObjects m.scene.children, true
         m.floorIntersects = raycaster.intersectObject m.floor, false
         m.panStart = m.floorIntersects[0].point
         m.selected = if m.roomIntersects[0]? then 'object' else 'floor'
+        console.log m.selected
         return m
         
   # Based on MapControls.js
   # github.com/grey-eminence/3DIT/blob/master/js/controls/MapControls.js
-  canvasDrag = fromD3event canvasDragHandler, 'drag'
-    .map getMouse
-    .withLatestFrom mainNDC, getNdcFromMouse
-    .map (mouse) ->
+  canvasDragMove = canvasDrag
+    .filter (event) -> event.type is 'drag'
+    .map (event) ->
       (m) ->
+        mouse = event.ndc
         raycaster.setFromCamera mouse, m.camera
+        
         m.floorIntersects = raycaster.intersectObject m.floor, false
         currentPan = m.floorIntersects[0].point
         delta = (new THREE.Vector3()).subVectors m.panStart, currentPan
         
         m.camera._lookAt.add delta
         m.camera.position.add delta
-        #m.camera.position.addVectors m.camera.position, delta
         
         return m
-  
-  allModelUpdates = stream.merge cameraModelUpdates, canvasDragStart, canvasDrag
+
+  allModelUpdates = stream.merge cameraModelUpdates, canvasDragStart, canvasDragMove
   
   roomObject = stream.just _roomObject
   
@@ -126,10 +132,14 @@ start = ->
   camera = model.map (model) -> model.camera
     
   # ---------------------------------------------- Render   
-  camera.withLatestFrom mainRenderer
-    .subscribeOnNext (arr) ->
+  do ->
+    onNext = (arr) ->
       [camera, renderer] = arr
       renderer.render scene, camera
+    onError = (err) -> 
+      console.error(err.stack);
+    camera.withLatestFrom mainRenderer
+      .subscribe onNext, onError
 
 # ------------------------------------------------------- Functions
 
@@ -139,11 +149,21 @@ updateNdcDomain = (s) ->
     d.y.domain [0, s.height]
     return d
 
-getNdcFromMouse = (mouse, ndc) ->
-  x: ndc.x mouse[0]
-  y: ndc.y mouse[1]
+getNdcFromMouse = (event, ndc) ->
+  event.ndc = 
+    x: ndc.x event.mouse[0]
+    y: ndc.y event.mouse[1]
+  return event
 
-getMouse = (event) -> d3.mouse event.sourceEvent.target
+getMouse = (event) -> 
+  event.mouse = d3.mouse event.sourceEvent.target
+  return event
+
+fromD3drag = (drag) ->
+  return stream.create (observer) ->
+    drag.on 'dragstart', -> observer.onNext d3.event
+      .on 'drag', -> observer.onNext d3.event
+      .on 'dragend', -> observer.onNext d3.event
 
 fromD3event = (emitter, event) ->
   return stream.create (observer) ->
@@ -153,7 +173,7 @@ getCanvasDrag = (canvas) ->
   canvasDragHandler = d3.behavior.drag()
   d3.select(canvas).call canvasDragHandler
   return stream.create (observer) ->
-    canvasDragHandler.on 'drag', -> observer.onNext d3.event
+    canvasDragHandler.on 'drag', observer.onNext
 
 getNdcScales = ->
   x: d3.scale.linear().range [-1, 1]
