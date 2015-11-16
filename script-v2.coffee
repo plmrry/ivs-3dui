@@ -92,11 +92,12 @@ start = ->
         mouse = event.ndc
         raycaster.setFromCamera mouse, m.camera
         m.roomIntersects = raycaster.intersectObjects m.room.children, false
-        m.sceneIntersects = raycaster.intersectObjects m.scene.children, true
         m.floorIntersects = raycaster.intersectObject m.floor, false
-        m.panStart = m.floorIntersects[0].point
-        m.selected = if m.roomIntersects[0]? then 'object' else 'floor'
-        console.log m.selected
+        m.selected = 
+          if m.roomIntersects[0]? then 'object' 
+          else if m.floorIntersects[0]? then 'floor'
+          else 'nothing'
+        m.panStart = m.floorIntersects[0]?.point
         return m
         
   # Based on MapControls.js
@@ -107,14 +108,12 @@ start = ->
       (m) ->
         mouse = event.ndc
         raycaster.setFromCamera mouse, m.camera
-        
         m.floorIntersects = raycaster.intersectObject m.floor, false
-        currentPan = m.floorIntersects[0].point
-        delta = (new THREE.Vector3()).subVectors m.panStart, currentPan
-        
+        _current = m.floorIntersects[0]?.point or (new THREE.Vector3())
+        _start = m.panStart or _current
+        delta = (new THREE.Vector3()).subVectors _start, _current
         m.camera._lookAt.add delta
         m.camera.position.add delta
-        
         return m
 
   allModelUpdates = stream.merge cameraModelUpdates, canvasDragStart, canvasDragMove
