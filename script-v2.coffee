@@ -81,7 +81,7 @@ start = ->
   d3.select(canvas).call canvasDragHandler
   
   canvasDrag = fromD3drag canvasDragHandler
-    .map getMouse
+    .map getMouseFrom canvas
     .withLatestFrom mainNDC, getNdcFromMouse
     .map (e) ->
       e.update = updateIntersects e
@@ -90,31 +90,17 @@ start = ->
   
   canvasDragStart = canvasDrag
     .filter (event) -> event.type is 'dragstart'
-    .map (event) ->
-      (m) ->
-        event.update m
-        m.selected = 
-          if m.roomIntersects[0]? then 'object' 
-          else if m.floorIntersects[0]? then 'floor'
-          else 'nothing'
-        m.panStart = m.floorIntersects[0]?.point
-        return m
+    .map setPanStart
         
-  # Based on MapControls.js
-  # github.com/grey-eminence/3DIT/blob/master/js/controls/MapControls.js
   canvasDragMove = canvasDrag
     .filter (event) -> event.type is 'drag'
-    .map (event) ->
-      (m) ->
-        event.update m
-        _current = m.floorIntersects[0]?.point or (new THREE.Vector3())
-        _start = m.panStart or _current
-        delta = (new THREE.Vector3()).subVectors _start, _current
-        m.camera._lookAt.add delta
-        m.camera.position.add delta
-        return m
+    .map panCamera
 
-  allModelUpdates = stream.merge cameraModelUpdates, canvasDragStart, canvasDragMove
+  allModelUpdates = stream.merge(
+    cameraModelUpdates
+    canvasDragStart
+    canvasDragMove
+  )
   
   roomObject = stream.just _roomObject
   
@@ -140,6 +126,28 @@ start = ->
 
 # ------------------------------------------------------- Functions
 
+# Based on MapControls.js
+# github.com/grey-eminence/3DIT/blob/master/js/controls/MapControls.js
+panCamera = (event) ->
+  (m) ->
+    event.update m
+    _current = m.floorIntersects[0]?.point or (new THREE.Vector3())
+    _start = m.panStart or _current
+    delta = (new THREE.Vector3()).subVectors _start, _current
+    m.camera._lookAt.add delta
+    m.camera.position.add delta
+    return m
+
+setPanStart = (event) ->
+  (m) ->
+    event.update m
+    m.selected = 
+      if m.roomIntersects[0]? then 'object' 
+      else if m.floorIntersects[0]? then 'floor'
+      else 'nothing'
+    m.panStart = m.floorIntersects[0]?.point
+    return m
+
 updateIntersects = (event) ->
   (model) ->
     m = model
@@ -147,13 +155,6 @@ updateIntersects = (event) ->
     raycaster.setFromCamera mouse, m.camera
     m.roomIntersects = raycaster.intersectObjects m.room.children, false
     m.floorIntersects = raycaster.intersectObject m.floor, false
-
-#updateIntersects = (model, event) ->
-  #m = model
-  #mouse = event.ndc
-  #raycaster.setFromCamera mouse, m.camera
-  #m.roomIntersects = raycaster.intersectObjects m.room.children, false
-  #m.floorIntersects = raycaster.intersectObject m.floor, false
 
 updateNdcDomain = (s) ->
   (d) ->
@@ -166,8 +167,14 @@ getNdcFromMouse = (event, ndc) ->
     x: ndc.x event.mouse[0]
     y: ndc.y event.mouse[1]
   return event
+  
+getMouseFrom = (node) ->
+  (event) ->
+    event.mouse = d3.mouse node
+    return event
 
 getMouse = (event) -> 
+  #console.log event.sourceEvent.target
   event.mouse = d3.mouse event.sourceEvent.target
   return event
 
