@@ -170,31 +170,6 @@ start = ->
       else
         return stream.empty()
     .share()
-    
-  coneZ = objectCard.flatMap (node) ->
-    slider = d3.select(node).select('#coneZ').node()
-    return stream.fromEvent slider, 'change'
-      .map (event) -> [event, node]
-      
-  coneY = objectCard.flatMap (node) ->
-    slider = d3.select(node).select('#coneY').node()
-    return stream.fromEvent slider, 'change'
-      .map (event) -> [event, node]
-      
-  coneHeight = objectCard.flatMap (node) ->
-    slider = d3.select(node).select('#coneHeight').node()
-    return stream.fromEvent slider, 'change'
-      .map (event) -> [event, node]
-      
-  coneSpread = objectCard.flatMap (node) ->
-    slider = d3.select(node).select('#coneSpread').node()
-    return stream.fromEvent slider, 'change'
-      .map (event) -> [event, node]
-    
-  addConeButton = objectCard.flatMap (node) ->
-    button = d3.select(node).select('#addCone').node()
-    return stream.fromEvent button, 'click'
-      .map (event) -> node
   
   newConeSelection = addConeButton.map (node) ->
     obj = d3.select(node).datum().object
@@ -204,28 +179,6 @@ start = ->
     selection = { coneName, objName }
     return selection
   .share()
-    
-  zUpdate = coneZ.withLatestFrom newConeSelection
-    .map (arr) ->
-      [[event, card], selection] = arr
-      value = parseFloat event.target.value
-      console.log value, selection
-      return (scene) ->
-        obj = scene.getObjectByName selection.objName
-        cone = obj.getObjectByName selection.coneName
-        cone.rotation.z = value
-        return scene
-        
-  yUpdate = coneY.withLatestFrom newConeSelection
-    .map (arr) ->
-      [[event, card], selection] = arr
-      value = parseFloat event.target.value
-      console.log value, selection
-      return (scene) ->
-        obj = scene.getObjectByName selection.objName
-        cone = obj.getObjectByName selection.coneName
-        cone.rotation.y = value
-        return scene
         
   heightUpdate = coneHeight.withLatestFrom newConeSelection
     .map (arr) ->

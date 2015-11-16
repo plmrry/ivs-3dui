@@ -1,4 +1,4 @@
-CAMERA_RADIUS = 1000
+CAMERA_RADIUS = 100
 INITIAL_THETA = 80 # longitude
 INITIAL_PHI = 45 # 90 - latitude
 INITIAL_ZOOM = 40
@@ -6,6 +6,7 @@ MIN_PHI = 0.01
 MAX_PHI = Math.PI * 0.5
 
 stream = Rx.Observable
+raycaster = new THREE.Raycaster()
 
 room =
     width: 15
@@ -27,33 +28,15 @@ start = ->
   cameraControls = addCameraControls main
 
   # ---------------------------------------------- Three.js Init
-  raycaster = new THREE.Raycaster()
-  roomObject = getRoomObject room
-  edges = new THREE.EdgesHelper roomObject, 0x00ff00 
+  _roomObject = getRoomObject room
+  edges = new THREE.EdgesHelper _roomObject, 0x00ff00 
   mainObject = getMainObject()
-  mainObject.add roomObject
+  mainObject.add _roomObject
   mainObject.add edges
   scene = new THREE.Scene()
   scene.add mainObject
 
-  # ---------------------------------------------- Sound Objects
-
-  newObject = do ->
-    node = modeButtons.select('#object').node()
-    stream.fromEvent node, 'click'
-
-  newObject.subscribe ->
-    room = roomObject
-    sphere = new THREE.SphereGeometry DEFAULT_OBJECT_RADIUS
-    material = new THREE.MeshBasicMaterial
-      color: 0x0000ff, wireframe: true
-    object = new THREE.Mesh( sphere, material )
-    i = room.children.length
-    object.name = "Object#{i}"
-    room.add object
-
   # ---------------------------------------------- Resize
-
   resize = Rx.Observable.fromEvent window, 'resize'
     .startWith target: window
     .map (e) -> e.target
@@ -67,69 +50,143 @@ start = ->
       return renderer
     , start
 
-  cameraSize = resize
-    .map (s) -> (c) ->
-      [ c.left, c.right ] = [-1, 1].map (d) -> d * s.width/2
-      [ c.bottom, c.top ] = [-1, 1].map (d) -> d * s.height/2
-      c.updateProjectionMatrix()
-      return c
-
-  # Normalized device coordinates
-  NDC = do ->
-    _ndc =
-      x: d3.scale.linear().range [-1, 1]
-      y: d3.scale.linear().range [1, -1]
-    return resize
-      .map (s) ->
-        (d) ->
-          d.x.domain [0, s.width]
-          d.y.domain [0, s.height]
-          return d
-      .scan apply, _ndc
+  #canvasDrag = d3.drag
 
   # ---------------------------------------------- Camera Update Streams
-
+  cameraSize = resize.map setCameraSize
   cameraPosition = getCameraPositionStream cameraControls.select('#camera')
   cameraZoom = getCameraZoomStream()
+  cameraButtonStreams = getCameraButtonStreams cameraControls
   
-  goToNorth = (camera) ->
-    _theta = camera.position._polar.theta
-    circle = (Math.PI * 2)
-    over = _theta % circle
-    under = circle - over
-    if (over < under) 
-      return theta: _theta - over
-    else
-      return theta: _theta + under
-  
-  cameraButtonStreams = stream.merge [
-    [ 'north', goToNorth ]
-    [ 'top', -> phi: MIN_PHI ]
-    [ 'phi_45', -> phi: degToRad 45 ]
-  ].map (arr) ->
-    return stream.fromEvent cameraControls.select("##{arr[0]}").node(), 'click'
-      .flatMap ->
-        cameraPolarTween arr[1]
-          .concat getTweenUpdateStream(1000)
-
   cameraUpdates = stream.merge [
     cameraPosition
     cameraZoom
     cameraSize
     cameraButtonStreams
   ]
+  
+  # Transform camera updates in to model updates
+  cameraModelUpdates = cameraUpdates
+    .map (func) ->
+      (model) ->
+        model.camera = func model.camera
+        return model
 
-  camera = stream.just getFirstCamera()
-    .concat cameraUpdates
-    .scan apply
-      
+  #Normalized device coordinates
+  mainNDC = resize.map updateNdcDomain
+    .scan apply, getNdcScales()
+  
+  canvasDragHandler = d3.behavior.drag()
+  d3.select(canvas).call canvasDragHandler
+  
+  #Emit a model update
+  canvasDragStart = fromD3event canvasDragHandler, 'dragstart'
+    .map getMouse
+    .withLatestFrom mainNDC, getNdcFromMouse
+    .map (mouse) ->
+      (m) -> 
+        raycaster.setFromCamera mouse, m.camera
+        m.roomIntersects = raycaster.intersectObjects m.room.children, false
+        m.sceneIntersects = raycaster.intersectObjects m.scene.children, true
+        m.floorIntersects = raycaster.intersectObject m.floor, false
+        m.panStart = m.floorIntersects[0].point
+        m.selected = if m.roomIntersects[0]? then 'object' else 'floor'
+        return m
+        
+  # Based on MapControls.js
+  # github.com/grey-eminence/3DIT/blob/master/js/controls/MapControls.js
+  canvasDrag = fromD3event canvasDragHandler, 'drag'
+    .map getMouse
+    .withLatestFrom mainNDC, getNdcFromMouse
+    .map (mouse) ->
+      (m) ->
+        raycaster.setFromCamera mouse, m.camera
+        m.floorIntersects = raycaster.intersectObject m.floor, false
+        currentPan = m.floorIntersects[0].point
+        delta = (new THREE.Vector3()).subVectors m.panStart, currentPan
+        
+        m.camera._lookAt.add delta
+        m.camera.position.add delta
+        #m.camera.position.addVectors m.camera.position, delta
+        
+        return m
+  
+  allModelUpdates = stream.merge cameraModelUpdates, canvasDragStart, canvasDrag
+  
+  roomObject = stream.just _roomObject
+  
+  model = stream.just
+    camera: getFirstCamera()
+    room: _roomObject
+    scene: scene
+    floor: scene.getObjectByName 'floor'
+  .concat allModelUpdates
+  .scan apply
+  
+  camera = model.map (model) -> model.camera
+    
+  # ---------------------------------------------- Render   
   camera.withLatestFrom mainRenderer
-    .subscribe (arr) ->
+    .subscribeOnNext (arr) ->
       [camera, renderer] = arr
       renderer.render scene, camera
 
-
 # ------------------------------------------------------- Functions
+
+updateNdcDomain = (s) ->
+  (d) ->
+    d.x.domain [0, s.width]
+    d.y.domain [0, s.height]
+    return d
+
+getNdcFromMouse = (mouse, ndc) ->
+  x: ndc.x mouse[0]
+  y: ndc.y mouse[1]
+
+getMouse = (event) -> d3.mouse event.sourceEvent.target
+
+fromD3event = (emitter, event) ->
+  return stream.create (observer) ->
+    emitter.on event, -> observer.onNext d3.event
+
+getCanvasDrag = (canvas) ->
+  canvasDragHandler = d3.behavior.drag()
+  d3.select(canvas).call canvasDragHandler
+  return stream.create (observer) ->
+    canvasDragHandler.on 'drag', -> observer.onNext d3.event
+
+getNdcScales = ->
+  x: d3.scale.linear().range [-1, 1]
+  y: d3.scale.linear().range [1, -1]
+
+setCameraSize = (s) ->
+  (c) ->
+    [ c.left, c.right ] = [-1, 1].map (d) -> d * s.width/2
+    [ c.bottom, c.top ] = [-1, 1].map (d) -> d * s.height/2
+    c.updateProjectionMatrix()
+    return c
+    
+getCameraButtonStreams = (cameraControls) ->
+  stream.merge [
+    [ 'north', goToNorth ]
+    [ 'top', -> phi: MIN_PHI ]
+    [ 'phi_45', -> phi: degToRad 45 ]
+  ].map (arr) ->
+    node = cameraControls.select("##{arr[0]}").node()
+    return stream.fromEvent node, 'click'
+      .flatMap ->
+        cameraPolarTween arr[1]
+          .concat getTweenUpdateStream(1000)
+
+goToNorth = (camera) ->
+  _theta = camera.position._polar.theta
+  circle = (Math.PI * 2)
+  over = _theta % circle
+  under = circle - over
+  if (over < under) 
+    return theta: _theta - over
+  else
+    return theta: _theta + under
 
 addSceneControls = (selection) ->
   selection.append('div')
@@ -277,7 +334,9 @@ cameraPolarTween = (endFunc) ->
     camera._interpolator = d3.interpolate polarStart, end
     camera._update = (t) -> (c) ->
       c.position._polar = c._interpolator t
-      c.position.copy polarToVector c.position._polar
+      c.position._relative = polarToVector c.position._polar
+      #c.position.copy polarToVector c.position._polar
+      c.position.addVectors c.position._relative, c._lookAt
       c.lookAt c._lookAt
       return c
     return camera
@@ -294,8 +353,9 @@ getCameraPositionStream = (selection) ->
       polar.theta += degToRad e.dx
       polar.phi = MIN_PHI if polar.phi < MIN_PHI
       polar.phi = MAX_PHI if polar.phi > MAX_PHI
-      camera.position.copy polarToVector polar
-      camera.lookAt new THREE.Vector3()
+      camera.position._relative = polarToVector camera.position._polar
+      camera.position.addVectors camera.position._relative, camera._lookAt
+      camera.lookAt camera._lookAt
       camera
 
 getCameraZoomStream = ->
@@ -360,12 +420,16 @@ getModeButtons = (sceneControls) ->
 getFirstCamera = ->
   c = new THREE.OrthographicCamera()
   c.zoom = INITIAL_ZOOM
+  c._lookAt = new THREE.Vector3()
   c.position._polar =
     radius: CAMERA_RADIUS
     theta: degToRad INITIAL_THETA
     phi: degToRad INITIAL_PHI
-  c.position.copy polarToVector c.position._polar
-  c._lookAt = new THREE.Vector3()
+    
+  c.position._relative = polarToVector c.position._polar
+  c.position.addVectors c.position._relative, c._lookAt
+  #c.position.copy polarToVector c.position._polar
+
   c.lookAt c._lookAt
   c.up.copy new THREE.Vector3 0, 1, 0
   c.updateProjectionMatrix()
@@ -380,10 +444,17 @@ getRoomObject = (room) ->
   return roomObject
 
 getMainObject = ->
-  gridHelper = new THREE.GridHelper 100, 10
-  axisHelper = new THREE.AxisHelper 5
   mainObject = new THREE.Object3D()
-  mainObject.add gridHelper
+  
+  floorGeom = new THREE.PlaneGeometry 100, 100, 10, 10
+  floorMat = new THREE.MeshBasicMaterial
+    color: 0xffff00, side: THREE.DoubleSide, wireframe: true
+  floor = new THREE.Mesh( floorGeom, floorMat )
+  floor.name = 'floor'
+  floor.rotateX Math.PI/2
+  mainObject.add floor
+  
+  axisHelper = new THREE.AxisHelper 5
   mainObject.add axisHelper
   return mainObject
 
