@@ -20,6 +20,16 @@ CONE_TOP = 0.01
 DEFAULT_SPREAD = 0.3
 
 start = ->
+  
+  emitter = new EventEmitter()
+    
+  cameraTweenStream = stream.fromEvent(emitter, 'tweenCamera')
+    .flatMap (o) ->
+      getTweenStream(o.duration) o.update
+    
+  #.subscribe (d) -> console.log d
+    
+  emitter.emit('tweenCamera', { foo: 12, bar: 13 })
 
   # ---------------------------------------------- DOM Init
   main = addMain d3.select('body')
@@ -50,13 +60,20 @@ start = ->
       renderer.setSize s.width, s.height
       return renderer
     , start
+    
+  # ---------------------------------------------- Add Objects
 
-  #canvasDrag = d3.drag
+  node = modeButtons.select('#object').node()
+  addObject = stream.fromEvent node, 'click'
+    .map ->
+      (camera) ->
+        cameraControls.select('#top').node().click()
+        return camera
 
   # ---------------------------------------------- Camera Update Streams
   cameraSize = resize.map setCameraSize
   cameraPosition = getCameraPositionStream cameraControls.select('#camera')
-  cameraZoom = getCameraZoomStream()
+  cameraZoom = getCameraZoomStream emitter
   cameraButtonStreams = getCameraButtonStreams cameraControls
   
   cameraUpdates = stream.merge [
@@ -64,6 +81,8 @@ start = ->
     cameraZoom
     cameraSize
     cameraButtonStreams
+    cameraTweenStream
+    addObject
   ]
   
   # Transform camera updates in to model updates
@@ -80,7 +99,7 @@ start = ->
   canvasDragHandler = d3.behavior.drag()
   d3.select(canvas).call canvasDragHandler
   
-  canvasDrag = fromD3drag canvasDragHandler
+  canvasDrag = fromD3dragHandler canvasDragHandler
     .map getMouseFrom canvas
     .withLatestFrom mainNDC, getNdcFromMouse
     .map (e) ->
@@ -114,17 +133,32 @@ start = ->
   
   camera = model.map (model) -> model.camera
     
+  #isAbove = camera
+    #.map (c) -> c.position._polar.phi is MIN_PHI
+  #
+  #aboveSwitch = isAbove
+    #.bufferWithCount 2, 1
+    #.filter (a) -> a[0] isnt a[1]
+    #.map (a) -> a[1]
+    #.subscribe (d) -> console.log d
+  
+    
   # ---------------------------------------------- Render   
   do ->
     onNext = (arr) ->
       [camera, renderer] = arr
       renderer.render scene, camera
-    onError = (err) -> 
-      console.error(err.stack);
+    onError = (err) -> console.error(err.stack);
     camera.withLatestFrom mainRenderer
       .subscribe onNext, onError
+      
+  #camera.connect()
 
 # ------------------------------------------------------- Functions
+
+
+
+isAbove = (camera) -> camera.position._polar.phi is MIN_PHI
 
 # Based on MapControls.js
 # github.com/grey-eminence/3DIT/blob/master/js/controls/MapControls.js
@@ -177,8 +211,13 @@ getMouse = (event) ->
   #console.log event.sourceEvent.target
   event.mouse = d3.mouse event.sourceEvent.target
   return event
+  
+fromD3drag = (selection) ->
+  handler = d3.behavior.drag()
+  selection.call handler
+  return fromD3dragHandler handler
 
-fromD3drag = (drag) ->
+fromD3dragHandler = (drag) ->
   return stream.create (observer) ->
     drag.on 'dragstart', -> observer.onNext d3.event
       .on 'drag', -> observer.onNext d3.event
@@ -213,9 +252,12 @@ getCameraButtonStreams = (cameraControls) ->
   ].map (arr) ->
     node = cameraControls.select("##{arr[0]}").node()
     return stream.fromEvent node, 'click'
-      .flatMap ->
-        cameraPolarTween arr[1]
-          .concat getTweenUpdateStream(1000)
+      .flatMap -> tweenCameraTo arr[1]
+          
+tweenCameraTo = (fn, duration) ->
+  duration ?= 1000
+  cameraPolarTween fn
+    .concat getTweenUpdateStream duration
 
 goToNorth = (camera) ->
   _theta = camera.position._polar.theta
@@ -329,7 +371,6 @@ addHudScene = (d) ->
   canvas._camera.top = 10
   canvas._camera.updateProjectionMatrix()
   
-  #canvas._camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 )
   canvas._camera.position.z = 5
   
   canvas._renderer = new THREE.WebGLRenderer canvas: canvas
@@ -397,22 +438,62 @@ getCameraPositionStream = (selection) ->
       camera.lookAt camera._lookAt
       camera
 
-getCameraZoomStream = ->
-  zooms = [['In',2],['Out',.5]].map (a) ->
+updateCameraPosition = (event) ->
+  (camera) ->
+    e = event
+    polar = camera.position._polar
+    polar.phi += degToRad e.dy
+    polar.theta += degToRad e.dx
+    polar.phi = MIN_PHI if polar.phi < MIN_PHI
+    polar.phi = MAX_PHI if polar.phi > MAX_PHI
+    camera.position._relative = polarToVector camera.position._polar
+    camera.position.addVectors camera.position._relative, camera._lookAt
+    camera.lookAt camera._lookAt
+    return camera
+
+getCameraZoomStream = (emitter) ->
+  ZOOM_AMOUNT = 2
+  a = ZOOM_AMOUNT
+  zooms = [['In',a],['Out',1/a]].map (a) ->
     node = d3.select("#zoom#{a[0]}").node()
     stream.fromEvent node, 'click'
       .map -> a[1]
   return stream.merge zooms
-    .flatMap (dz) ->
-      stream.just (cam) ->
-        end = cam.zoom * dz
-        cam._interpolator = d3.interpolate cam.zoom, end
-        cam._update = (t) -> (c) ->
-          c.zoom = c._interpolator t
+    .map (dz) ->
+      (camera) ->
+        z = camera.zoom
+        interpolator = d3.interpolate z, z * dz
+        update = (t) -> (c) ->
+          c.zoom = interpolator t
           c.updateProjectionMatrix()
           return c
-        return cam
-      .concat getTweenUpdateStream 500
+        emitter.emit 'tweenCamera', { update: update, duration: 500 }
+        return camera
+    #.flatMap (dz) ->
+      #stream.just (cam) ->
+        #end = cam.zoom * dz
+        #cam._interpolator = d3.interpolate cam.zoom, end
+        #cam._update = (t) -> (c) ->
+          #c.zoom = c._interpolator t
+          #c.updateProjectionMatrix()
+          #return c
+        #return cam
+      #.concat getTweenUpdateStream 500
+      
+getTweenStream = (duration) -> (update) ->
+  tweenStream(duration).map update
+      
+getTweenUpdateStream = (duration) ->
+  tweenStream(duration).map (time) ->
+    (cam) -> cam._update(time)(cam)
+
+tweenStream = (duration) ->
+  duration = duration or 0
+  Rx.Observable.create (observer) ->
+    d3.transition()
+      .duration duration
+      .tween "tween", -> (t) -> observer.onNext t
+      .each "end", -> observer.onCompleted()
 
 addCameraControls = (main) ->
   cameraControls = main
@@ -440,7 +521,7 @@ addCameraControls = (main) ->
 
 getModeButtons = (sceneControls) ->
   butts = [
-    { name: 'object' }
+    { name: 'object', html: 'add object' }
     { name: 'zone' }
     { name: 'trajectory' }
   ]
@@ -452,7 +533,7 @@ getModeButtons = (sceneControls) ->
       group.selectAll('button').data butts
         .enter().append('button')
         .classed 'btn btn-secondary', true
-        .property 'disabled', true
+        #.property 'disabled', true
         .attr 'id', (d) -> d.name
         .html (d) -> d.html ? d.name
 
@@ -496,18 +577,10 @@ getMainObject = ->
   axisHelper = new THREE.AxisHelper 5
   mainObject.add axisHelper
   return mainObject
+  
 
-getTweenUpdateStream = (duration) ->
-  tweenStream(duration).map (time) ->
-    (cam) -> cam._update(time)(cam)
 
-tweenStream = (duration) ->
-  duration = duration or 0
-  Rx.Observable.create (observer) ->
-    d3.transition()
-      .duration duration
-      .tween "tween", -> (t) -> observer.onNext t
-      .each "end", -> observer.onCompleted()
+
 
 # NOTE: See http://mathworld.wolfram.com/SphericalCoordinates.html
 polarToVector = (o) ->
