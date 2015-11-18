@@ -34,7 +34,7 @@ start = ->
   main = d3.select('body').append('main')
     .style
       width: "100%"
-      height: "80vh"
+      height: "100vh"
       position: 'relative'
 
   canvas = main.append('canvas').node()
@@ -185,22 +185,33 @@ start = ->
     
   coneZ = objectCard.flatMap (node) ->
     slider = d3.select(node).select('#coneZ').node()
-    return stream.fromEvent slider, 'change'
+    return stream.fromEvent slider, 'mousedown'
+      .flatMap ->
+        stream.fromEvent slider, 'mousemove'
       .map (event) -> [event, node]
+      #.map (event) -> [event, node]
+    #return stream.fromEvent slider, 'change'
+      #.map (event) -> [event, node]
       
   coneY = objectCard.flatMap (node) ->
     slider = d3.select(node).select('#coneY').node()
-    return stream.fromEvent slider, 'change'
+    return stream.fromEvent slider, 'mousedown'
+      .flatMap ->
+        stream.fromEvent slider, 'mousemove'
       .map (event) -> [event, node]
       
   coneHeight = objectCard.flatMap (node) ->
     slider = d3.select(node).select('#coneHeight').node()
-    return stream.fromEvent slider, 'change'
+    return stream.fromEvent slider, 'mousedown'
+      .flatMap ->
+        stream.fromEvent slider, 'mousemove'
       .map (event) -> [event, node]
       
   coneSpread = objectCard.flatMap (node) ->
     slider = d3.select(node).select('#coneSpread').node()
-    return stream.fromEvent slider, 'change'
+    return stream.fromEvent slider, 'mousedown'
+      .flatMap ->
+        stream.fromEvent slider, 'mousemove'
       .map (event) -> [event, node]
     
   addConeButton = objectCard.flatMap (node) ->
