@@ -171,14 +171,14 @@ start = ->
         return stream.empty()
     .share()
   
-  newConeSelection = addConeButton.map (node) ->
-    obj = d3.select(node).datum().object
-    i = obj.children.length
-    coneName = "cone#{i}"
-    objName = d3.select(node).datum().object.name
-    selection = { coneName, objName }
-    return selection
-  .share()
+  #newConeSelection = addConeButton.map (node) ->
+    #obj = d3.select(node).datum().object
+    #i = obj.children.length
+    #coneName = "cone#{i}"
+    #objName = d3.select(node).datum().object.name
+    #selection = { coneName, objName }
+    #return selection
+  #.share()
         
   heightUpdate = coneHeight.withLatestFrom newConeSelection
     .map (arr) ->
