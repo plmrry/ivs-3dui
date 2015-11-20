@@ -1,7 +1,6 @@
 Rx.config.longStackSupport = true
 stream = Rx.Observable
 raycaster = new THREE.Raycaster()
-emitter = new EventEmitter()
 
 CAMERA_RADIUS = 100
 INITIAL_THETA = 80 # longitude
@@ -15,9 +14,19 @@ room =
     length: 10
     height: 3
 
-DEFAULT_CONE_VOLUME = DEFAULT_OBJECT_RADIUS = room.width * 0.1
+DEFAULT_VOLUME = DEFAULT_OBJECT_RADIUS = room.width * 0.1
 CONE_TOP = 0.01
 DEFAULT_SPREAD = 0.3
+
+emitter = do ->
+  subject = new Rx.Subject()
+  _emitter = (event) ->
+    return subject
+      .filter (o) -> o.event is event
+      .map (o) -> o.data
+  _emitter.emit = (event, data) ->
+    subject.onNext { event, data }
+  return _emitter
 
 start = ->
   # ---------------------------------------------- DOM Init
@@ -49,19 +58,24 @@ start = ->
     
   # ---------------------------------------------- Add Object Button
   
-  floorIntersects = stream.fromEvent emitter, 'floorIntersects'
+  # floorIntersects = stream.fromEvent emitter, 'floorIntersects'
+  floorIntersects = emitter 'floorIntersects'
   
-  # addObject = stream.fromEvent emitter, 'addObject'
-  #   .withLatestFrom floorIntersects
-  #   .subscribe (arr) ->
-  #     update = (model) ->
-  #       newObject = new THREE.Object3D()
-        
+  addObject = emitter 'addObject'
+    .withLatestFrom floorIntersects
+    .subscribe (arr) ->
+      debugger
+      # update = (model) ->
+      #   newObject = new THREE.Object3D()
+      #   geom = new THREE.SphereGeometry DEFAULT_VOLUME
+      #   material = new 
   
-  cameraState = stream.fromEvent emitter, 'cameraState'
+  # cameraState = stream.fromEvent emitter, 'cameraState'
+  cameraState = emitter 'cameraState'
   # isAbove = cameraState.map (c) -> c.position._polar.phi is MIN_PHI
   
-  cancelAdd = stream.fromEvent emitter, 'cancelAdd'
+  # cancelAdd = stream.fromEvent emitter, 'cancelAdd'
+  cancelAdd = emitter 'cancelAdd'
     .do -> console.log 'Add object mode cancelled.'
   
   addObjectMode = stream.fromEvent(
@@ -81,7 +95,7 @@ start = ->
         cameraPolarTween(goToTop, emitter) camera
 
   # ---------------------------------------------- Camera Update Streams
-  cameraTop = stream.fromEvent emitter, 
+  # cameraTop = stream.fromEvent emitter, 
   
   cameraMoveButton = cameraControls.select('#camera')
   cameraSize = resize.map setCameraSize
@@ -90,7 +104,7 @@ start = ->
   
   cameraButtonStreams = getCameraButtonStreams cameraControls, emitter
   
-  cameraTweenStream = stream.fromEvent emitter, 'tweenCamera'
+  cameraTweenStream = emitter 'tweenCamera'
     .flatMap (o) -> getTweenStream(o.duration) o.update
   
   cameraUpdates = stream.merge [
@@ -121,7 +135,7 @@ start = ->
       return e
     .shareReplay()
     
-  modelState = stream.fromEvent emitter, 'modelState'
+  modelState = emitter 'modelState'
   
   canvasDrag.withLatestFrom modelState
     .subscribe (arr) ->
