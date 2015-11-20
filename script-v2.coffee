@@ -1,3 +1,8 @@
+Rx.config.longStackSupport = true
+stream = Rx.Observable
+raycaster = new THREE.Raycaster()
+emitter = new EventEmitter()
+
 CAMERA_RADIUS = 100
 INITIAL_THETA = 80 # longitude
 INITIAL_PHI = 45 # 90 - latitude
@@ -5,39 +10,30 @@ INITIAL_ZOOM = 40
 MIN_PHI = 0.01
 MAX_PHI = Math.PI * 0.5
 
-Rx.config.longStackSupport = true
-stream = Rx.Observable
-raycaster = new THREE.Raycaster()
-
 room =
     width: 15
     length: 10
     height: 3
 
-DEFAULT_OBJECT_RADIUS = room.width * 0.1
-DEFAULT_CONE_VOLUME = DEFAULT_OBJECT_RADIUS
+DEFAULT_CONE_VOLUME = DEFAULT_OBJECT_RADIUS = room.width * 0.1
 CONE_TOP = 0.01
 DEFAULT_SPREAD = 0.3
 
 start = ->
-  
-  emitter = new EventEmitter()
-
   # ---------------------------------------------- DOM Init
   main = addMain d3.select('body')
   canvas = main.append('canvas').node()
+  
   sceneControls = addSceneControls main
   modeButtons = getModeButtons sceneControls
   cameraControls = addCameraControls main
 
   # ---------------------------------------------- Three.js Init
-  _roomObject = getRoomObject room
-  edges = new THREE.EdgesHelper _roomObject, 0x00ff00 
-  mainObject = getMainObject()
-  mainObject.add _roomObject
-  mainObject.add edges
-  scene = new THREE.Scene()
-  scene.add mainObject
+  firstRenderer = new THREE.WebGLRenderer canvas: canvas
+  firstRenderer.setClearColor 'white'
+  
+  roomObject = getRoomObject room
+  scene = getInitialScene roomObject
 
   # ---------------------------------------------- Resize
   resize = Rx.Observable.fromEvent window, 'resize'
@@ -45,51 +41,56 @@ start = ->
     .map (e) -> e.target
     .map -> getClientSize main.node()
 
-  mainRenderer = do ->
-    start = new THREE.WebGLRenderer canvas: canvas
-    start.setClearColor "white"
-    resize.scan (renderer, s) ->
-      renderer.setSize s.width, s.height
-      return renderer
-    , start
+  renderer = stream.just firstRenderer
+    .concat resize
+    .scan (r, s) ->
+      r.setSize s.width, s.height
+      return r
     
-  # ---------------------------------------------- Add Objects
-
-  node = modeButtons.select('#object').node()
+  # ---------------------------------------------- Add Object Button
+  
+  floorIntersects = stream.fromEvent emitter, 'floorIntersects'
+  
+  # addObject = stream.fromEvent emitter, 'addObject'
+  #   .withLatestFrom floorIntersects
+  #   .subscribe (arr) ->
+  #     update = (model) ->
+  #       newObject = new THREE.Object3D()
+        
   
   cameraState = stream.fromEvent emitter, 'cameraState'
+  # isAbove = cameraState.map (c) -> c.position._polar.phi is MIN_PHI
+  
+  cancelAdd = stream.fromEvent emitter, 'cancelAdd'
+    .do -> console.log 'Add object mode cancelled.'
+  
+  addObjectMode = stream.fromEvent(
+      modeButtons.select('#object').node(), 
+      'click'
+    )
     
-  #cameraState.subscribe (camera) -> console.log camera
-  
-  isAbove = cameraState.map (c) -> c.position._polar.phi is MIN_PHI
-  
-  addObject = stream.fromEvent node, 'click'
-  
-  readyAdd = addObject.withLatestFrom isAbove, (a, b) -> b
-    .flatMap (first) ->
-      isAbove
-        .startWith first
-        .skipWhile (a) -> a is false
-        .takeWhile (a) -> a is true
-        .concat stream.just false
+  readyAdd = addObjectMode.map -> true
+    .merge cancelAdd.map -> false
     .startWith false
-    .distinctUntilChanged()
     .do (d) -> console.log 'readyAdd', d
-    #.combineLatest isAbove
-    #.subscribe (arr) -> console.log arr
     
-  #addObjectMove = addObject.map ->
-    #(camera) ->
-      #cameraControls.select('#top').node().click()
-      #return camera
+  addObjectMode
+    .withLatestFrom cameraState, (e, c) -> c
+    .subscribe (camera) ->
+      if not isAbove camera
+        cameraPolarTween(goToTop, emitter) camera
 
   # ---------------------------------------------- Camera Update Streams
+  cameraTop = stream.fromEvent emitter, 
+  
   cameraMoveButton = cameraControls.select('#camera')
   cameraSize = resize.map setCameraSize
   cameraPosition = getCameraPositionStream cameraMoveButton, emitter
   cameraZoom = getCameraZoomStream emitter
+  
   cameraButtonStreams = getCameraButtonStreams cameraControls, emitter
-  cameraTweenStream = stream.fromEvent(emitter, 'tweenCamera')
+  
+  cameraTweenStream = stream.fromEvent emitter, 'tweenCamera'
     .flatMap (o) -> getTweenStream(o.duration) o.update
   
   cameraUpdates = stream.merge [
@@ -98,10 +99,9 @@ start = ->
     cameraSize
     cameraButtonStreams
     cameraTweenStream
-    #addObjectMove
   ]
   
-  # Transform camera updates in to model updates
+  # Transform camera updates into model updates
   cameraModelUpdates = cameraUpdates
     .map (func) ->
       (model) ->
@@ -109,7 +109,7 @@ start = ->
         emitter.emit 'cameraState', model.camera
         return model
 
-  #Normalized device coordinates
+  # Normalized device coordinates
   mainNDC = resize.map updateNdcDomain
     .scan apply, getNdcScales()
   
@@ -120,14 +120,32 @@ start = ->
       e.update = updateIntersects e
       return e
     .shareReplay()
+    
+  modelState = stream.fromEvent emitter, 'modelState'
+  
+  canvasDrag.withLatestFrom modelState
+    .subscribe (arr) ->
+      [ event, model ] = arr
+      m = model
+      mouse = event.ndc
+      raycaster.setFromCamera mouse, m.camera
+      room = raycaster.intersectObjects m.room.children, false
+      floor = raycaster.intersectObject m.floor, false
+      emitter.emit 'floorIntersects', floor
   
   canvasDragStart = canvasDrag
     .filter (event) -> event.type is 'dragstart'
+    #.do (event) -> console.log event
     
-  canvasDragStart.combineLatest readyAdd
-    .subscribe (arr) -> console.log arr
-    
-  #canvasDragStart
+  canvasDragStart.withLatestFrom readyAdd
+    .subscribe (arr) ->
+      [ event, ready ] = arr
+      if ready 
+        console.info 'Adding object.'
+        emitter.emit 'addObject', event
+        emitter.emit 'cancelAdd'
+      else
+        console.info 'Not in add object mode.'
     
   panStart = canvasDragStart.map setPanStart
         
@@ -141,26 +159,17 @@ start = ->
     canvasDragMove
   )
   
-  roomObject = stream.just _roomObject
-  
   model = stream.just
     camera: getFirstCamera()
-    room: _roomObject
+    room: roomObject
     scene: scene
     floor: scene.getObjectByName 'floor'
   .concat allModelUpdates
-  .scan apply
+  .scan (o, fn) ->
+    emitter.emit 'modelState', o
+    return fn o
   
   camera = model.map (model) -> model.camera
-    
-  #isAbove = camera
-    #.map (c) -> c.position._polar.phi is MIN_PHI
-  #
-  #aboveSwitch = isAbove
-    #.bufferWithCount 2, 1
-    #.filter (a) -> a[0] isnt a[1]
-    #.map (a) -> a[1]
-    #.subscribe (d) -> console.log d
     
   # ---------------------------------------------- Render   
   do ->
@@ -168,12 +177,21 @@ start = ->
       [camera, renderer] = arr
       renderer.render scene, camera
     onError = (err) -> console.error(err.stack);
-    camera.withLatestFrom mainRenderer
+    camera.withLatestFrom renderer
       .subscribe onNext, onError
       
   #camera.connect()
 
 # ------------------------------------------------------- Functions
+
+getInitialScene = (roomObject) ->
+  edges = new THREE.EdgesHelper roomObject, 0x00ff00 
+  mainObject = getMainObject()
+  mainObject.add roomObject
+  mainObject.add edges
+  scene = new THREE.Scene()
+  scene.add mainObject
+  return scene
 
 isAbove = (camera) -> camera.position._polar.phi is MIN_PHI
 
@@ -264,13 +282,15 @@ setCameraSize = (s) ->
 getCameraButtonStreams = (cameraControls, emitter) ->
   stream.merge [
     [ 'north', goToNorth ]
-    [ 'top', -> phi: MIN_PHI ]
+    [ 'top', goToTop ]
     [ 'phi_45', -> phi: degToRad 45 ]
   ].map (arr) ->
     node = cameraControls.select("##{arr[0]}").node()
     endFunc = arr[1]
     return stream.fromEvent node, 'click'
       .map -> cameraPolarTween(endFunc, emitter)
+      
+goToTop = -> phi: MIN_PHI
 
 goToNorth = (camera) ->
   _theta = camera.position._polar.theta
@@ -292,10 +312,12 @@ addSceneControls = (selection) ->
       top: '1%'
 
 addMain = (selection) ->
+  d3.select('html').style height: '100%'
+  d3.select('body').style height: '100%'
   selection.append('main')
     .style
       width: "100%"
-      height: "80vh"
+      height: "100%"
       position: 'relative'
 
 addCone = (obj) ->
@@ -595,8 +617,11 @@ vectorToPolar = (vector) ->
   return { radius, theta, phi }
   
 getClientSize = (element) ->
-  width: element.clientWidth
-  height: element.clientHeight
+  d3.select('body').append('p').text(element.clientHeight);
+  return {
+    width: element.clientWidth
+    height: element.clientHeight
+  }
 
 apply = (last, func) -> func last
 
