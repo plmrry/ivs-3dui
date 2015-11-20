@@ -26,7 +26,7 @@ start = ->
   main = d3.select('body').append('main')
     .style
       width: "100%"
-      height: "80vh"
+      height: "100vh"
       position: 'relative'
 
   canvas = main.append('canvas').node()
@@ -170,15 +170,51 @@ start = ->
       else
         return stream.empty()
     .share()
+    
+  coneZ = objectCard.flatMap (node) ->
+    slider = d3.select(node).select('#coneZ').node()
+    return stream.fromEvent slider, 'mousedown'
+      .flatMap ->
+        stream.fromEvent slider, 'mousemove'
+      .map (event) -> [event, node]
+      #.map (event) -> [event, node]
+    #return stream.fromEvent slider, 'change'
+      #.map (event) -> [event, node]
+      
+  coneY = objectCard.flatMap (node) ->
+    slider = d3.select(node).select('#coneY').node()
+    return stream.fromEvent slider, 'mousedown'
+      .flatMap ->
+        stream.fromEvent slider, 'mousemove'
+      .map (event) -> [event, node]
+      
+  coneHeight = objectCard.flatMap (node) ->
+    slider = d3.select(node).select('#coneHeight').node()
+    return stream.fromEvent slider, 'mousedown'
+      .flatMap ->
+        stream.fromEvent slider, 'mousemove'
+      .map (event) -> [event, node]
+      
+  coneSpread = objectCard.flatMap (node) ->
+    slider = d3.select(node).select('#coneSpread').node()
+    return stream.fromEvent slider, 'mousedown'
+      .flatMap ->
+        stream.fromEvent slider, 'mousemove'
+      .map (event) -> [event, node]
+    
+  addConeButton = objectCard.flatMap (node) ->
+    button = d3.select(node).select('#addCone').node()
+    return stream.fromEvent button, 'click'
+      .map (event) -> node
   
-  #newConeSelection = addConeButton.map (node) ->
-    #obj = d3.select(node).datum().object
-    #i = obj.children.length
-    #coneName = "cone#{i}"
-    #objName = d3.select(node).datum().object.name
-    #selection = { coneName, objName }
-    #return selection
-  #.share()
+  newConeSelection = addConeButton.map (node) ->
+    obj = d3.select(node).datum().object
+    i = obj.children.length
+    coneName = "cone#{i}"
+    objName = d3.select(node).datum().object.name
+    selection = { coneName, objName }
+    return selection
+  .share()
         
   heightUpdate = coneHeight.withLatestFrom newConeSelection
     .map (arr) ->
@@ -230,7 +266,7 @@ start = ->
         return scene
       return sceneUpdater
   
-  sceneUpdates = stream.merge newConeUpdate, zUpdate, yUpdate, heightUpdate, spreadUpdate
+  sceneUpdates = stream.merge newConeUpdate, heightUpdate, spreadUpdate
     
   hudCanvas = objectCard.map (node) ->
     return d3.select(node).select('canvas').node()
