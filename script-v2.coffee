@@ -66,7 +66,12 @@ start = ->
     .withLatestFrom emitter 'cameraState'
     .subscribe (arr) ->
       [object, camera] = arr
-      
+      i = d3.interpolate camera._lookAt, object.position
+      update = (t) -> (c) ->
+        c._lookAt.copy i t
+        c.lookAt c._lookAt
+        return c
+      emitter.emit 'tweenCamera', { update, duration: 500 }
   
   addObject = emitter 'addObject'
     .withLatestFrom emitter 'floorIntersects'
@@ -114,7 +119,9 @@ start = ->
   
   cameraMoveButton = cameraControls.select('#camera')
   cameraSize = resize.map setCameraSize
+  
   cameraPosition = getCameraPositionStream cameraMoveButton, emitter
+  
   cameraZoom = getCameraZoomStream emitter
   
   cameraButtonStreams = getCameraButtonStreams cameraControls, emitter
@@ -487,21 +494,19 @@ cameraPolarTween = (endFunc, emitter) ->
     return camera
 
 getCameraPositionStream = (selection, emitter) ->
-  cameraDrag = d3.behavior.drag()
-  selection.call cameraDrag
-  return Rx.Observable.create (observer) ->
-    cameraDrag.on 'drag', -> observer.onNext d3.event
-  .map (e) ->
-    (camera) ->
-      polar = camera.position._polar
-      polar.phi += degToRad e.dy
-      polar.theta += degToRad e.dx
-      polar.phi = MIN_PHI if polar.phi < MIN_PHI
-      polar.phi = MAX_PHI if polar.phi > MAX_PHI
-      camera.position._relative = polarToVector camera.position._polar
-      camera.position.addVectors camera.position._relative, camera._lookAt
-      camera.lookAt camera._lookAt
-      camera
+  fromD3drag selection
+    .filter (e) -> e.type is 'drag'
+    .map (e) ->
+      (camera) ->
+        polar = camera.position._polar
+        polar.phi += degToRad e.dy
+        polar.theta += degToRad e.dx
+        polar.phi = MIN_PHI if polar.phi < MIN_PHI
+        polar.phi = MAX_PHI if polar.phi > MAX_PHI
+        camera.position._relative = polarToVector camera.position._polar
+        camera.position.addVectors camera.position._relative, camera._lookAt
+        camera.lookAt camera._lookAt
+        camera
 
 updateCameraPosition = (event) ->
   (camera) ->
