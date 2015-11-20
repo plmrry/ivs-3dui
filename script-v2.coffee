@@ -6,6 +6,9 @@ CAMERA_RADIUS = 100
 INITIAL_THETA = 80 # longitude
 INITIAL_PHI = 45 # 90 - latitude
 INITIAL_ZOOM = 40
+EDIT_MODE_ZOOM = 90
+EDIT_MODE_PHI = 85
+ADD_OBJECT_PHI = 80
 MIN_PHI = 0.01
 MAX_PHI = Math.PI * 0.5
 
@@ -63,12 +66,28 @@ start = ->
   floorIntersects = emitter 'floorIntersects'
   
   emitter 'objectAdded'
-    .withLatestFrom emitter 'cameraState'
+    .subscribe (o) ->
+      emitter.emit 'selectObject', o
+      emitter.emit 'editSelected'
+  
+  emitter 'editSelected'
+    .withLatestFrom(
+      emitter('selectObject'), 
+      emitter('cameraState'),
+      (e, o, c) -> [o,c]
+    )
     .subscribe (arr) ->
       [object, camera] = arr
-      i = d3.interpolate camera._lookAt, object.position
+      i = 
+        lookAt: d3.interpolate camera._lookAt, object.position
+        zoom: d3.interpolate camera.zoom, EDIT_MODE_ZOOM
+        phi: d3.interpolate camera.position._polar.phi, EDIT_MODE_PHI
+        
       update = (t) -> (c) ->
-        c._lookAt.copy i t
+        c._lookAt.copy i.lookAt t
+        camera.position.addVectors camera.position._relative, camera._lookAt
+        c.zoom = i.zoom t
+        c.updateProjectionMatrix()
         c.lookAt c._lookAt
         return c
       emitter.emit 'tweenCamera', { update, duration: 500 }
@@ -111,8 +130,10 @@ start = ->
   addObjectMode
     .withLatestFrom cameraState, (e, c) -> c
     .subscribe (camera) ->
-      if not isAbove camera
-        cameraPolarTween(goToTop, emitter) camera
+      maxPhi = degToRad ADD_OBJECT_PHI
+      if camera.position._polar.phi > maxPhi
+        end = -> phi: maxPhi
+        cameraPolarTween(end, emitter) camera
 
   # ---------------------------------------------- Camera Update Streams
   # cameraTop = stream.fromEvent emitter, 
@@ -507,19 +528,6 @@ getCameraPositionStream = (selection, emitter) ->
         camera.position.addVectors camera.position._relative, camera._lookAt
         camera.lookAt camera._lookAt
         camera
-
-updateCameraPosition = (event) ->
-  (camera) ->
-    e = event
-    polar = camera.position._polar
-    polar.phi += degToRad e.dy
-    polar.theta += degToRad e.dx
-    polar.phi = MIN_PHI if polar.phi < MIN_PHI
-    polar.phi = MAX_PHI if polar.phi > MAX_PHI
-    camera.position._relative = polarToVector camera.position._polar
-    camera.position.addVectors camera.position._relative, camera._lookAt
-    camera.lookAt camera._lookAt
-    return camera
 
 getCameraZoomStream = (emitter) ->
   ZOOM_AMOUNT = 2
