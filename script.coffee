@@ -644,3 +644,42 @@ do start
           #_scene = new THREE.Scene()
           #_scene.add clone
           #d3.timer -> _renderer.render _scene, _camera
+
+  #canvasClick.withLatestFrom camera
+    #.subscribe (arr) ->
+      #camera = arr[1]
+      #
+       #FIXME
+      #NDC = [
+        #d3.scale.linear().range [-1, 1]
+        #d3.scale.linear().range [1, -1]
+      #]
+      #_c = d3.select canvas
+      #NDC[0].domain [0, _c.attr('width')]
+      #NDC[1].domain [0, _c.attr('height')]
+      #
+      #mouse = d3.mouse canvas
+        #.map (d, i) -> NDC[i] d
+      #
+      #raycaster.setFromCamera { x: mouse[0], y: mouse[1] }, camera
+      #intersects = raycaster.intersectObjects roomObject.children, false
+      #first = intersects[0].object
+      #clone = first.clone()
+      #
+      #console.log first
+      #
+      #sceneControls.selectAll('#objectView').data(Array(1))
+        #.enter().append('div').classed('card', true)
+        #.attr id: 'objectView'
+        #.append 'canvas'
+        #.call ->
+          #_wid = 300
+          #_camera = new THREE.OrthographicCamera()
+          #_camera.left = _camera.bottom = -_wid/2
+          #_camera.right = _camera.top = _wid/2
+          #_renderer = new THREE.WebGLRenderer canvas: this.node()
+          #_renderer.setSize _wid, _wid
+          #_renderer.setClearColor "white"
+          #_scene = new THREE.Scene()
+          #_scene.add clone
+          #d3.timer -> _renderer.render _scene, _camera

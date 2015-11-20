@@ -14,7 +14,8 @@ room =
     length: 10
     height: 3
 
-DEFAULT_VOLUME = DEFAULT_OBJECT_RADIUS = room.width * 0.1
+DEFAULT_OBJECT_VOLUME = room.width * 0.1
+DEFAULT_OBJECT_HEIGHT = room.height * 0.5
 CONE_TOP = 0.01
 DEFAULT_SPREAD = 0.3
 
@@ -61,20 +62,34 @@ start = ->
   # floorIntersects = stream.fromEvent emitter, 'floorIntersects'
   floorIntersects = emitter 'floorIntersects'
   
-  addObject = emitter 'addObject'
-    .withLatestFrom floorIntersects
+  emitter 'objectAdded'
+    .withLatestFrom emitter 'cameraState'
     .subscribe (arr) ->
-      debugger
-      # update = (model) ->
-      #   newObject = new THREE.Object3D()
-      #   geom = new THREE.SphereGeometry DEFAULT_VOLUME
-      #   material = new 
+      [object, camera] = arr
+      
   
-  # cameraState = stream.fromEvent emitter, 'cameraState'
+  addObject = emitter 'addObject'
+    .withLatestFrom emitter 'floorIntersects'
+    .subscribe (arr) ->
+      [ event, intersects ] = arr
+      p = intersects[0]?.point
+      newObject = new THREE.Object3D()
+      geometry = new THREE.SphereGeometry DEFAULT_OBJECT_VOLUME
+      material = new THREE.MeshBasicMaterial
+        color: 0x0000ff, wireframe: true
+      object = new THREE.Mesh geometry, material
+      y = DEFAULT_OBJECT_HEIGHT
+      object.position.set p.x, y, p.z
+      update = (model) ->
+        i = model.room.children.length
+        object.name = "object#{i}"
+        model.room.add object
+        return model
+      emitter.emit 'modelUpdate', update
+      emitter.emit 'objectAdded', object
+  
   cameraState = emitter 'cameraState'
-  # isAbove = cameraState.map (c) -> c.position._polar.phi is MIN_PHI
-  
-  # cancelAdd = stream.fromEvent emitter, 'cancelAdd'
+
   cancelAdd = emitter 'cancelAdd'
     .do -> console.log 'Add object mode cancelled.'
   
@@ -171,6 +186,7 @@ start = ->
     cameraModelUpdates
     panStart
     canvasDragMove
+    emitter 'modelUpdate'
   )
   
   model = stream.just
@@ -340,7 +356,7 @@ addCone = (obj) ->
   coneParent = new THREE.Object3D()
   coneParent.name = "cone#{i}"
   obj.add coneParent
-  height = DEFAULT_VOLUME
+  height = DEFAULT_OBJECT_VOLUME
   geometry = new THREE.CylinderGeometry CONE_TOP, DEFAULT_SPREAD, height
   material = new THREE.MeshBasicMaterial
     color: 0xff0000, wireframe: true
@@ -521,13 +537,9 @@ getCameraZoomStream = (emitter) ->
       
 getTweenStream = (duration) -> (update) ->
   tweenStream(duration).map update
-      
-getTweenUpdateStream = (duration) ->
-  tweenStream(duration).map (time) ->
-    (cam) -> cam._update(time)(cam)
 
 tweenStream = (duration) ->
-  duration = duration or 0
+  duration ?= 0
   Rx.Observable.create (observer) ->
     d3.transition()
       .duration duration
@@ -642,43 +654,3 @@ apply = (last, func) -> func last
 degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
 
 do start
-
-
-  #canvasClick.withLatestFrom camera
-    #.subscribe (arr) ->
-      #camera = arr[1]
-      #
-       #FIXME
-      #NDC = [
-        #d3.scale.linear().range [-1, 1]
-        #d3.scale.linear().range [1, -1]
-      #]
-      #_c = d3.select canvas
-      #NDC[0].domain [0, _c.attr('width')]
-      #NDC[1].domain [0, _c.attr('height')]
-      #
-      #mouse = d3.mouse canvas
-        #.map (d, i) -> NDC[i] d
-      #
-      #raycaster.setFromCamera { x: mouse[0], y: mouse[1] }, camera
-      #intersects = raycaster.intersectObjects roomObject.children, false
-      #first = intersects[0].object
-      #clone = first.clone()
-      #
-      #console.log first
-      #
-      #sceneControls.selectAll('#objectView').data(Array(1))
-        #.enter().append('div').classed('card', true)
-        #.attr id: 'objectView'
-        #.append 'canvas'
-        #.call ->
-          #_wid = 300
-          #_camera = new THREE.OrthographicCamera()
-          #_camera.left = _camera.bottom = -_wid/2
-          #_camera.right = _camera.top = _wid/2
-          #_renderer = new THREE.WebGLRenderer canvas: this.node()
-          #_renderer.setSize _wid, _wid
-          #_renderer.setClearColor "white"
-          #_scene = new THREE.Scene()
-          #_scene.add clone
-          #d3.timer -> _renderer.render _scene, _camera
