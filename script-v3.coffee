@@ -2,12 +2,15 @@ Rx.config.longStackSupport = true
 stream = Rx.Observable
 raycaster = new THREE.Raycaster()
 
+log = console.log.bind console
+
 CAMERA_RADIUS = 100
 INITIAL_THETA = 80
 INITIAL_PHI = 45
 INITIAL_ZOOM = 40
 MIN_PHI = 0.01
 MAX_PHI = Math.PI * 0.5
+EDIT_MODE_PHI = 85
 ZOOM_AMOUNT = 2
 
 ROOM_SIZE =
@@ -46,12 +49,26 @@ renderer = dom
       r.setSize s.width, s.height
       return r
     , first
+    
+emitter 'tweenCamera'
+  .flatMap (o) ->
+    tweenStream o.duration
+      .map o.update
+  .map (update) ->
+    return (model) ->
+      model.camera = update model.camera
+      return model
+  .subscribe (update) -> 
+    emitter.emit 'modelUpdate', update
 
 modelUpdates = stream.merge cameraSize, emitter 'modelUpdate'
 
 model = emitter 'start'
   .flatMap ->
-    modelUpdates.scan apply, firstModel()
+    modelUpdates.scan (o, fn) ->
+      emitter.emit 'modelState', o
+      return fn o
+    , firstModel()
 
 # ------------------------------------------------------- Render 
 do ->
@@ -96,13 +113,54 @@ dom
       stream.fromEvent node, 'click'
         .map -> arr[1]
     return stream.merge zooms
-      .map (dz) -> dz
-      #   update = (model) -> 
-      #     # z = model.camera.zoom
-      #     # interpolator = d3.interpolate z, z * dz
-  .subscribe (d) -> console.log d
+  .withLatestFrom emitter 'modelState'
+  .map (arr) -> 
+    [ dz, model ] = arr
+    camera = model.camera
+    z = camera.zoom
+    interpolator = d3.interpolate z, z * dz
+    update = (t) -> (c) ->
+      c.zoom = interpolator t
+      c.updateProjectionMatrix()
+      return c
+    return update
+  .subscribe (update) -> 
+    emitter.emit 'tweenCamera', { update: update, duration: 500 }
+    
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Add Object
+addObjectMode = dom
+  .flatMap (dom) ->
+    addObject = dom.modeButtons.select('#object').node()
+    return stream.fromEvent addObject, 'click'
+readyAdd = addObjectMode.map -> true
+  .merge emitter('cancelAdd').map -> false
+  .startWith false
+  .do (d) -> log "readyAdd #{d}"
+  .subscribe()
+addObjectMode
+  .withLatestFrom emitter('modelState'), (a, b) -> b
+  .subscribe (model) ->
+    camera = model.camera
+    maxPhi = degToRad EDIT_MODE_PHI
+    if camera.position._polar.phi > maxPhi
+      endFunc = -> phi: maxPhi
+      update = cameraPolarTweenFunc(endFunc)(camera)
+      emitter.emit 'tweenCamera', { update: update, duration: 1000 }
   
 # ------------------------------------------------------- Functions
+
+cameraPolarTweenFunc = (endFunc) -> (camera) ->
+  polarStart = camera.position._polar
+  end = endFunc camera
+  interpolator = d3.interpolate polarStart, end
+  update = (t) -> (c) ->
+    c.position._polar = interpolator t
+    c.position._relative = polarToVector c.position._polar
+    c.position.addVectors c.position._relative, c._lookAt
+    c.lookAt c._lookAt
+    return c
+  return update
 
 addMain = (selection) ->
   d3.select('html').style height: '100%'
@@ -230,6 +288,15 @@ setCameraSize = (s) ->
     [ c.bottom, c.top ] = [-1, 1].map (d) -> d * s.height/2
     c.updateProjectionMatrix()
     return c
+
+tweenStream = (duration, name) ->
+  duration ?= 0
+  name ?= 'tween'
+  Rx.Observable.create (observer) ->
+    d3.select({}).transition()
+      .duration duration
+      .tween name, -> (t) -> observer.onNext t
+      .each "end", -> observer.onCompleted()
     
 firstModelUpdate = (model) ->
   model.camera = getFirstCamera()
@@ -238,10 +305,11 @@ firstModelUpdate = (model) ->
   return model
   
 firstModel = ->
-  model.camera = getFirstCamera()
-  model.room = getRoomObject ROOM_SIZE
-  model.scene = getInitialScene model.room
-  return model
+  _model = {}
+  _model.camera = getFirstCamera()
+  _model.room = getRoomObject ROOM_SIZE
+  _model.scene = getInitialScene _model.room
+  return _model
   
 firstDom = ->
   dom = {}
