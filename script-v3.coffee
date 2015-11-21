@@ -6,13 +6,14 @@ CAMERA_RADIUS = 100
 INITIAL_THETA = 80
 INITIAL_PHI = 45
 INITIAL_ZOOM = 40
+MIN_PHI = 0.01
+MAX_PHI = Math.PI * 0.5
+ZOOM_AMOUNT = 2
 
 ROOM_SIZE =
   width: 15
   length: 10
   height: 3
-
-apply = (o, fn) -> fn o
 
 emitter = do ->
   subject = new Rx.Subject()
@@ -52,6 +53,7 @@ model = emitter 'start'
   .flatMap ->
     modelUpdates.scan apply, firstModel()
 
+# ------------------------------------------------------- Render 
 do ->
   onNext = (arr) ->
     [model, renderer] = arr
@@ -59,9 +61,47 @@ do ->
   onError = (err) -> console.error(err.stack);
   model.combineLatest renderer
     .subscribe onNext, onError
-  
-# start = ->
-#   emitter.emit 'start'
+    
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Camera Position
+dom
+  .flatMap (dom) ->
+    cameraMove = dom.cameraControls.select '#camera'
+    fromD3drag cameraMove
+  .filter (e) -> e.type is 'drag'
+  .map (e) ->
+    (camera) ->
+      polar = camera.position._polar
+      polar.phi += degToRad e.dy
+      polar.theta += degToRad e.dx
+      polar.phi = MIN_PHI if polar.phi < MIN_PHI
+      polar.phi = MAX_PHI if polar.phi > MAX_PHI
+      camera.position._relative = polarToVector camera.position._polar
+      camera.position.addVectors camera.position._relative, camera._lookAt
+      camera.lookAt camera._lookAt
+      camera
+  .subscribe (camUpdate) -> 
+    update = (model) ->
+      model.camera = camUpdate model.camera
+      return model
+    emitter.emit 'modelUpdate', update
+    
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Camera Zoom
+dom
+  .flatMap (dom) ->
+    a = ZOOM_AMOUNT
+    zooms = [['In',a],['Out',1/a]].map (arr) ->
+      node = dom.cameraControls.select("#zoom#{arr[0]}").node()
+      stream.fromEvent node, 'click'
+        .map -> arr[1]
+    return stream.merge zooms
+      .map (dz) -> dz
+      # .map (dz) ->
+      #   update = (model) -> 
+      #     # z = model.camera.zoom
+      #     # interpolator = d3.interpolate z, z * dz
+  .subscribe (d) -> console.log d
   
 # ------------------------------------------------------- Functions
 
@@ -118,9 +158,9 @@ addCameraControls = (main) ->
   buttons = [
     { name: "north" }, { name: "top" }
     { name: "phi_45", html: '45' }
-    { name: "camera", html: '<i class="material-icons" style="display: block">3d_rotation</i>' }
-    { name: "zoomIn", html: '<i class="material-icons" style="display: block">zoom_in</i>' }
-    { name: "zoomOut", html: '<i class="material-icons" style="display: block">zoom_out</i>' }
+    { name: "camera", html: materialIcon '3d_rotation' }
+    { name: "zoomIn", html: materialIcon 'zoom_in' }
+    { name: "zoomOut", html: materialIcon 'zoom_out' }
   ]
   butts = cameraControls.selectAll("button").data(buttons)
   butts.enter().append("button")
@@ -128,6 +168,9 @@ addCameraControls = (main) ->
     .attr "id", (d) -> d.name
     .html (d) -> d.html ? d.name
   return cameraControls
+  
+materialIcon = (text) ->
+  "<i class='material-icons' style='display: block'>#{text}</i>"
   
 getRoomObject = (room) ->
   geometry = new THREE.BoxGeometry room.width, room.height, room.length
@@ -209,6 +252,19 @@ firstDom = ->
   dom.modeButtons = getModeButtons dom.sceneControls
   dom.cameraControls = addCameraControls main
   return dom
+  
+fromD3drag = (selection) ->
+  handler = d3.behavior.drag()
+  selection.call handler
+  return fromD3dragHandler handler
+
+fromD3dragHandler = (drag) ->
+  return stream.create (observer) ->
+    drag.on 'dragstart', -> observer.onNext d3.event
+      .on 'drag', -> observer.onNext d3.event
+      .on 'dragend', -> observer.onNext d3.event
+      
+apply = (o, fn) -> fn o
 
 degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
     
