@@ -35,6 +35,11 @@ size = stream.fromEvent window, 'resize'
   .startWith 'first resize'
   .combineLatest dom, (a, b) -> b
   .map (dom) -> getClientSize dom.main.node()
+  
+ndc = emitter 'start'
+  .flatMap ->
+    size.map updateNdcDomain
+      .scan apply, firstNdcScales()
 
 cameraSize = size.map (size) ->
   return (model) ->
@@ -78,6 +83,59 @@ do ->
   onError = (err) -> console.error(err.stack);
   model.combineLatest renderer
     .subscribe onNext, onError
+    
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Canvas Drag
+canvasDrag = dom
+  .flatMap (dom) ->
+    canvas = dom.canvas
+    fromD3drag d3.select canvas
+      .map getMouseFrom canvas
+  .withLatestFrom ndc, (a, b) -> getNdcFromMouse a, b
+  .withLatestFrom emitter 'modelState'
+  .do (arr) ->
+    [event, model] = arr
+    raycaster.setFromCamera event.ndc, model.camera
+    roomIntersects = raycaster.intersectObjects model.room.children, false
+    floorIntersects = raycaster.intersectObject model.floor, false
+    emitter.emit 'roomIntersects', roomIntersects
+    emitter.emit 'floorIntersects', floorIntersects
+  .map (arr) -> arr[0]
+  .subscribe (d) -> emitter.emit 'canvasDrag', d
+  
+r = emitter('roomIntersects')
+f = emitter('floorIntersects')
+allIntersects = stream.combineLatest r, f, ((r, f) -> room: r, floor: f)
+  
+canvasDragStart = emitter 'canvasDrag'
+  .filter (e) -> e.type is 'dragstart'
+  .withLatestFrom allIntersects, (e, i) -> i
+
+canvasDragStart.subscribe log
+  
+canvasDragMove = emitter 'canvasDrag'
+  .filter (e) -> e.type is 'drag'
+  .withLatestFrom allIntersects, (e, i) -> i
+
+canvasDragMove.subscribe log
+
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Camera Pan
+canvasDragMove
+  .withLatestFrom canvasDragStart
+  .map (arr) ->
+    [current, start] = arr
+    _current = current.floor[0]?.point or (new THREE.Vector3())
+    _start = start.floor[0]?.point or _current
+    delta = (new THREE.Vector3()).subVectors _start, _current
+    update = (model) ->
+      model.camera._lookAt.add delta
+      model.camera.position.add delta
+      return model
+    return update
+  .subscribe (update) -> emitter.emit 'modelUpdate', update
+    # _current = intersects.floor[0]?.point or (new THREE.Vector3())
+    # _start = intersects.floor[0]?.point
     
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Position
@@ -149,6 +207,16 @@ addObjectMode
       emitter.emit 'tweenCamera', { update: update, duration: 1000 }
   
 # ------------------------------------------------------- Functions
+getMouseFrom = (node) ->
+  (event) ->
+    event.mouse = d3.mouse node
+    return event
+    
+getNdcFromMouse = (event, ndc) ->
+  event.ndc = 
+    x: ndc.x event.mouse[0]
+    y: ndc.y event.mouse[1]
+  return event
 
 cameraPolarTweenFunc = (endFunc) -> (camera) ->
   polarStart = camera.position._polar
@@ -229,6 +297,16 @@ addCameraControls = (main) ->
 materialIcon = (text) ->
   "<i class='material-icons' style='display: block'>#{text}</i>"
   
+updateNdcDomain = (s) ->
+  (d) ->
+    d.x.domain [0, s.width]
+    d.y.domain [0, s.height]
+    return d
+  
+firstNdcScales = ->
+  x: d3.scale.linear().range [-1, 1]
+  y: d3.scale.linear().range [1, -1]
+  
 getRoomObject = (room) ->
   geometry = new THREE.BoxGeometry room.width, room.height, room.length
   material = new THREE.MeshBasicMaterial
@@ -305,11 +383,12 @@ firstModelUpdate = (model) ->
   return model
   
 firstModel = ->
-  _model = {}
-  _model.camera = getFirstCamera()
-  _model.room = getRoomObject ROOM_SIZE
-  _model.scene = getInitialScene _model.room
-  return _model
+  m = {}
+  m.camera = getFirstCamera()
+  m.room = getRoomObject ROOM_SIZE
+  m.scene = getInitialScene m.room
+  m.floor = m.scene.getObjectByName 'floor'
+  return m
   
 firstDom = ->
   dom = {}
