@@ -33,10 +33,20 @@ emitter = do ->
   return _emitter
 
 start = ->
+  # Rx.Observable.create (observer) ->
+  #   d3.select({}).transition()
+  #     .duration 1000
+  #     .tween 'foo', -> (t) -> observer.onNext t
+  #     .each "end", -> observer.onCompleted()
+  # .subscribe(
+  #     (update) -> console.log 'update'
+  #     (err) ->
+  #     (done) -> console.log 'done'
+  #   )
   # ---------------------------------------------- DOM Init
   main = addMain d3.select('body')
-  canvas = main.append('canvas').node()
   
+  canvas = main.append('canvas').node()
   sceneControls = addSceneControls main
   modeButtons = getModeButtons sceneControls
   cameraControls = addCameraControls main
@@ -81,27 +91,82 @@ start = ->
       i = 
         lookAt: d3.interpolate camera._lookAt, object.position
         zoom: d3.interpolate camera.zoom, EDIT_MODE_ZOOM
-        phi: d3.interpolate camera.position._polar.phi, EDIT_MODE_PHI
+        phi: d3.interpolate camera.position._polar.phi, degToRad EDIT_MODE_PHI
         
       update = (t) -> (c) ->
+        position = c.position
+        polar = position._polar
+        polar.phi = i.phi t
+        position._relative = polarToVector polar
         c._lookAt.copy i.lookAt t
-        camera.position.addVectors camera.position._relative, camera._lookAt
+        position.addVectors position._relative, c._lookAt
         c.zoom = i.zoom t
-        c.updateProjectionMatrix()
         c.lookAt c._lookAt
+        c.updateProjectionMatrix()
         return c
       emitter.emit 'tweenCamera', { update, duration: 500 }
+      
+  emitter 'tweenSphereVolume'
+    .subscribe (sphere) ->
+      end = DEFAULT_OBJECT_VOLUME
+      i = 
+        volume: d3.interpolate sphere._volume, end
+      tweenStream 500, 'sphere'
+        .map (t) ->
+          sphere._volume = i.volume t
+        .subscribe(
+          () -> 
+            emitter.emit 'sphereUpdated', sphere
+          (err) ->
+          (done) -> emitter.emit 'sphereAdded'
+        )
+  
+  emitter 'sphereUpdated'
+    .subscribe (sphere) ->
+      currentGeom = sphere.geometry
+      geomType = currentGeom.type
+      params = currentGeom.parameters
+      newParams = _.extend {}, params
+      newParams.radius = sphere._volume
+      endFunc = (p) -> p.radius = 
+      
+      
+      
+  emitter 'tweenInSphere'
+    .subscribe (sphere) ->
+      currentGeom = sphere.geometry
+      geomType = currentGeom.type
+      params = currentGeom.parameters
+      start = params.radius
+      end = DEFAULT_OBJECT_VOLUME
+      i =
+        radius: d3.interpolate start, end
+      tweenStream 500, 'sphere'
+        .map (t) ->
+          params.radius = i.radius t
+          # Calling clone will use the new parameters, man
+          newGeom = currentGeom.clone()
+          sphere.geometry.dispose()
+          sphere.geometry = newGeom
+          return (model) -> model
+        .subscribe(
+          (update) -> emitter.emit 'modelUpdate', update
+          (err) ->
+          (done) -> emitter.emit 'sphereAdded'
+        )
   
   addObject = emitter 'addObject'
     .withLatestFrom emitter 'floorIntersects'
     .subscribe (arr) ->
       [ event, intersects ] = arr
       p = intersects[0]?.point
-      newObject = new THREE.Object3D()
-      geometry = new THREE.SphereGeometry DEFAULT_OBJECT_VOLUME
+      geometry = new THREE.SphereGeometry 0
       material = new THREE.MeshBasicMaterial
         color: 0x0000ff, wireframe: true
-      object = new THREE.Mesh geometry, material
+      sphere = new THREE.Mesh geometry, material
+      sphere._volume = 0
+      object = new THREE.Object3D()
+      object.add sphere
       y = DEFAULT_OBJECT_HEIGHT
       object.position.set p.x, y, p.z
       update = (model) ->
@@ -110,6 +175,8 @@ start = ->
         model.room.add object
         return model
       emitter.emit 'modelUpdate', update
+      # emitter.emit 'tweenInSphere', sphere
+      emitter.emit 'tweenSphereVolume', sphere
       emitter.emit 'objectAdded', object
   
   cameraState = emitter 'cameraState'
@@ -242,6 +309,8 @@ start = ->
 
 # ------------------------------------------------------- Functions
 
+
+
 getInitialScene = (roomObject) ->
   edges = new THREE.EdgesHelper roomObject, 0x00ff00 
   mainObject = getMainObject()
@@ -359,6 +428,8 @@ goToNorth = (camera) ->
     return theta: _theta - over
   else
     return theta: _theta + under
+    
+goToNearest =
 
 addSceneControls = (selection) ->
   selection.append('div')
@@ -518,6 +589,12 @@ getCameraPositionStream = (selection, emitter) ->
   fromD3drag selection
     .filter (e) -> e.type is 'drag'
     .map (e) ->
+      # # console.log e
+      # end = (camera) ->
+      #   polar = camera.position._polar
+      #   polar.phi += degToRad e.dy
+      #   polar.theta += degToRad e.dx
+        
       (camera) ->
         polar = camera.position._polar
         polar.phi += degToRad e.dy
@@ -551,12 +628,13 @@ getCameraZoomStream = (emitter) ->
 getTweenStream = (duration) -> (update) ->
   tweenStream(duration).map update
 
-tweenStream = (duration) ->
+tweenStream = (duration, name) ->
   duration ?= 0
+  name ?= 'tween'
   Rx.Observable.create (observer) ->
-    d3.transition()
+    d3.select({}).transition()
       .duration duration
-      .tween "tween", -> (t) -> observer.onNext t
+      .tween name, -> (t) -> observer.onNext t
       .each "end", -> observer.onCompleted()
 
 addCameraControls = (main) ->
