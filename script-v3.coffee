@@ -97,7 +97,6 @@ dom
         .map -> arr[1]
     return stream.merge zooms
       .map (dz) -> dz
-      # .map (dz) ->
       #   update = (model) -> 
       #     # z = model.camera.zoom
       #     # interpolator = d3.interpolate z, z * dz
