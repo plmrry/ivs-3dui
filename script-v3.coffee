@@ -10,13 +10,18 @@ INITIAL_PHI = 45
 INITIAL_ZOOM = 40
 MIN_PHI = 0.01
 MAX_PHI = Math.PI * 0.5
+EDIT_MODE_ZOOM = 90
 EDIT_MODE_PHI = 85
 ZOOM_AMOUNT = 2
+DEFAULT_OBJECT_HEIGHT = 0
+PARENT_SPHERE_COLOR = new THREE.Color 0, 0, 1
 
 ROOM_SIZE =
   width: 15
   length: 10
   height: 3
+  
+DEFAULT_OBJECT_VOLUME = ROOM_SIZE.width * 0.1
 
 emitter = do ->
   subject = new Rx.Subject()
@@ -110,14 +115,14 @@ allIntersects = stream.combineLatest r, f, ((r, f) -> room: r, floor: f)
 canvasDragStart = emitter 'canvasDrag'
   .filter (e) -> e.type is 'dragstart'
   .withLatestFrom allIntersects, (e, i) -> i
-
-canvasDragStart.subscribe log
   
 canvasDragMove = emitter 'canvasDrag'
   .filter (e) -> e.type is 'drag'
   .withLatestFrom allIntersects, (e, i) -> i
-
-canvasDragMove.subscribe log
+  
+canvasDragEnd = emitter 'canvasDrag'
+  .filter (e) -> e.type is 'dragend'
+  .withLatestFrom allIntersects, (e, i) -> i
 
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Pan
@@ -134,8 +139,6 @@ canvasDragMove
       return model
     return update
   .subscribe (update) -> emitter.emit 'modelUpdate', update
-    # _current = intersects.floor[0]?.point or (new THREE.Vector3())
-    # _start = intersects.floor[0]?.point
     
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Position
@@ -186,25 +189,186 @@ dom
     emitter.emit 'tweenCamera', { update: update, duration: 500 }
     
 # ------------------------------------------------------- Emitters 
-# ------------------------------------ Add Object
+# ------------------------------------ Add Object Mode
 addObjectMode = dom
   .flatMap (dom) ->
     addObject = dom.modeButtons.select('#object').node()
     return stream.fromEvent addObject, 'click'
+    
 readyAdd = addObjectMode.map -> true
   .merge emitter('cancelAdd').map -> false
   .startWith false
   .do (d) -> log "readyAdd #{d}"
-  .subscribe()
+  
 addObjectMode
   .withLatestFrom emitter('modelState'), (a, b) -> b
   .subscribe (model) ->
     camera = model.camera
+    currentPhi = camera.position._polar.phi
     maxPhi = degToRad EDIT_MODE_PHI
-    if camera.position._polar.phi > maxPhi
+    
+    if currentPhi > maxPhi
       endFunc = -> phi: maxPhi
-      update = cameraPolarTweenFunc(endFunc)(camera)
-      emitter.emit 'tweenCamera', { update: update, duration: 1000 }
+      updatePhi = cameraPolarTweenFunc(endFunc)(camera)
+      emitter.emit 'tweenCamera', { update: updatePhi, duration: 500 }
+      
+    if camera.zoom isnt INITIAL_ZOOM
+      i = d3.interpolate camera.zoom, INITIAL_ZOOM
+      updateZoom = (t) -> (c) ->
+        c.zoom = i t
+        c.updateProjectionMatrix()
+        return c
+      emitter.emit 'tweenCamera', { update: updateZoom, duration: 500 }
+      
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Add Object
+canvasDragStart
+  .withLatestFrom readyAdd
+  .subscribe (arr) ->
+    [ event, ready ] = arr
+    if ready 
+      console.info 'Adding object.'
+      emitter.emit 'addObject', event
+      emitter.emit 'cancelAdd'
+    else
+      console.info 'Not in add object mode.'
+      
+emitter 'addObject'
+  .withLatestFrom emitter 'floorIntersects'
+  .subscribe (arr) ->
+    [ event, intersects ] = arr
+    p = intersects[0]?.point
+    geometry = new THREE.SphereGeometry 0.1
+    material = new THREE.MeshBasicMaterial(
+      color: PARENT_SPHERE_COLOR, 
+      wireframe: true
+    )
+    sphere = new THREE.Mesh geometry, material
+    sphere.name = 'parentSphere'
+    sphere._volume = 0
+    object = new THREE.Object3D()
+    object.add sphere
+    y = DEFAULT_OBJECT_HEIGHT
+    object.position.set p.x, y, p.z
+    update = (model) ->
+      i = model.room.children.length
+      object.name = "object#{i}"
+      model.room.add object
+      return model
+    emitter.emit 'modelUpdate', update
+    emitter.emit 'tweenInSphere', sphere
+    # emitter.emit 'tweenSphereVolume', sphere
+    emitter.emit 'objectAdded', object
+    
+emitter 'objectAdded'
+  .subscribe (o) ->
+    emitter.emit 'selectObject', o
+    emitter.emit 'editSelected'
+    
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Object Selected
+emitter('selectObject')
+  .do (o) -> emitter.emit 'unselectOthers', o
+  .flatMap (o) ->
+    red = new THREE.Color 1, 0, 0
+    return tweenColor(red) o
+  .subscribe (update) -> emitter.emit 'modelUpdate', update
+  
+emitter('unselectObject')
+  .flatMap (o) ->
+    console.log o
+    color = PARENT_SPHERE_COLOR
+    return tweenColor(color) o
+  .subscribe (update) -> emitter.emit 'modelUpdate', update
+  
+tweenColor = (color) -> (o) ->
+  sphere = o.getObjectByName 'parentSphere'
+  start = sphere.material.color
+  end = color
+  i = d3.interpolate start, end
+  tweenStream 500, 'color'
+    .map (t) ->
+      sphere.material.color = i t
+      return (model) -> model
+  
+emitter('unselectOthers')
+  .withLatestFrom emitter('modelState')
+  .subscribe (arr) ->
+    [obj, model] = arr
+    chil = model.room.children
+    console.log model.room.children
+    model.room.children.forEach (c) ->
+      console.log c is obj
+    _.without chil, obj
+      .forEach (o) -> emitter.emit 'unselectObject', o
+    
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Edit Selected Object
+o = emitter('selectObject')
+m = emitter('modelState')
+emitter 'editSelected'
+  .withLatestFrom( o, m, (e, o, m) -> [o, m] )
+  .map (arr) ->
+    [object, model] = arr
+    camera = model.camera
+    i = 
+      lookAt: d3.interpolate camera._lookAt, object.position
+      zoom: d3.interpolate camera.zoom, EDIT_MODE_ZOOM
+      phi: d3.interpolate camera.position._polar.phi, degToRad EDIT_MODE_PHI
+      
+    update = (t) -> (c) ->
+      position = c.position
+      polar = position._polar
+      polar.phi = i.phi t
+      position._relative = polarToVector polar
+      c._lookAt.copy i.lookAt t
+      position.addVectors position._relative, c._lookAt
+      c.zoom = i.zoom t
+      c.lookAt c._lookAt
+      c.updateProjectionMatrix()
+      return c
+    return update
+  .subscribe (update) ->
+    emitter.emit 'tweenCamera', { update, duration: 500 }
+    
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Tween Sphere Volume
+# emitter 'tweenSphereVolume'
+#   .subscribe (sphere) ->
+#     end = DEFAULT_OBJECT_VOLUME
+#     i = 
+#       volume: d3.interpolate sphere._volume, end
+#     tweenStream 500, 'sphere'
+#       .map (t) ->
+#         sphere._volume = i.volume t
+#       .subscribe(
+#         () -> emitter.emit 'sphereUpdate', sphere
+#         (err) ->
+#         (done) -> emitter.emit 'sphereAdded'
+#       )
+      
+emitter 'tweenInSphere'
+  .subscribe (sphere) ->
+    currentGeom = sphere.geometry
+    geomType = currentGeom.type
+    params = currentGeom.parameters
+    start = params.radius
+    end = DEFAULT_OBJECT_VOLUME
+    i =
+      radius: d3.interpolate start, end
+    tweenStream 500, 'sphere'
+      .map (t) ->
+        params.radius = i.radius t
+        # Calling clone will use the new parameters, man
+        newGeom = currentGeom.clone()
+        sphere.geometry.dispose()
+        sphere.geometry = newGeom
+        return (model) -> model
+      .subscribe(
+        (update) -> emitter.emit 'modelUpdate', update
+        (err) ->
+        (done) -> emitter.emit 'sphereAdded'
+      )
   
 # ------------------------------------------------------- Functions
 getMouseFrom = (node) ->
