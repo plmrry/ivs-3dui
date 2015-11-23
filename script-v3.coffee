@@ -179,7 +179,7 @@ canvasDragMove
   .filter (arr) -> arr[1] is false # Not in object add move
   .map (arr) -> arr[0]
   .withLatestFrom canvasDragStart
-  .filter (arr) -> not arr[1].room[0]? # Didn't click an object
+  .filter (arr) -> not arr[1].room[0]? # Didn't start with an object
   .map (arr) ->
     [current, start] = arr
     _current = current.floor[0]?.point or (new THREE.Vector3())
@@ -194,28 +194,29 @@ canvasDragMove
   
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Object Move
-canvasDragMove
+canvasDragStart
   .withLatestFrom readyAdd
   .filter (arr) -> arr[1] is false # Not in object add move
   .map (arr) -> arr[0]
+  .filter (start) -> start.room[0]? # Started on an object
+  .flatMap (start) ->
+    canvasDragMove.startWith start
+      .map (ints) -> ints.floor[0]?.point
+      .bufferWithCount 2, 1
+      .takeUntil canvasDragEnd
+  .map (arr) -> 
+    return (new THREE.Vector3())
+      .subVectors arr[1], arr[0]
   .withLatestFrom canvasDragStart
-  .filter (arr) -> arr[1].room[0]? # Clicked an object
-  .subscribe (arr) ->
-    [current, start] = arr
-    obj = start.room[0].object
-    point = current.floor[0]?.point or (new THREE.Vector3())
-    console.log obj.position, point
-  #   [current, start] = arr
-  #   _current = current.floor[0]?.point or (new THREE.Vector3())
-  #   _start = start.floor[0]?.point or _current
-  #   delta = (new THREE.Vector3()).subVectors _start, _current
-  #   update = (model) ->
-  #     model.camera._lookAt.add delta
-  #     model.camera.position.add delta
-  #     return model
-  #   return update
-  # .subscribe (update) -> emitter.emit 'modelUpdate', update
-
+  .map (arr) ->
+    [delta, int] = arr
+    delta.setY 0
+    obj = int.room[0].object
+    return (model) ->
+      obj.position.add delta
+      return model
+  .subscribe (update) ->
+    emitter.emit 'modelUpdate', update
     
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Position
@@ -298,8 +299,9 @@ emitter 'addObject'
     sphere = new THREE.Mesh geometry, material
     sphere.name = 'parentSphere'
     sphere._volume = 0
-    object = new THREE.Object3D()
-    object.add sphere
+    # object = new THREE.Object3D()
+    # object.add sphere
+    object = sphere
     y = DEFAULT_OBJECT_HEIGHT
     object.position.set p.x, y, p.z
     update = (model) ->
@@ -333,7 +335,8 @@ emitter('unselectObject')
   .subscribe (update) -> emitter.emit 'modelUpdate', update
   
 tweenColor = (color) -> (o) ->
-  sphere = o.getObjectByName 'parentSphere'
+  # sphere = o.getObjectByName 'parentSphere'
+  sphere = o
   start = sphere.material.color
   end = color
   i = d3.interpolate start, end
