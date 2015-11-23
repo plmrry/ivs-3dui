@@ -101,7 +101,11 @@ canvasDrag = dom
   .do (arr) ->
     [event, model] = arr
     raycaster.setFromCamera event.ndc, model.camera
-    roomIntersects = raycaster.intersectObjects model.room.children, false
+    # console.log model.room.children
+    # console.log raycaster.intersectObjects model.room.children, false
+    # console.log raycaster.intersectObjects model.room.children, true
+    # console.log raycaster.intersectObject model.room, true
+    roomIntersects = raycaster.intersectObjects model.room.children, true
     floorIntersects = raycaster.intersectObject model.floor, false
     emitter.emit 'roomIntersects', roomIntersects
     emitter.emit 'floorIntersects', floorIntersects
@@ -123,11 +127,59 @@ canvasDragMove = emitter 'canvasDrag'
 canvasDragEnd = emitter 'canvasDrag'
   .filter (e) -> e.type is 'dragend'
   .withLatestFrom allIntersects, (e, i) -> i
+  
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Add Object Mode
+addObjectMode = dom
+  .flatMap (dom) ->
+    addObject = dom.modeButtons.select('#object').node()
+    return stream.fromEvent addObject, 'click'
+    
+readyAdd = addObjectMode.map -> true
+  .merge emitter('cancelAdd').map -> false
+  .startWith false
+  .do (d) -> log "readyAdd #{d}"
+  
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Add Object
+canvasDragStart
+  .withLatestFrom readyAdd
+  .filter (arr) -> arr[1] is true
+  .subscribe (arr) ->
+    [ event, ready ] = arr
+    console.info 'Adding object.'
+    emitter.emit 'addObject', event
+    
+canvasDragEnd
+  .withLatestFrom readyAdd
+  .filter (arr) -> arr[1] is true
+  .subscribe (arr) -> emitter.emit 'cancelAdd'
+    
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Unselect Others
+canvasDragStart
+  .withLatestFrom readyAdd
+  .filter (arr) -> arr[1] is false # Not in object-add mode
+  .map (arr) -> arr[0]
+  .filter (i) -> i.room.length is 0 # Didn't click an object
+  .subscribe -> emitter.emit 'unselectOthers', {}
+  
+canvasDragStart
+  .withLatestFrom readyAdd
+  .filter (arr) -> arr[1] is false # Not in object-add mode
+  .map (arr) -> arr[0]
+  .filter (i) -> i.room.length > 0 # Did click an object
+  .subscribe (i) -> 
+    emitter.emit 'selectObject', i.room[0].object
 
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Pan
 canvasDragMove
+  .withLatestFrom readyAdd
+  .filter (arr) -> arr[1] is false # Not in object add move
+  .map (arr) -> arr[0]
   .withLatestFrom canvasDragStart
+  .filter (arr) -> not arr[1].room[0]? # Didn't click an object
   .map (arr) ->
     [current, start] = arr
     _current = current.floor[0]?.point or (new THREE.Vector3())
@@ -139,6 +191,31 @@ canvasDragMove
       return model
     return update
   .subscribe (update) -> emitter.emit 'modelUpdate', update
+  
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Object Move
+canvasDragMove
+  .withLatestFrom readyAdd
+  .filter (arr) -> arr[1] is false # Not in object add move
+  .map (arr) -> arr[0]
+  .withLatestFrom canvasDragStart
+  .filter (arr) -> arr[1].room[0]? # Clicked an object
+  .subscribe (arr) ->
+    [current, start] = arr
+    obj = start.room[0].object
+    point = current.floor[0]?.point or (new THREE.Vector3())
+    console.log obj.position, point
+  #   [current, start] = arr
+  #   _current = current.floor[0]?.point or (new THREE.Vector3())
+  #   _start = start.floor[0]?.point or _current
+  #   delta = (new THREE.Vector3()).subVectors _start, _current
+  #   update = (model) ->
+  #     model.camera._lookAt.add delta
+  #     model.camera.position.add delta
+  #     return model
+  #   return update
+  # .subscribe (update) -> emitter.emit 'modelUpdate', update
+
     
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Position
@@ -188,18 +265,6 @@ dom
   .subscribe (update) -> 
     emitter.emit 'tweenCamera', { update: update, duration: 500 }
     
-# ------------------------------------------------------- Emitters 
-# ------------------------------------ Add Object Mode
-addObjectMode = dom
-  .flatMap (dom) ->
-    addObject = dom.modeButtons.select('#object').node()
-    return stream.fromEvent addObject, 'click'
-    
-readyAdd = addObjectMode.map -> true
-  .merge emitter('cancelAdd').map -> false
-  .startWith false
-  .do (d) -> log "readyAdd #{d}"
-  
 addObjectMode
   .withLatestFrom emitter('modelState'), (a, b) -> b
   .subscribe (model) ->
@@ -219,19 +284,6 @@ addObjectMode
         c.updateProjectionMatrix()
         return c
       emitter.emit 'tweenCamera', { update: updateZoom, duration: 500 }
-      
-# ------------------------------------------------------- Emitters 
-# ------------------------------------ Add Object
-canvasDragStart
-  .withLatestFrom readyAdd
-  .subscribe (arr) ->
-    [ event, ready ] = arr
-    if ready 
-      console.info 'Adding object.'
-      emitter.emit 'addObject', event
-      emitter.emit 'cancelAdd'
-    else
-      console.info 'Not in add object mode.'
       
 emitter 'addObject'
   .withLatestFrom emitter 'floorIntersects'
@@ -276,7 +328,6 @@ emitter('selectObject')
   
 emitter('unselectObject')
   .flatMap (o) ->
-    console.log o
     color = PARENT_SPHERE_COLOR
     return tweenColor(color) o
   .subscribe (update) -> emitter.emit 'modelUpdate', update
@@ -296,11 +347,13 @@ emitter('unselectOthers')
   .subscribe (arr) ->
     [obj, model] = arr
     chil = model.room.children
-    console.log model.room.children
-    model.room.children.forEach (c) ->
-      console.log c is obj
     _.without chil, obj
       .forEach (o) -> emitter.emit 'unselectObject', o
+      
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Unselect Others
+
+
     
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Edit Selected Object
