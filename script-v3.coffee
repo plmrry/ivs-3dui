@@ -116,6 +116,12 @@ canvasDrag = dom
 r = emitter('roomIntersects')
 f = emitter('floorIntersects')
 allIntersects = stream.combineLatest r, f, ((r, f) -> room: r, floor: f)
+
+_canvasDragStart = emitter 'canvasDrag'
+  .filter (e) -> e.type is 'dragstart'
+  
+_canvasDragEnd = emitter 'canvasDrag'
+  .filter (e) -> e.type is 'dragend'
   
 canvasDragStart = emitter 'canvasDrag'
   .filter (e) -> e.type is 'dragstart'
@@ -155,23 +161,49 @@ canvasDragEnd
   .withLatestFrom readyAdd
   .filter (arr) -> arr[1] is true
   .subscribe (arr) -> emitter.emit 'cancelAdd'
+  
+_canvasDragEnd
+  .withLatestFrom _canvasDragStart
+  .filter (arr) ->
+    xEqual = arr[0].mouse[0] is arr[1].mouse[0]
+    yEqual = arr[0].mouse[1] is arr[1].mouse[1]
+    return xEqual and yEqual
+  .map (arr) -> arr[0]
+  .subscribe (event) -> emitter.emit 'click', event
     
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Unselect Others
-canvasDragStart
-  .withLatestFrom readyAdd
-  .filter (arr) -> arr[1] is false # Not in object-add mode
-  .map (arr) -> arr[0]
-  .filter (i) -> i.room.length is 0 # Didn't click an object
-  .subscribe -> emitter.emit 'unselectOthers', {}
+# canvasDragStart
+#   .withLatestFrom readyAdd
+#   .filter (arr) -> arr[1] is false # Not in object-add mode
+#   .map (arr) -> arr[0]
+#   .filter (i) -> i.room.length is 0 # Didn't click an object
+#   .subscribe -> emitter.emit 'unselectOthers', {}
   
-canvasDragStart
+# ------------------------------------------------------- Emitters 
+# ------------------------------------ Select Object
+#.withLatestFrom allIntersects, (e, i) -> i
+# canvasDragStart
+emitter 'click'
+  .withLatestFrom allIntersects, (e, i) -> i
   .withLatestFrom readyAdd
   .filter (arr) -> arr[1] is false # Not in object-add mode
   .map (arr) -> arr[0]
   .filter (i) -> i.room.length > 0 # Did click an object
   .subscribe (i) -> 
     emitter.emit 'selectObject', i.room[0].object
+    
+emitter 'click'
+  .withLatestFrom allIntersects, (e, i) -> i
+  .pausable readyAdd.map (d) -> not d # Not in object-add mode
+  .filter (i) -> i.room.length is 0 # Did not click an object
+  .do -> console.log 'clicked floor'
+  .subscribe -> 
+    emitter.emit 'unselectAll'
+    
+emitter 'unselectAll'
+  .subscribe (i) -> 
+    emitter.emit 'unselectOthers', {}
 
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Pan
@@ -328,7 +360,7 @@ emitter 'addObject'
 emitter 'objectAdded'
   .subscribe (o) ->
     emitter.emit 'selectObject', o
-    emitter.emit 'editSelected'
+    # emitter.emit 'editSelected'
     
 # ------------------------------------------------------- Emitters 
 # ------------------------------------ Object Selected
@@ -338,6 +370,64 @@ emitter('selectObject')
     red = new THREE.Color 1, 0, 0
     return tweenColor(red) o
   .subscribe (update) -> emitter.emit 'modelUpdate', update
+  
+emitter('selectObject')
+  .withLatestFrom dom
+  .subscribe (arr) ->
+    [object, dom] = arr
+    updateObjectControls(dom) [object]
+    emitter.emit 'domUpdated', dom
+    
+emitter 'unselectAll'
+  .withLatestFrom dom, (a, b) -> b
+  .subscribe (dom) ->
+    updateObjectControls(dom) []
+    emitter.emit 'domUpdated', dom
+    
+addCone = emitter 'domUpdated'
+  .map (dom) -> dom.sceneControls.select('#add-cone').node()
+  .filter (node) -> node?
+  .flatMap (node) -> stream.fromEvent node, 'click'
+  .do -> console.info 'Add cone.'
+  .subscribe (event) ->
+    obj = d3.select(event.target).datum()
+    emitter.emit 'addCone', obj
+    
+emitter 'addCone'
+  
+    
+# addCone = dom
+#   .flatMap (dom) ->
+#     node = dom.sceneControls.select('add-cone').node()
+#     return stream.fromEvent node, 'click'
+#   .subscribe -> console.log 'add cone'
+  
+updateObjectControls = (dom) ->
+  (data) ->
+    objectControls = dom.sceneControls
+      .selectAll("#objectControls")
+      .data data
+    objectControls.enter()
+      .append('div').classed('row', true)
+        .attr id: 'objectControls'
+      .append('div').classed('col-xs-12', true)
+      .append('div').classed('card', true)
+      .call (card) ->
+        card.append('div').classed('card-block', true)
+          .append('h4').classed('card-title', true)
+          .text('Object')
+        butts = [{ name: 'add-cone', html: 'add cone' }]
+        card.append('div').classed('card-block', true)
+          .append('div').classed('btn-group', true)
+          .selectAll('button').data(butts)
+          .enter().append('button')
+          .classed('btn btn-secondary', true)
+          .attr { id: (d) -> d.name }
+          .html (d) -> d.html
+          .data data # re-set button data to THREE Object
+    # objectControls.select '.card-title'
+    #   .text (d) -> d.name
+    objectControls.exit().remove()
   
 emitter('unselectObject')
   .flatMap (o) ->
