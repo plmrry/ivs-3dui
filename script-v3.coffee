@@ -54,7 +54,8 @@ cameraSize = size.map (size) ->
 renderer = dom
   .flatMap (dom) ->
     first = new THREE.WebGLRenderer canvas: dom.canvas
-    first.setClearColor 'white'
+    first.shadowMapEnabled = true
+    # first.setClearColor 'white'
     return size.scan (r, s) ->
       r.setSize s.width, s.height
       return r
@@ -292,12 +293,21 @@ emitter 'addObject'
   .subscribe (arr) ->
     [ event, intersects ] = arr
     p = intersects[0]?.point
-    geometry = new THREE.SphereGeometry 0.1
-    material = new THREE.MeshBasicMaterial(
-      color: PARENT_SPHERE_COLOR, 
-      wireframe: true
+    geometry = new THREE.SphereGeometry 0.1, 30, 30
+    # material = new THREE.MeshBasicMaterial(
+    #   color: PARENT_SPHERE_COLOR, 
+    #   # wireframe: true
+    # )
+    material = new THREE.MeshPhongMaterial(
+      color: PARENT_SPHERE_COLOR
+      transparent: true
+      opacity: 0.5
+      # wireframe: true
+      shading: THREE.FlatShading
     )
+    
     sphere = new THREE.Mesh geometry, material
+    sphere.castShadow = true
     sphere.name = 'parentSphere'
     sphere._volume = 0
     # object = new THREE.Object3D()
@@ -557,7 +567,7 @@ getMainObject = ->
   return mainObject
   
 getFloor = ->
-  FLOOR_SIZE = 1000
+  FLOOR_SIZE = 100
   FLOOR_GRID_COLOR = new THREE.Color 0.9, 0.9, 0.9
   floorGeom = new THREE.PlaneGeometry FLOOR_SIZE, FLOOR_SIZE
   floorMat = new THREE.MeshBasicMaterial
@@ -565,16 +575,20 @@ getFloor = ->
     side: THREE.DoubleSide, 
     depthWrite: false
     # wireframe: true
+  floorMat = new THREE.MeshPhongMaterial(
+    # color: (new THREE.Color(0.1,0.2,0.1))
+    side: THREE.DoubleSide
+  )
   floor = new THREE.Mesh floorGeom, floorMat 
   floor.name = 'floor'
   floor.rotateX Math.PI/2
   floor.position.setY -ROOM_SIZE.height/2
   
-  grid = new THREE.GridHelper FLOOR_SIZE/2, 2
-  grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
-  grid.rotateX Math.PI/2
-  grid.material.depthWrite = false
-  floor.add grid
+  # grid = new THREE.GridHelper FLOOR_SIZE/2, 2
+  # grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
+  # grid.rotateX Math.PI/2
+  # grid.material.depthWrite = false
+  # floor.add grid
   return floor
   
 getFirstCamera = ->
@@ -622,6 +636,19 @@ firstModel = ->
   m.room = getRoomObject ROOM_SIZE
   m.scene = getInitialScene m.room
   m.floor = m.scene.getObjectByName 'floor'
+  
+  # light = new THREE.PointLight 0xffffff
+  # light = new THREE.DirectionalLight 0xffffff
+  light = new THREE.SpotLight 0xffffff
+  light.position.setY 100
+  light.castShadow = true
+  m.scene.add light
+  
+  m.floor.receiveShadow = true
+  
+  hemisphere = new THREE.HemisphereLight( 0, 0xffffff, 0.8 );
+  m.scene.add hemisphere
+  
   return m
   
 firstDom = ->
