@@ -201,6 +201,7 @@ canvasDragStart
   .filter (start) -> start.room[0]? # Started on an object
   .flatMap (start) ->
     canvasDragMove.startWith start
+      .filter (ints) -> ints.floor[0]? # Ignore non-floor drags
       .map (ints) -> ints.floor[0]?.point
       .bufferWithCount 2, 1
       .takeUntil canvasDragEnd
@@ -528,34 +529,53 @@ firstNdcScales = ->
   y: d3.scale.linear().range [1, -1]
   
 getRoomObject = (room) ->
-  geometry = new THREE.BoxGeometry room.width, room.height, room.length
-  material = new THREE.MeshBasicMaterial
-    color: 0x00ff00, transparent: true, opacity: 0.1
-  roomObject = new THREE.Mesh( geometry, material );
+  # geometry = new THREE.BoxGeometry room.width, room.height, room.length
+  # material = new THREE.MeshBasicMaterial
+  #   color: 0x00ff00, transparent: true, opacity: 0.1
+  # roomObject = new THREE.Mesh( geometry, material );
+  roomObject = new THREE.Object3D()
   roomObject.name = 'room'
   return roomObject
   
 getInitialScene = (roomObject) ->
-  edges = new THREE.EdgesHelper roomObject, 0x00ff00 
+  # edges = new THREE.EdgesHelper roomObject, 0x00ff00 
   mainObject = getMainObject()
+  floor = getFloor()
+  mainObject.add floor
   mainObject.add roomObject
-  mainObject.add edges
+  # mainObject.add edges
   scene = new THREE.Scene()
   scene.add mainObject
   return scene
   
 getMainObject = ->
   mainObject = new THREE.Object3D()
-  floorGeom = new THREE.PlaneGeometry 100, 100, 10, 10
+  # floor = getFloor()
+  # mainObject.add floor
+  # axisHelper = new THREE.AxisHelper 5
+  # mainObject.add axisHelper
+  return mainObject
+  
+getFloor = ->
+  FLOOR_SIZE = 1000
+  FLOOR_GRID_COLOR = new THREE.Color 0.9, 0.9, 0.9
+  floorGeom = new THREE.PlaneGeometry FLOOR_SIZE, FLOOR_SIZE
   floorMat = new THREE.MeshBasicMaterial
-    color: 0xffff00, side: THREE.DoubleSide, wireframe: true
-  floor = new THREE.Mesh( floorGeom, floorMat )
+    # color: (new THREE.Color(0.1,0.2,0.1)), 
+    side: THREE.DoubleSide, 
+    depthWrite: false
+    # wireframe: true
+  floor = new THREE.Mesh floorGeom, floorMat 
   floor.name = 'floor'
   floor.rotateX Math.PI/2
-  mainObject.add floor
-  axisHelper = new THREE.AxisHelper 5
-  mainObject.add axisHelper
-  return mainObject
+  floor.position.setY -ROOM_SIZE.height/2
+  
+  grid = new THREE.GridHelper FLOOR_SIZE/2, 2
+  grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
+  grid.rotateX Math.PI/2
+  grid.material.depthWrite = false
+  floor.add grid
+  return floor
   
 getFirstCamera = ->
   c = new THREE.OrthographicCamera()
@@ -595,12 +615,6 @@ tweenStream = (duration, name) ->
       .duration duration
       .tween name, -> (t) -> observer.onNext t
       .each "end", -> observer.onCompleted()
-    
-firstModelUpdate = (model) ->
-  model.camera = getFirstCamera()
-  model.room = getRoomObject model.roomSize
-  model.scene = getInitialScene model.room
-  return model
   
 firstModel = ->
   m = {}
