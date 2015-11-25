@@ -14,7 +14,7 @@ EDIT_MODE_ZOOM = 90
 EDIT_MODE_PHI = 85
 ZOOM_AMOUNT = 2
 DEFAULT_OBJECT_HEIGHT = 0
-PARENT_SPHERE_COLOR = new THREE.Color 0, 0, 1
+PARENT_SPHERE_COLOR = new THREE.Color 0, 0, 0
 
 ROOM_SIZE =
   width: 15
@@ -23,6 +23,8 @@ ROOM_SIZE =
   
 DEFAULT_OBJECT_VOLUME = ROOM_SIZE.width * 0.1
 DEFAULT_CONE_SPREAD = 0.3
+MAX_CONE_SPREAD = 2
+MAX_CONE_VOLUME = 2
 CONE_TOP = 0.01
 
 emitter = do ->
@@ -288,6 +290,10 @@ dom
       stream.fromEvent node, 'click'
         .map -> arr[1]
     return stream.merge zooms
+  .subscribe (dz) ->
+    emitter.emit 'zoom', dz
+    
+emitter 'zoom'    
   .withLatestFrom emitter 'modelState'
   .map (arr) -> 
     [ dz, model ] = arr
@@ -327,37 +333,73 @@ emitter 'addObject'
   .subscribe (arr) ->
     [ event, intersects ] = arr
     p = intersects[0]?.point
-    geometry = new THREE.SphereGeometry 0.1, 30, 30
-    # material = new THREE.MeshBasicMaterial(
-    #   color: PARENT_SPHERE_COLOR, 
+    addObjectAtPoint p
+    # geometry = new THREE.SphereGeometry 0.1, 30, 30
+    # # material = new THREE.MeshBasicMaterial(
+    # #   color: PARENT_SPHERE_COLOR, 
+    # #   # wireframe: true
+    # # )
+    # material = new THREE.MeshPhongMaterial(
+    #   color: PARENT_SPHERE_COLOR
+    #   transparent: true
+    #   opacity: 0.5
     #   # wireframe: true
+    #   shading: THREE.FlatShading
     # )
-    material = new THREE.MeshPhongMaterial(
-      color: PARENT_SPHERE_COLOR
-      transparent: true
-      opacity: 0.5
-      # wireframe: true
-      shading: THREE.FlatShading
-    )
     
-    sphere = new THREE.Mesh geometry, material
-    sphere.castShadow = true
-    sphere.name = 'parentSphere'
-    sphere._volume = 0
-    # object = new THREE.Object3D()
-    # object.add sphere
-    object = sphere
-    y = DEFAULT_OBJECT_HEIGHT
-    object.position.set p.x, y, p.z
-    update = (model) ->
-      i = model.room.children.length
-      object.name = "object#{i}"
-      model.room.add object
-      return model
-    emitter.emit 'modelUpdate', update
-    emitter.emit 'tweenInSphere', sphere
-    # emitter.emit 'tweenSphereVolume', sphere
-    emitter.emit 'objectAdded', object
+    # sphere = new THREE.Mesh geometry, material
+    # sphere.castShadow = true
+    # sphere.name = 'parentSphere'
+    # sphere._volume = 0
+    # # object = new THREE.Object3D()
+    # # object.add sphere
+    # object = sphere
+    # y = DEFAULT_OBJECT_HEIGHT
+    # object.position.set p.x, y, p.z
+    # update = (model) ->
+    #   i = model.room.children.length
+    #   object.name = "object#{i}"
+    #   model.room.add object
+    #   return model
+    # emitter.emit 'modelUpdate', update
+    # emitter.emit 'tweenInSphere', sphere
+    # # emitter.emit 'tweenSphereVolume', sphere
+    # emitter.emit 'objectAdded', object
+    
+addObjectAtPoint = (p) ->
+  geometry = new THREE.SphereGeometry 0.1, 30, 30
+  # material = new THREE.MeshBasicMaterial(
+  #   color: PARENT_SPHERE_COLOR, 
+  #   # wireframe: true
+  # )
+  material = new THREE.MeshPhongMaterial(
+    color: PARENT_SPHERE_COLOR
+    transparent: true
+    opacity: 0.3
+    # wireframe: true
+    shading: THREE.FlatShading
+  )
+  
+  sphere = new THREE.Mesh geometry, material
+  sphere.castShadow = true
+  sphere.name = 'parentSphere'
+  sphere._volume = 0
+  # object = new THREE.Object3D()
+  # object.add sphere
+  object = sphere
+  # y = DEFAULT_OBJECT_HEIGHT
+  y = 1
+  object.position.set p.x, y, p.z
+  update = (model) ->
+    i = model.room.children.length
+    object.name = "object#{i}"
+    model.room.add object
+    return model
+  emitter.emit 'modelUpdate', update
+  emitter.emit 'tweenInSphere', sphere
+  # emitter.emit 'tweenSphereVolume', sphere
+  emitter.emit 'objectAdded', object
+  return object
     
 emitter 'objectAdded'
   .subscribe (o) ->
@@ -369,8 +411,9 @@ emitter 'objectAdded'
 emitter('selectObject')
   .do (o) -> emitter.emit 'unselectOthers', o
   .flatMap (o) ->
-    red = new THREE.Color 1, 0, 0
-    return tweenColor(red) o
+    # red = new THREE.Color 1, 0, 0
+    color = new THREE.Color 0, 0, 1
+    return tweenColor(color) o
   .subscribe (update) -> emitter.emit 'modelUpdate', update
   
 emitter('selectObject')
@@ -378,21 +421,22 @@ emitter('selectObject')
   .subscribe (arr) ->
     [object, dom] = arr
     updateObjectControls(dom) [object]
-    emitter.emit 'domUpdated', dom
+    # emitter.emit 'domUpdated', dom
     
 emitter 'unselectAll'
   .withLatestFrom dom, (a, b) -> b
   .subscribe (dom) ->
     updateObjectControls(dom) []
-    emitter.emit 'domUpdated', dom
+    # emitter.emit 'domUpdated', dom
     
-addCone = emitter 'domUpdated'
+addCone = emitter 'domAdded'
   .map (dom) -> dom.sceneControls.select('#add-cone').node()
   .filter (node) -> node?
   .flatMap (node) -> stream.fromEvent node, 'click'
   .do -> console.info 'Add cone.'
   .subscribe (event) ->
     obj = d3.select(event.target).datum()
+    console.log obj
     emitter.emit 'addCone', obj
     
 emitter 'coneAdded'
@@ -404,7 +448,7 @@ emitter 'selectCone'
   .subscribe (arr) ->
     [object, dom] = arr
     updateConeControls(dom) [object]
-    emitter.emit 'domUpdated', dom
+    # emitter.emit 'domUpdated', dom
     
 emitter 'addCone'
   .subscribe (obj) ->
@@ -414,19 +458,52 @@ emitter 'addCone'
     coneParent._phi = 0
     coneParent._volume = DEFAULT_OBJECT_VOLUME
     coneParent._spread = DEFAULT_CONE_SPREAD
+    coneParent.rotateX Math.random() * (Math.PI * 2)
+    coneParent.rotateZ Math.random() * (Math.PI * 2)
     obj.add coneParent
     top = CONE_TOP
-    bottom = DEFAULT_CONE_SPREAD
-    height = DEFAULT_OBJECT_VOLUME
+    # bottom = DEFAULT_CONE_SPREAD 
+    s = DEFAULT_CONE_SPREAD 
+    bottom = d3.random.normal(s, 0.08)()
+    # bottom = MAX_CONE_SPREAD * Math.random()
+    # height = DEFAULT_OBJECT_VOLUME
+    h = DEFAULT_OBJECT_VOLUME
+    height = d3.random.normal(h, 0.2)()
+    # height = MAX_CONE_VOLUME * Math.random()
     geometry = new THREE.CylinderGeometry top, bottom, height
+    geometry.parameters.openEnded = true
+    geometry = geometry.clone()
+    # geometry.
     # geometry = new THREE.CylinderGeometry CONE_TOP
-    material = new THREE.MeshBasicMaterial
-      color: 0xff0000, wireframe: true
+    # material = new THREE.MeshBasicMaterial
+    #   color: 0xff0000
+    material = new THREE.MeshPhongMaterial(
+      color: 0xff0000
+      shading: THREE.FlatShading
+      side: THREE.DoubleSide
+    )
+    # material = new THREE.MeshPhongMaterial(
+    #   color: new THREE.Color 0, 0, 0
+    #   transparent: true
+    #   opacity: 0.4
+    #   # wireframe: true
+    #   shading: THREE.FlatShading
+    # )
+    
     cone = new THREE.Mesh geometry, material
     cone.position.y = -cone.geometry.parameters.height/2
     coneParent.add cone
     emitter.emit 'modelUpdate', (m) -> m
     emitter.emit 'coneAdded', coneParent
+    
+window.foo = ->
+  # obj = addObjectAtPoint new THREE.Vector3()
+  
+# dom.subscribe (d) -> 
+#   hammertime = new Hammer(d.canvas);
+#   hammertime.on 'pinchin', (ev) ->
+#     alert('pinch') 
+  
     
 # addCone = dom
 #   .flatMap (dom) ->
@@ -450,6 +527,8 @@ updateConeControls = (dom) ->
           .append('button')
           .classed('btn btn-secondary pull-right', true)
           .text 'add file'
+        # console.log 'added cone controls'
+        # emitter.emit 'domAdded', dom
       #   butts = [{ name: 'add-file', html: 'add file' }]
       #   card.append('div').classed('card-block', true)
       #     .append('div').classed('btn-group', true)
@@ -481,6 +560,8 @@ updateObjectControls = (dom) ->
           .classed('btn btn-secondary pull-right', true)
           .text 'add cone'
           .attr { id: 'add-cone' }
+      .each ->
+        emitter.emit 'domAdded', dom
         # butts = [{ name: 'add-cone', html: 'add cone' }]
         # card.append('div').classed('card-block', true)
         #   .append('div').classed('btn-group', true)
