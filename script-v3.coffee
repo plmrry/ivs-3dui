@@ -59,6 +59,7 @@ renderer = dom
   .flatMap (dom) ->
     first = new THREE.WebGLRenderer canvas: dom.canvas
     first.shadowMapEnabled = true
+    first.shadowMapType = THREE.PCFSoftShadowMap
     # first.setClearColor 'white'
     return size.scan (r, s) ->
       r.setSize s.width, s.height
@@ -496,7 +497,7 @@ emitter 'addCone'
     emitter.emit 'modelUpdate', (m) -> m
     emitter.emit 'coneAdded', coneParent
     
-window.foo = ->
+window.emitter = emitter
   # obj = addObjectAtPoint new THREE.Vector3()
   
 # dom.subscribe (d) -> 
@@ -874,10 +875,22 @@ firstModel = ->
   m.floor = m.scene.getObjectByName 'floor'
   
   # light = new THREE.PointLight 0xffffff
-  # light = new THREE.DirectionalLight 0xffffff
-  light = new THREE.SpotLight 0xffffff
-  light.position.setY 100
+  light = new THREE.DirectionalLight 0xffffff, 0.5
+  # spotLight = light = new THREE.SpotLight 0xffffff, 1
+  light.position.setY 50
   light.castShadow = true
+  
+  # spotLight.shadowMapWidth = 2000;
+  # spotLight.shadowMapHeight = 2000;
+  # # spotLight.shadowCameraNear = 30;
+  # spotLight.shadowCameraFar = 200;
+  # spotLight.exponent = 2
+  # spotLight.shadowCameraFov = 30;
+  
+  # spotLight.shadowBias = 0.0001;
+  # spotLight.shadowDarkness = 0.2;
+  
+  light.shadowCameraVisible = true
   m.scene.add light
   
   m.floor.receiveShadow = true
