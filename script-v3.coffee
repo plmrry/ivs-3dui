@@ -22,6 +22,8 @@ ROOM_SIZE =
   height: 3
   
 DEFAULT_OBJECT_VOLUME = ROOM_SIZE.width * 0.1
+DEFAULT_CONE_SPREAD = 0.3
+CONE_TOP = 0.01
 
 emitter = do ->
   subject = new Rx.Subject()
@@ -393,14 +395,73 @@ addCone = emitter 'domUpdated'
     obj = d3.select(event.target).datum()
     emitter.emit 'addCone', obj
     
+emitter 'coneAdded'
+  .subscribe (coneParent) ->
+    emitter.emit 'selectCone', coneParent
+    
+emitter 'selectCone'
+  .withLatestFrom dom
+  .subscribe (arr) ->
+    [object, dom] = arr
+    updateConeControls(dom) [object]
+    emitter.emit 'domUpdated', dom
+    
 emitter 'addCone'
-  
+  .subscribe (obj) ->
+    i = obj.children.length
+    coneParent = new THREE.Object3D()
+    coneParent._theta = 0
+    coneParent._phi = 0
+    coneParent._volume = DEFAULT_OBJECT_VOLUME
+    coneParent._spread = DEFAULT_CONE_SPREAD
+    obj.add coneParent
+    top = CONE_TOP
+    bottom = DEFAULT_CONE_SPREAD
+    height = DEFAULT_OBJECT_VOLUME
+    geometry = new THREE.CylinderGeometry top, bottom, height
+    # geometry = new THREE.CylinderGeometry CONE_TOP
+    material = new THREE.MeshBasicMaterial
+      color: 0xff0000, wireframe: true
+    cone = new THREE.Mesh geometry, material
+    cone.position.y = -cone.geometry.parameters.height/2
+    coneParent.add cone
+    emitter.emit 'modelUpdate', (m) -> m
+    emitter.emit 'coneAdded', coneParent
     
 # addCone = dom
 #   .flatMap (dom) ->
 #     node = dom.sceneControls.select('add-cone').node()
 #     return stream.fromEvent node, 'click'
 #   .subscribe -> console.log 'add cone'
+
+updateConeControls = (dom) ->
+  (data) ->
+    coneControls = dom.sceneControls
+      .select("#objectControls")
+      .select(".card")
+      .selectAll("#coneControls")
+      .data data
+    coneControls.enter()
+      .append('div').attr({ id: "coneControls" })
+      .call (card) ->
+        card.append('div').classed('card-block', true)
+          .append('h4').classed('card-title', true)
+          .text('Cone')
+          .append('button')
+          .classed('btn btn-secondary pull-right', true)
+          .text 'add file'
+      #   butts = [{ name: 'add-file', html: 'add file' }]
+      #   card.append('div').classed('card-block', true)
+      #     .append('div').classed('btn-group', true)
+      #     .selectAll('button').data(butts)
+      #     .enter().append('button')
+      #     .classed('btn btn-secondary', true)
+      #     .attr { id: (d) -> d.name }
+      #     .html (d) -> d.html
+      #     .data data # re-set button data to object
+    # objectControls.select '.card-title'
+    #   .text (d) -> d.name
+    coneControls.exit().remove()
   
 updateObjectControls = (dom) ->
   (data) ->
@@ -416,15 +477,19 @@ updateObjectControls = (dom) ->
         card.append('div').classed('card-block', true)
           .append('h4').classed('card-title', true)
           .text('Object')
-        butts = [{ name: 'add-cone', html: 'add cone' }]
-        card.append('div').classed('card-block', true)
-          .append('div').classed('btn-group', true)
-          .selectAll('button').data(butts)
-          .enter().append('button')
-          .classed('btn btn-secondary', true)
-          .attr { id: (d) -> d.name }
-          .html (d) -> d.html
-          .data data # re-set button data to THREE Object
+          .append('button')
+          .classed('btn btn-secondary pull-right', true)
+          .text 'add cone'
+          .attr { id: 'add-cone' }
+        # butts = [{ name: 'add-cone', html: 'add cone' }]
+        # card.append('div').classed('card-block', true)
+        #   .append('div').classed('btn-group', true)
+        #   .selectAll('button').data(butts)
+        #   .enter().append('button')
+        #   .classed('btn btn-secondary', true)
+        #   .attr { id: (d) -> d.name }
+        #   .html (d) -> d.html
+        #   .data data # re-set button data to THREE Object
     # objectControls.select '.card-title'
     #   .text (d) -> d.name
     objectControls.exit().remove()
