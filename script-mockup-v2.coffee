@@ -21,7 +21,7 @@ ROOM_SIZE =
   length: 10
   height: 3
   
-DEFAULT_OBJECT_VOLUME = ROOM_SIZE.width * 0.1
+DEFAULT_OBJECT_VOLUME = ROOM_SIZE.width * 0.05
 DEFAULT_CONE_SPREAD = 0.3
 MAX_CONE_SPREAD = 2
 MAX_CONE_VOLUME = 2
@@ -417,6 +417,7 @@ emitter 'selectCone'
     
 emitter 'addCone'
   .subscribe (obj) ->
+    
     i = obj.children.length
     coneParent = new THREE.Object3D()
     coneParent._theta = 0
@@ -790,22 +791,31 @@ firstModel = ->
   m.floor = m.scene.getObjectByName 'floor'
   
 
-  directional = new THREE.DirectionalLight 0xffffff, 0.1
+  directional = new THREE.DirectionalLight 0xffffff, 0.95
   directional.position.setY 100
+  directional.castShadow = true
+  directional.near = 0.1
+  f = 10
+  directional.shadowCameraLeft = -f
+  directional.shadowCameraRight = f
+  directional.shadowCameraTop = f
+  directional.shadowCameraBottom = -f
+  directional.shadowDarkness = 0.2
   # directional.shadowCameraVisible = true
   
-  # m.scene.add directional
+  m.scene.add directional
   
-  spotLight = new THREE.SpotLight 0xffffff, 1
-  spotLight.position.setY 50
-  spotLight.castShadow = true
-  spotLight.shadowMapWidth = 2000
-  spotLight.shadowMapHeight = 2000
-  spotLight.shadowBias = 0.0001
-  spotLight.shadowDarkness = 0.2
+  # spotLight = new THREE.SpotLight 0xffffff, 0.2
+  # spotLight.position.setY 50
+  # spotLight.castShadow = true
+  # spotLight.shadowMapWidth = 2000
+  # spotLight.shadowMapHeight = 2000
+  # spotLight.shadowBias = 0.0001
+  # spotLight.shadowDarkness = 0.2
+  # spotLight.exponent = 2
   
-  spotLight.shadowCameraVisible = true
-  m.scene.add spotLight
+  # spotLight.shadowCameraVisible = true
+  # m.scene.add spotLight
   
   m.floor.receiveShadow = true
   
