@@ -337,6 +337,8 @@ emitter 'addObject'
     addObjectAtPoint p
     
 addObjectAtPoint = (p) ->
+  console.info "Add object at", p
+  
   geometry = new THREE.SphereGeometry 0.1, 30, 30
 
   material = new THREE.MeshPhongMaterial(
@@ -856,9 +858,16 @@ apply = (o, fn) -> fn o
 degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
 
 emitter 'mockup'
-  .subscribe ->
+  .withLatestFrom emitter('modelState'), (a,b) -> b
+  .subscribe (model) ->
     console.info 'Start mockup.'
+    console.log model
+    p = new THREE.Vector3 -7, -1.5, 3
+    addObjectAtPoint p
     
-emitter.emit 'mockup'
+    # _room = new THREE.
+    
+    
     
 emitter.emit 'start'
+emitter.emit 'mockup'
