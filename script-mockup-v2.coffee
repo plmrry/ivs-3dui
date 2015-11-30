@@ -666,8 +666,6 @@ addCameraControls = (main) ->
     .append('div').classed 'col-xs-12', true
     .append('div').classed "cameraControls", true
   buttons = [
-    { name: "north" }, { name: "top" }
-    { name: "phi_45", html: '45' }
     { name: "camera", html: materialIcon '3d_rotation' }
     { name: "zoomIn", html: materialIcon 'zoom_in' }
     { name: "zoomOut", html: materialIcon 'zoom_out' }
