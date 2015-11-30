@@ -721,27 +721,35 @@ getMainObject = ->
   
 getFloor = ->
   FLOOR_SIZE = 100
-  FLOOR_GRID_COLOR = new THREE.Color 0.9, 0.9, 0.9
+  # FLOOR_GRID_COLOR = new THREE.Color 0.9, 0.9, 0.9
+  FLOOR_GRID_COLOR = new THREE.Color 0, 0, 0
   floorGeom = new THREE.PlaneGeometry FLOOR_SIZE, FLOOR_SIZE
-  floorMat = new THREE.MeshBasicMaterial
-    # color: (new THREE.Color(0.1,0.2,0.1)), 
-    side: THREE.DoubleSide, 
-    depthWrite: false
-    # wireframe: true
+  
+  # floorMat = new THREE.MeshBasicMaterial
+  #   # color: (new THREE.Color(0.1,0.2,0.1)), 
+  #   side: THREE.DoubleSide, 
+  #   depthWrite: false
+  #   # wireframe: true
+  
   floorMat = new THREE.MeshPhongMaterial(
     # color: (new THREE.Color(0.1,0.2,0.1))
     side: THREE.DoubleSide
+    depthWrite: false
   )
   floor = new THREE.Mesh floorGeom, floorMat 
   floor.name = 'floor'
   floor.rotateX Math.PI/2
   floor.position.setY -ROOM_SIZE.height/2
   
-  # grid = new THREE.GridHelper FLOOR_SIZE/2, 2
-  # grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
-  # grid.rotateX Math.PI/2
-  # grid.material.depthWrite = false
-  # floor.add grid
+  grid = new THREE.GridHelper FLOOR_SIZE/2, 2
+  grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
+  grid.rotateX Math.PI/2
+  grid.material.transparent = true
+  grid.material.opacity = 0.1
+  grid.material.linewidth = 3
+  grid.material.depthWrite = false
+  floor.add grid
+  
   return floor
   
 getFirstCamera = ->
@@ -790,7 +798,6 @@ firstModel = ->
   m.scene = getInitialScene m.room
   m.floor = m.scene.getObjectByName 'floor'
   
-
   # directional = new THREE.DirectionalLight 0xffffff, 0.95
   # directional.position.setY 100
   # directional.castShadow = true
@@ -847,5 +854,11 @@ fromD3dragHandler = (drag) ->
 apply = (o, fn) -> fn o
 
 degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
+
+emitter 'mockup'
+  .subscribe ->
+    console.info 'Start mockup.'
+    
+emitter.emit 'mockup'
     
 emitter.emit 'start'
