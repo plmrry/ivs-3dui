@@ -791,31 +791,31 @@ firstModel = ->
   m.floor = m.scene.getObjectByName 'floor'
   
 
-  directional = new THREE.DirectionalLight 0xffffff, 0.95
-  directional.position.setY 100
-  directional.castShadow = true
-  directional.near = 0.1
-  f = 10
-  directional.shadowCameraLeft = -f
-  directional.shadowCameraRight = f
-  directional.shadowCameraTop = f
-  directional.shadowCameraBottom = -f
-  directional.shadowDarkness = 0.2
-  # directional.shadowCameraVisible = true
+  # directional = new THREE.DirectionalLight 0xffffff, 0.95
+  # directional.position.setY 100
+  # directional.castShadow = true
+  # directional.near = 0.1
+  # f = 10
+  # directional.shadowCameraLeft = -f
+  # directional.shadowCameraRight = f
+  # directional.shadowCameraTop = f
+  # directional.shadowCameraBottom = -f
+  # directional.shadowDarkness = 0.2
+  # # directional.shadowCameraVisible = true
   
-  m.scene.add directional
+  # m.scene.add directional
   
-  # spotLight = new THREE.SpotLight 0xffffff, 0.2
-  # spotLight.position.setY 50
-  # spotLight.castShadow = true
-  # spotLight.shadowMapWidth = 2000
-  # spotLight.shadowMapHeight = 2000
+  spotLight = new THREE.SpotLight 0xffffff, 0.95
+  spotLight.position.setY 80
+  spotLight.castShadow = true
+  spotLight.shadowMapWidth = 2000
+  spotLight.shadowMapHeight = 2000
   # spotLight.shadowBias = 0.0001
-  # spotLight.shadowDarkness = 0.2
-  # spotLight.exponent = 2
+  spotLight.shadowDarkness = 0.2
+  spotLight.exponent = 1
   
-  # spotLight.shadowCameraVisible = true
-  # m.scene.add spotLight
+  spotLight.shadowCameraVisible = true
+  m.scene.add spotLight
   
   m.floor.receiveShadow = true
   
