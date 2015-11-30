@@ -58,8 +58,8 @@ cameraSize = size.map (size) ->
 renderer = dom
   .flatMap (dom) ->
     first = new THREE.WebGLRenderer canvas: dom.canvas
-    first.shadowMapEnabled = true
-    first.shadowMapType = THREE.PCFSoftShadowMap
+    first.shadowMap.enabled = true
+    first.shadowMap.type = THREE.PCFSoftShadowMap
     # first.setClearColor 'white'
     return size.scan (r, s) ->
       r.setSize s.width, s.height
@@ -335,49 +335,14 @@ emitter 'addObject'
     [ event, intersects ] = arr
     p = intersects[0]?.point
     addObjectAtPoint p
-    # geometry = new THREE.SphereGeometry 0.1, 30, 30
-    # # material = new THREE.MeshBasicMaterial(
-    # #   color: PARENT_SPHERE_COLOR, 
-    # #   # wireframe: true
-    # # )
-    # material = new THREE.MeshPhongMaterial(
-    #   color: PARENT_SPHERE_COLOR
-    #   transparent: true
-    #   opacity: 0.5
-    #   # wireframe: true
-    #   shading: THREE.FlatShading
-    # )
-    
-    # sphere = new THREE.Mesh geometry, material
-    # sphere.castShadow = true
-    # sphere.name = 'parentSphere'
-    # sphere._volume = 0
-    # # object = new THREE.Object3D()
-    # # object.add sphere
-    # object = sphere
-    # y = DEFAULT_OBJECT_HEIGHT
-    # object.position.set p.x, y, p.z
-    # update = (model) ->
-    #   i = model.room.children.length
-    #   object.name = "object#{i}"
-    #   model.room.add object
-    #   return model
-    # emitter.emit 'modelUpdate', update
-    # emitter.emit 'tweenInSphere', sphere
-    # # emitter.emit 'tweenSphereVolume', sphere
-    # emitter.emit 'objectAdded', object
     
 addObjectAtPoint = (p) ->
   geometry = new THREE.SphereGeometry 0.1, 30, 30
-  # material = new THREE.MeshBasicMaterial(
-  #   color: PARENT_SPHERE_COLOR, 
-  #   # wireframe: true
-  # )
+
   material = new THREE.MeshPhongMaterial(
     color: PARENT_SPHERE_COLOR
     transparent: true
     opacity: 0.3
-    # wireframe: true
     shading: THREE.FlatShading
   )
   
@@ -385,11 +350,10 @@ addObjectAtPoint = (p) ->
   sphere.castShadow = true
   sphere.name = 'parentSphere'
   sphere._volume = 0
-  # object = new THREE.Object3D()
-  # object.add sphere
+
   object = sphere
-  # y = DEFAULT_OBJECT_HEIGHT
-  y = 1
+  DEFAULT_OBJECT_HEIGHT = 1
+  y = DEFAULT_OBJECT_HEIGHT
   object.position.set p.x, y, p.z
   update = (model) ->
     i = model.room.children.length
@@ -463,34 +427,23 @@ emitter 'addCone'
     coneParent.rotateZ Math.random() * (Math.PI * 2)
     obj.add coneParent
     top = CONE_TOP
-    # bottom = DEFAULT_CONE_SPREAD 
+
     s = DEFAULT_CONE_SPREAD 
     bottom = d3.random.normal(s, 0.08)()
-    # bottom = MAX_CONE_SPREAD * Math.random()
-    # height = DEFAULT_OBJECT_VOLUME
+    
     h = DEFAULT_OBJECT_VOLUME
     height = d3.random.normal(h, 0.2)()
-    # height = MAX_CONE_VOLUME * Math.random()
+    
     geometry = new THREE.CylinderGeometry top, bottom, height
     geometry.parameters.openEnded = true
     geometry = geometry.clone()
-    # geometry.
-    # geometry = new THREE.CylinderGeometry CONE_TOP
-    # material = new THREE.MeshBasicMaterial
-    #   color: 0xff0000
+    
     material = new THREE.MeshPhongMaterial(
       color: 0xff0000
       shading: THREE.FlatShading
       side: THREE.DoubleSide
     )
-    # material = new THREE.MeshPhongMaterial(
-    #   color: new THREE.Color 0, 0, 0
-    #   transparent: true
-    #   opacity: 0.4
-    #   # wireframe: true
-    #   shading: THREE.FlatShading
-    # )
-    
+
     cone = new THREE.Mesh geometry, material
     cone.position.y = -cone.geometry.parameters.height/2
     coneParent.add cone
@@ -498,19 +451,6 @@ emitter 'addCone'
     emitter.emit 'coneAdded', coneParent
     
 window.emitter = emitter
-  # obj = addObjectAtPoint new THREE.Vector3()
-  
-# dom.subscribe (d) -> 
-#   hammertime = new Hammer(d.canvas);
-#   hammertime.on 'pinchin', (ev) ->
-#     alert('pinch') 
-  
-    
-# addCone = dom
-#   .flatMap (dom) ->
-#     node = dom.sceneControls.select('add-cone').node()
-#     return stream.fromEvent node, 'click'
-#   .subscribe -> console.log 'add cone'
 
 updateConeControls = (dom) ->
   (data) ->
@@ -528,19 +468,7 @@ updateConeControls = (dom) ->
           .append('button')
           .classed('btn btn-secondary pull-right', true)
           .text 'add file'
-        # console.log 'added cone controls'
-        # emitter.emit 'domAdded', dom
-      #   butts = [{ name: 'add-file', html: 'add file' }]
-      #   card.append('div').classed('card-block', true)
-      #     .append('div').classed('btn-group', true)
-      #     .selectAll('button').data(butts)
-      #     .enter().append('button')
-      #     .classed('btn btn-secondary', true)
-      #     .attr { id: (d) -> d.name }
-      #     .html (d) -> d.html
-      #     .data data # re-set button data to object
-    # objectControls.select '.card-title'
-    #   .text (d) -> d.name
+
     coneControls.exit().remove()
   
 updateObjectControls = (dom) ->
@@ -563,17 +491,6 @@ updateObjectControls = (dom) ->
           .attr { id: 'add-cone' }
       .each ->
         emitter.emit 'domAdded', dom
-        # butts = [{ name: 'add-cone', html: 'add cone' }]
-        # card.append('div').classed('card-block', true)
-        #   .append('div').classed('btn-group', true)
-        #   .selectAll('button').data(butts)
-        #   .enter().append('button')
-        #   .classed('btn btn-secondary', true)
-        #   .attr { id: (d) -> d.name }
-        #   .html (d) -> d.html
-        #   .data data # re-set button data to THREE Object
-    # objectControls.select '.card-title'
-    #   .text (d) -> d.name
     objectControls.exit().remove()
   
 emitter('unselectObject')
@@ -874,24 +791,23 @@ firstModel = ->
   m.scene = getInitialScene m.room
   m.floor = m.scene.getObjectByName 'floor'
   
-  # light = new THREE.PointLight 0xffffff
-  # light = new THREE.DirectionalLight 0xffffff, 0.5
-  spotLight = light = new THREE.SpotLight 0xffffff, 1
-  light.position.setY 50
-  light.castShadow = true
+
+  directional = new THREE.DirectionalLight 0xffffff, 0.1
+  directional.position.setY 100
+  # directional.shadowCameraVisible = true
   
-  spotLight.shadowMapWidth = 2000;
-  spotLight.shadowMapHeight = 2000;
-  # # spotLight.shadowCameraNear = 30;
-  # spotLight.shadowCameraFar = 200;
-  # spotLight.exponent = 2
-  # spotLight.shadowCameraFov = 30;
+  # m.scene.add directional
   
-  spotLight.shadowBias = 0.0001;
-  spotLight.shadowDarkness = 0.2;
+  spotLight = new THREE.SpotLight 0xffffff, 1
+  spotLight.position.setY 50
+  spotLight.castShadow = true
+  spotLight.shadowMapWidth = 2000
+  spotLight.shadowMapHeight = 2000
+  spotLight.shadowBias = 0.0001
+  spotLight.shadowDarkness = 0.2
   
-  # light.shadowCameraVisible = true
-  m.scene.add light
+  spotLight.shadowCameraVisible = true
+  m.scene.add spotLight
   
   m.floor.receiveShadow = true
   
