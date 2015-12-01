@@ -782,11 +782,11 @@ getFloor = ->
   floor.position.setY -ROOM_SIZE.height/2
 
   grid = new THREE.GridHelper FLOOR_SIZE/2, 2
-  grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
+  # grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
   grid.rotateX Math.PI/2
   grid.material.transparent = true
-  grid.material.opacity = 0.1
-  grid.material.linewidth = 3
+  grid.material.opacity = 0.2
+  grid.material.linewidth = 2
   grid.material.depthWrite = false
   floor.add grid
 
@@ -939,20 +939,58 @@ emitter 'mockup'
       line.receiveShadow = true
       return line
 
-    # _zone = do ->
-  #     splinepts = [];
-		# 	splinepts.push( new THREE.Vector2 ( 70, 20 ) );
-		# 	splinepts.push( new THREE.Vector2 ( 80, 90 ) );
-		# 	splinepts.push( new THREE.Vector2 ( -30, 70 ) );
-		# 	splinepts.push( new THREE.Vector2 ( 0, 0 ) );
-
-		# 	splineShape = new THREE.Shape();
-		# 	splineShape.moveTo( 0, 0 );
-		# 	splineShape.splineThru( splinepts );
-
-		# 	points = splineShape.createPointsGeometry()
-
     model.scene.add _room
+
+    _zone = do ->
+      splinepts = [
+        new THREE.Vector2 1, -2
+        new THREE.Vector2 7, 2
+        new THREE.Vector2 3, 9
+        new THREE.Vector2 -3, 7
+        new THREE.Vector2 -2, 4
+        # new THREE.Vector2 0, 0
+      ]
+      splineShape = new THREE.Shape()
+      splineShape.moveTo( 0, 0 );
+      splineShape.splineThru( splinepts );
+      geometry = new THREE.ShapeGeometry splineShape
+      material = new THREE.MeshPhongMaterial(
+        color: 0x000000
+        # shading: THREE.FlatShading
+        transparent: true
+        opacity: 0.2
+        side: THREE.DoubleSide
+      )
+      obj = new THREE.Mesh geometry, material
+      obj.rotateX Math.PI/2
+      obj.position.setY -ROOM_SIZE.height/2
+      return obj
+
+    model.scene.add _zone
+
+    _trajectory = do ->
+      sampleClosedSpline = new THREE.ClosedSplineCurve3([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(4, 0, -4),
+        new THREE.Vector3(9, 0, -4),
+        new THREE.Vector3(4, 0, 4),
+        new THREE.Vector3(-4, 0, 4)
+      ]);
+      geometry = new THREE.TubeGeometry(
+        sampleClosedSpline, 100, 0.05, 8, true
+      );
+      mat = new THREE.MeshPhongMaterial(
+        color: 0x000000
+        # shading: THREE.FlatShading
+        transparent: true
+        opacity: 0.5
+        # side: THREE.DoubleSide
+      )
+      obj = new THREE.Mesh geometry, mat
+      obj.castShadow = true
+      return obj
+
+    sphere.add _trajectory
 
     emitter.emit 'modelUpdate', (m) -> m
 
