@@ -198,7 +198,7 @@ emitter 'click'
   .map (arr) -> arr[0]
   .filter (i) -> i.room.length > 0 # Did click an object
   .subscribe (i) ->
-    emitter.emit 'selectObject', i.room[0].object
+    # emitter.emit 'selectObject', i.room[0].object
 
 emitter 'click'
   .withLatestFrom allIntersects, (e, i) -> i
@@ -365,6 +365,7 @@ addObjectAtPoint = (p) ->
   update = (model) ->
     i = model.room.children.length
     object.name = "object#{i}"
+    object._id = i
     model.room.add object
     return model
   emitter.emit 'modelUpdate', update
@@ -375,11 +376,16 @@ addObjectAtPoint = (p) ->
 
 emitter 'objectAdded'
   .subscribe (o) ->
-    emitter.emit 'selectObject', o
+    # emitter.emit 'selectObject', o
     # emitter.emit 'editSelected'
 
 # ------------------------------------------------------- Emitters
 # ------------------------------------ Object Selected
+highlightObject = (o) ->
+  color = new THREE.Color 0, 0, 1
+  tweenColor(color) o
+    .subscribe (up) -> emitter.emit 'modelUpdate', (m) -> m
+  
 emitter('selectObject')
   .do (o) -> emitter.emit 'unselectOthers', o
   .flatMap (o) ->
@@ -424,81 +430,76 @@ emitter 'selectCone'
     
 getConeParentWithParams = (params) ->
   coneParent = new THREE.Object3D()
-  Object.assign coneParent params
+  Object.assign coneParent, params
+  coneParent.castShadow = true
+  coneParent.receiveShadow = true
+  CONE_RADIAL_SEGMENTS = 50
+  geometry = new THREE.CylinderGeometry()
+  geometry.parameters =
+    radiusBottom: CONE_BOTTOM
+    openEnded: true
+    radialSegments: CONE_RADIAL_SEGMENTS
+  geometry = geometry.clone()
+  material = new THREE.MeshPhongMaterial(
+    transparent: true
+    opacity: 0.2
+    side: THREE.DoubleSide
+  )
+  cone = new THREE.Mesh geometry, material
+  cone.name = 'cone'
+  cone.castShadow = true
+  cone.receiveShadow = true
+  coneParent.add cone
   return coneParent
+  
+addConeParentWithParams = (params) ->
+  (obj) ->
+    coneParent = getConeParentWithParams params
+    updateConeParent coneParent
+    i = obj.children.length
+    coneParent.name = "cone#{i}"
+    obj.add coneParent
     
 emitter 'addCone'
   .subscribe (obj) ->
-
-    i = obj.children.length
-    coneParent = new THREE.Object3D()
-    coneParent._theta = 0 # Math.random() * (Math.PI * 2)
-    coneParent._phi = 0 # Math.random() * (Math.PI * 2)
-    coneParent._volume = DEFAULT_OBJECT_VOLUME
-    coneParent._spread = DEFAULT_CONE_SPREAD
-    
     params =
       _theta: Math.random() * (Math.PI * 2)
       _phi: Math.random() * (Math.PI * 2)
+      _volume: DEFAULT_OBJECT_VOLUME
+      _spread: DEFAULT_CONE_SPREAD
       
-    # coneParent.rotateX Math.random() * (Math.PI * 2)
-    # coneParent.rotateZ Math.random() * (Math.PI * 2)
-    obj.add coneParent
-    # top = CONE_TOP
-
-    s = DEFAULT_CONE_SPREAD
-    bottom = d3.random.normal(s, 0.08)()
-
-    h = DEFAULT_OBJECT_VOLUME
-    height = d3.random.normal(h, 0.2)()
-
-    CONE_RADIAL_SEGMENTS = 50
-
-    geometry = new THREE.CylinderGeometry() # top, bottom, height
-    geometry.parameters =
-      # radiusTop: 10
-      radiusBottom: CONE_BOTTOM
-      # height: height
-      openEnded: true
-      radialSegments: CONE_RADIAL_SEGMENTS
-    # geometry.parameters.openEnded = true
-    geometry = geometry.clone()
-
-    material = new THREE.MeshPhongMaterial(
-      # color: 0xff0000
-      # shading: THREE.FlatShading
-      transparent: true
-      opacity: 0.2
-      side: THREE.DoubleSide
-    )
-
-    cone = new THREE.Mesh geometry, material
-    cone.name = 'cone'
-    cone.castShadow = true
-    cone.receiveShadow = true
-    # cone.position.y = -cone.geometry.parameters.height/2
-    coneParent.add cone
-    coneParent.castShadow = true
-    coneParent.receiveShadow = true
+    addConeParentWithParams(params) obj
+      
+    # coneParent = getConeParentWithParams params
+    
+    # i = obj.children.length
+    # coneParent.name = "cone#{i}"
+    # obj.add coneParent
+    
+    # updateConeParent coneParent
 
     emitter.emit 'modelUpdate', (m) -> m
-    emitter.emit 'coneAdded', coneParent
-    emitter.emit 'coneParentUpdate', coneParent
+    # emitter.emit 'coneAdded', coneParent
+    # emitter.emit 'coneParentUpdate', coneParent
+    
+updateConeParent = (coneParent) ->
+  coneParent.rotation.x = coneParent._phi
+  coneParent.rotation.z = coneParent._theta
+  cone = coneParent.getObjectByName 'cone'
+  geom = cone.geometry
+  params = geom.parameters
+  params.height = coneParent._volume
+  params.radiusTop = coneParent._spread
+  newGeom = geom.clone()
+  cone.geometry.dispose()
+  cone.geometry = newGeom
+  cone.position.y = cone.geometry.parameters.height/2
 
 emitter 'coneParentUpdate'
   .subscribe (coneParent) ->
-    coneParent.rotation.x = coneParent._phi
-    coneParent.rotation.y = coneParent._theta
 
-    cone = coneParent.getObjectByName 'cone'
-    geom = cone.geometry
-    params = geom.parameters
-    params.height = coneParent._volume
-    params.radiusTop = coneParent._spread
-    newGeom = geom.clone()
-    cone.geometry.dispose()
-    cone.geometry = newGeom
-    cone.position.y = cone.geometry.parameters.height/2
+    updateConeParent coneParent
+    
     emitter.emit 'modelUpdate', (m) -> m
 
 window.emitter = emitter
@@ -690,9 +691,7 @@ addSceneControls = (selection) ->
 
 getModeButtons = (sceneControls) ->
   butts = [
-    { name: 'object', html: 'add object' }
-    { name: 'zone' }
-    { name: 'trajectory' }
+    { name: 'object', html: '<i class="material-icons" style="display: block">add</i>' }
   ]
   return sceneControls
     .append('div').classed 'row', true
@@ -911,22 +910,210 @@ degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
 
 emitter 'mockup'
   .withLatestFrom emitter('modelState'), (a,b) -> b
-  .subscribe (model) ->
+  .withLatestFrom dom
+  .subscribe (arr) ->
+    [model, dom] = arr
     console.info 'Start mockup.'
     # console.log model
     p = new THREE.Vector3 -7, -1.5, 3
     sphere = addObjectAtPoint p
-
-    emitter 'coneAdded'
-      .subscribe (coneParent) ->
-        coneParent._volume = 2
-        coneParent._spread = 0.5
-        coneParent._theta = 0
-        coneParent._phi = Math.PI/2 # degToRad 45
-        emitter.emit 'coneParentUpdate', coneParent
-
-    emitter.emit 'addCone', sphere
-    # emitter.emit 'addTrajectory', sphere
+    
+    coneParams1 =
+      _volume: 2
+      _spread: 0.5
+      _theta: 0
+      _phi: Math.PI/2
+      
+    addConeParentWithParams({
+      _volume: 2
+      _spread: 0.5
+      _theta: 0
+      _phi: Math.PI/2
+    })(sphere)
+    
+    addConeParentWithParams({
+      _volume: 1.2
+      _spread: 0.7
+      _theta: Math.PI * 0.3
+      _phi: - Math.PI * 0.1
+    })(sphere)
+    
+    coneParent = sphere.children[0]
+    
+    highlightObject coneParent.getObjectByName 'cone'
+    
+    dom.sceneControls
+      .append('div')
+      .classed 'card', true
+      .style 'height', '20rem'
+    
+    # dom.subscribe (dom) ->
+    dom.sceneControls
+      .append('div').attr({ id: "coneControls" })
+      .classed 'card', true
+      .call (card) ->
+        card.append('div').classed('card-block', true)
+          .call (block) ->
+            block.append('h6')
+              .classed('card-title', true)
+              .text('cone1.2')
+            block.append('table')
+              .classed('table table-sm', true)
+              .append('tbody')
+              .call (tbody) ->
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td').classed('param', true).text('File')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text('cone.wav')
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Volume')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text(coneParent._volume)
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Pitch')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text (degToRad.invert coneParent._phi) + "°"
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Spread')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text(coneParent._spread)
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Yaw')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text (degToRad.invert coneParent._theta) + "°"
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span')
+                      .text('Delete')
+          # .append('button')
+          # .classed('btn btn-secondary pull-right', true)
+          # .text 'add file'
+          
+    # dom.sceneControls
+    #   .append('div').classed('row', true)
+    #     .attr id: 'objectControls'
+    #   .append('div').classed('col-xs-12', true)
+    #   .append('div').classed('card', true)
+    #   .call (card) ->
+    #     card.append('div').classed('card-block', true)
+    #       .call (block) ->
+    #         block.append('h6').classed('card-title', true)
+    #           .text('object1')
+    #         block.append('table')
+    #           .classed('table table-sm', true)
+    #           .append('tbody')
+    #           .call (tbody) ->
+    #             tbody.append('tr')
+    #               .call (tr) ->
+    #                 tr.append('td').classed('param', true)
+    #                   .text('File')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span').text('object.wav')
+    #             tbody.append('tr')
+    #               .call (tr) ->
+    #                 tr.append('td').classed('param', true)
+    #                   .text('Volume')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span').text('95%')
+    #             tbody.append('tr')
+    #               .call (tr) ->
+    #                 tr.append('td')
+    #                   .classed('param', true)
+    #                   .text('x')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span').text(sphere.position.x + "m")
+    #                 tr.append('td')
+    #                   .classed('param', true)
+    #                   .text('Pitch')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span').text ((degToRad.invert(sphere.rotation.x)) + "°")
+    #             tbody.append('tr')
+    #               .call (tr) ->
+    #                 tr.append('td')
+    #                   .classed('param', true)
+    #                   .text('y')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span').text(sphere.position.y + "m")
+    #                 tr.append('td')
+    #                   .classed('param', true)
+    #                   .text('Yaw')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span').text ((degToRad.invert(sphere.rotation.z)) + "°")
+    #             tbody.append('tr')
+    #               .call (tr) ->
+    #                 tr.append('td')
+    #                   .classed('param', true)
+    #                   .text('z')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span').text(sphere.position.z + "m")
+    #             tbody.append('tr')
+    #               .call (tr) ->
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .attr 'colspan', 2
+    #                   .append('span')
+    #                   .text('Delete')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .attr 'colspan', 2
+    #                   .append('span')
+    #                   .text('Duplicate')
+    # dom.sceneControls
+    #   .append('div').classed('row', true)
+    #     .attr id: 'objectControls'
+    #   .append('div').classed('col-xs-12', true)
+    #   .append('div').classed('card', true)
+    #   .call (card) ->
+    #     card.append('div').classed('card-block', true)
+    #       .call (block) ->
+    #         block.append('h6').classed('card-title', true)
+    #           .text('trajectory')
+    #         block.append('table')
+    #           .classed('table table-sm', true)
+    #           .append('tbody')
+    #           .call (tbody) ->
+    #             tbody.append('tr')
+    #               .call (tr) ->
+    #                 tr.append('td')
+    #                   .classed('param', true)
+    #                   .text('Speed')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span').text('0.5m/s')
+    #             tbody.append('tr')
+    #               .call (tr) ->
+    #                 tr.append('td')
+    #                   .attr 'colspan', 2
+    #                   .classed('value', true)
+    #                   .append('span')
+    #                   .text('Stop')
+    #                 tr.append('td')
+    #                   .classed('value', true)
+    #                   .append('span')
+    #                   .text('Delete')
 
     _room = do ->
       w = ROOM_SIZE.width
@@ -965,7 +1152,7 @@ emitter 'mockup'
       splineShape.splineThru( splinepts );
       geometry = new THREE.ShapeGeometry splineShape
       material = new THREE.MeshPhongMaterial(
-        color: 0x000000
+        color: 0xff0000
         # shading: THREE.FlatShading
         transparent: true
         opacity: 0.2
