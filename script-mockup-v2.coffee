@@ -20,8 +20,8 @@ ROOM_SIZE =
   width: 15
   length: 10
   height: 3
-
-DEFAULT_OBJECT_VOLUME = ROOM_SIZE.width * 0.1
+  
+DEFAULT_OBJECT_VOLUME = ROOM_SIZE.width * 0.05
 DEFAULT_CONE_SPREAD = 0.3
 MAX_CONE_SPREAD = 2
 MAX_CONE_VOLUME = 2
@@ -34,7 +34,7 @@ emitter = do ->
       .map (o) -> o.data
   _emitter.emit = (event, data) -> subject.onNext { event, data }
   return _emitter
-
+  
 dom = emitter 'start'
   .flatMap ->
     stream.just firstDom()
@@ -44,7 +44,7 @@ size = stream.fromEvent window, 'resize'
   .startWith 'first resize'
   .combineLatest dom, (a, b) -> b
   .map (dom) -> getClientSize dom.main.node()
-
+  
 ndc = emitter 'start'
   .flatMap ->
     size.map updateNdcDomain
@@ -58,14 +58,14 @@ cameraSize = size.map (size) ->
 renderer = dom
   .flatMap (dom) ->
     first = new THREE.WebGLRenderer canvas: dom.canvas
-    first.shadowMapEnabled = true
-    first.shadowMapType = THREE.PCFSoftShadowMap
+    first.shadowMap.enabled = true
+    first.shadowMap.type = THREE.PCFSoftShadowMap
     # first.setClearColor 'white'
     return size.scan (r, s) ->
       r.setSize s.width, s.height
       return r
     , first
-
+    
 emitter 'tweenCamera'
   .flatMap (o) ->
     tweenStream o.duration
@@ -74,7 +74,7 @@ emitter 'tweenCamera'
     return (model) ->
       model.camera = update model.camera
       return model
-  .subscribe (update) ->
+  .subscribe (update) -> 
     emitter.emit 'modelUpdate', update
 
 modelUpdates = stream.merge cameraSize, emitter 'modelUpdate'
@@ -86,7 +86,7 @@ model = emitter 'start'
       return fn o
     , firstModel()
 
-# ------------------------------------------------------- Render
+# ------------------------------------------------------- Render 
 do ->
   onNext = (arr) ->
     [model, renderer] = arr
@@ -94,8 +94,8 @@ do ->
   onError = (err) -> console.error(err.stack);
   model.combineLatest renderer
     .subscribe onNext, onError
-
-# ------------------------------------------------------- Emitters
+    
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Canvas Drag
 canvasDrag = dom
   .flatMap (dom) ->
@@ -117,42 +117,42 @@ canvasDrag = dom
     emitter.emit 'floorIntersects', floorIntersects
   .map (arr) -> arr[0]
   .subscribe (d) -> emitter.emit 'canvasDrag', d
-
+  
 r = emitter('roomIntersects')
 f = emitter('floorIntersects')
 allIntersects = stream.combineLatest r, f, ((r, f) -> room: r, floor: f)
 
 _canvasDragStart = emitter 'canvasDrag'
   .filter (e) -> e.type is 'dragstart'
-
+  
 _canvasDragEnd = emitter 'canvasDrag'
   .filter (e) -> e.type is 'dragend'
-
+  
 canvasDragStart = emitter 'canvasDrag'
   .filter (e) -> e.type is 'dragstart'
   .withLatestFrom allIntersects, (e, i) -> i
-
+  
 canvasDragMove = emitter 'canvasDrag'
   .filter (e) -> e.type is 'drag'
   .withLatestFrom allIntersects, (e, i) -> i
-
+  
 canvasDragEnd = emitter 'canvasDrag'
   .filter (e) -> e.type is 'dragend'
   .withLatestFrom allIntersects, (e, i) -> i
-
-# ------------------------------------------------------- Emitters
+  
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Add Object Mode
 addObjectMode = dom
   .flatMap (dom) ->
     addObject = dom.modeButtons.select('#object').node()
     return stream.fromEvent addObject, 'click'
-
+    
 readyAdd = addObjectMode.map -> true
   .merge emitter('cancelAdd').map -> false
   .startWith false
   .do (d) -> log "readyAdd #{d}"
-
-# ------------------------------------------------------- Emitters
+  
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Add Object
 canvasDragStart
   .withLatestFrom readyAdd
@@ -161,12 +161,12 @@ canvasDragStart
     [ event, ready ] = arr
     console.info 'Adding object.'
     emitter.emit 'addObject', event
-
+    
 canvasDragEnd
   .withLatestFrom readyAdd
   .filter (arr) -> arr[1] is true
   .subscribe (arr) -> emitter.emit 'cancelAdd'
-
+  
 _canvasDragEnd
   .withLatestFrom _canvasDragStart
   .filter (arr) ->
@@ -175,8 +175,8 @@ _canvasDragEnd
     return xEqual and yEqual
   .map (arr) -> arr[0]
   .subscribe (event) -> emitter.emit 'click', event
-
-# ------------------------------------------------------- Emitters
+    
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Unselect Others
 # canvasDragStart
 #   .withLatestFrom readyAdd
@@ -184,8 +184,8 @@ _canvasDragEnd
 #   .map (arr) -> arr[0]
 #   .filter (i) -> i.room.length is 0 # Didn't click an object
 #   .subscribe -> emitter.emit 'unselectOthers', {}
-
-# ------------------------------------------------------- Emitters
+  
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Select Object
 #.withLatestFrom allIntersects, (e, i) -> i
 # canvasDragStart
@@ -195,22 +195,22 @@ emitter 'click'
   .filter (arr) -> arr[1] is false # Not in object-add mode
   .map (arr) -> arr[0]
   .filter (i) -> i.room.length > 0 # Did click an object
-  .subscribe (i) ->
+  .subscribe (i) -> 
     emitter.emit 'selectObject', i.room[0].object
-
+    
 emitter 'click'
   .withLatestFrom allIntersects, (e, i) -> i
   .pausable readyAdd.map (d) -> not d # Not in object-add mode
   .filter (i) -> i.room.length is 0 # Did not click an object
   .do -> console.log 'clicked floor'
-  .subscribe ->
+  .subscribe -> 
     emitter.emit 'unselectAll'
-
+    
 emitter 'unselectAll'
-  .subscribe (i) ->
+  .subscribe (i) -> 
     emitter.emit 'unselectOthers', {}
 
-# ------------------------------------------------------- Emitters
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Pan
 canvasDragMove
   .withLatestFrom readyAdd
@@ -229,8 +229,8 @@ canvasDragMove
       return model
     return update
   .subscribe (update) -> emitter.emit 'modelUpdate', update
-
-# ------------------------------------------------------- Emitters
+  
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Object Move
 canvasDragStart
   .withLatestFrom readyAdd
@@ -243,7 +243,7 @@ canvasDragStart
       .map (ints) -> ints.floor[0]?.point
       .bufferWithCount 2, 1
       .takeUntil canvasDragEnd
-  .map (arr) ->
+  .map (arr) -> 
     return (new THREE.Vector3())
       .subVectors arr[1], arr[0]
   .withLatestFrom canvasDragStart
@@ -256,8 +256,8 @@ canvasDragStart
       return model
   .subscribe (update) ->
     emitter.emit 'modelUpdate', update
-
-# ------------------------------------------------------- Emitters
+    
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Position
 dom
   .flatMap (dom) ->
@@ -275,13 +275,13 @@ dom
       camera.position.addVectors camera.position._relative, camera._lookAt
       camera.lookAt camera._lookAt
       camera
-  .subscribe (camUpdate) ->
+  .subscribe (camUpdate) -> 
     update = (model) ->
       model.camera = camUpdate model.camera
       return model
     emitter.emit 'modelUpdate', update
-
-# ------------------------------------------------------- Emitters
+    
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Camera Zoom
 dom
   .flatMap (dom) ->
@@ -293,10 +293,10 @@ dom
     return stream.merge zooms
   .subscribe (dz) ->
     emitter.emit 'zoom', dz
-
-emitter 'zoom'
+    
+emitter 'zoom'    
   .withLatestFrom emitter 'modelState'
-  .map (arr) ->
+  .map (arr) -> 
     [ dz, model ] = arr
     camera = model.camera
     z = camera.zoom
@@ -306,21 +306,21 @@ emitter 'zoom'
       c.updateProjectionMatrix()
       return c
     return update
-  .subscribe (update) ->
+  .subscribe (update) -> 
     emitter.emit 'tweenCamera', { update: update, duration: 500 }
-
+    
 addObjectMode
   .withLatestFrom emitter('modelState'), (a, b) -> b
   .subscribe (model) ->
     camera = model.camera
     currentPhi = camera.position._polar.phi
     maxPhi = degToRad EDIT_MODE_PHI
-
+    
     if currentPhi > maxPhi
       endFunc = -> phi: maxPhi
       updatePhi = cameraPolarTweenFunc(endFunc)(camera)
       emitter.emit 'tweenCamera', { update: updatePhi, duration: 500 }
-
+      
     if camera.zoom isnt INITIAL_ZOOM
       i = d3.interpolate camera.zoom, INITIAL_ZOOM
       updateZoom = (t) -> (c) ->
@@ -328,68 +328,37 @@ addObjectMode
         c.updateProjectionMatrix()
         return c
       emitter.emit 'tweenCamera', { update: updateZoom, duration: 500 }
-
+      
 emitter 'addObject'
   .withLatestFrom emitter 'floorIntersects'
   .subscribe (arr) ->
     [ event, intersects ] = arr
     p = intersects[0]?.point
     addObjectAtPoint p
-    # geometry = new THREE.SphereGeometry 0.1, 30, 30
-    # # material = new THREE.MeshBasicMaterial(
-    # #   color: PARENT_SPHERE_COLOR,
-    # #   # wireframe: true
-    # # )
-    # material = new THREE.MeshPhongMaterial(
-    #   color: PARENT_SPHERE_COLOR
-    #   transparent: true
-    #   opacity: 0.5
-    #   # wireframe: true
-    #   shading: THREE.FlatShading
-    # )
-
-    # sphere = new THREE.Mesh geometry, material
-    # sphere.castShadow = true
-    # sphere.name = 'parentSphere'
-    # sphere._volume = 0
-    # # object = new THREE.Object3D()
-    # # object.add sphere
-    # object = sphere
-    # y = DEFAULT_OBJECT_HEIGHT
-    # object.position.set p.x, y, p.z
-    # update = (model) ->
-    #   i = model.room.children.length
-    #   object.name = "object#{i}"
-    #   model.room.add object
-    #   return model
-    # emitter.emit 'modelUpdate', update
-    # emitter.emit 'tweenInSphere', sphere
-    # # emitter.emit 'tweenSphereVolume', sphere
-    # emitter.emit 'objectAdded', object
-
+    
 addObjectAtPoint = (p) ->
+  console.info "Add object at", p
+  
   geometry = new THREE.SphereGeometry 0.1, 30, 30
-  # material = new THREE.MeshBasicMaterial(
-  #   color: PARENT_SPHERE_COLOR,
-  #   # wireframe: true
-  # )
+
   material = new THREE.MeshPhongMaterial(
     color: PARENT_SPHERE_COLOR
     transparent: true
     opacity: 0.3
-    # wireframe: true
     shading: THREE.FlatShading
+    side: THREE.DoubleSide
   )
-
+  
   sphere = new THREE.Mesh geometry, material
   sphere.castShadow = true
+  sphere.receiveShadow = true
   sphere.name = 'parentSphere'
   sphere._volume = 0
-  # object = new THREE.Object3D()
-  # object.add sphere
+  sphere.renderOrder = 1
+
   object = sphere
-  # y = DEFAULT_OBJECT_HEIGHT
-  y = 1
+  DEFAULT_OBJECT_HEIGHT = 1
+  y = DEFAULT_OBJECT_HEIGHT
   object.position.set p.x, y, p.z
   update = (model) ->
     i = model.room.children.length
@@ -401,13 +370,13 @@ addObjectAtPoint = (p) ->
   # emitter.emit 'tweenSphereVolume', sphere
   emitter.emit 'objectAdded', object
   return object
-
+    
 emitter 'objectAdded'
   .subscribe (o) ->
     emitter.emit 'selectObject', o
     # emitter.emit 'editSelected'
-
-# ------------------------------------------------------- Emitters
+    
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Object Selected
 emitter('selectObject')
   .do (o) -> emitter.emit 'unselectOthers', o
@@ -416,20 +385,20 @@ emitter('selectObject')
     color = new THREE.Color 0, 0, 1
     return tweenColor(color) o
   .subscribe (update) -> emitter.emit 'modelUpdate', update
-
+  
 emitter('selectObject')
   .withLatestFrom dom
   .subscribe (arr) ->
     [object, dom] = arr
     updateObjectControls(dom) [object]
     # emitter.emit 'domUpdated', dom
-
+    
 emitter 'unselectAll'
   .withLatestFrom dom, (a, b) -> b
   .subscribe (dom) ->
     updateObjectControls(dom) []
     # emitter.emit 'domUpdated', dom
-
+    
 addCone = emitter 'domAdded'
   .map (dom) -> dom.sceneControls.select('#add-cone').node()
   .filter (node) -> node?
@@ -439,78 +408,69 @@ addCone = emitter 'domAdded'
     obj = d3.select(event.target).datum()
     console.log obj
     emitter.emit 'addCone', obj
-
+    
 emitter 'coneAdded'
   .subscribe (coneParent) ->
     emitter.emit 'selectCone', coneParent
-
+    
 emitter 'selectCone'
   .withLatestFrom dom
   .subscribe (arr) ->
     [object, dom] = arr
     updateConeControls(dom) [object]
     # emitter.emit 'domUpdated', dom
-
+    
 emitter 'addCone'
   .subscribe (obj) ->
+    
     i = obj.children.length
     coneParent = new THREE.Object3D()
-    coneParent._theta = 0
-    coneParent._phi = 0
+    coneParent._theta = Math.random() * (Math.PI * 2)
+    coneParent._phi = Math.random() * (Math.PI * 2)
     coneParent._volume = DEFAULT_OBJECT_VOLUME
     coneParent._spread = DEFAULT_CONE_SPREAD
-    coneParent.rotateX Math.random() * (Math.PI * 2)
-    coneParent.rotateZ Math.random() * (Math.PI * 2)
+    # coneParent.rotateX Math.random() * (Math.PI * 2)
+    # coneParent.rotateZ Math.random() * (Math.PI * 2)
     obj.add coneParent
     top = CONE_TOP
-    # bottom = DEFAULT_CONE_SPREAD
-    s = DEFAULT_CONE_SPREAD
+
+    s = DEFAULT_CONE_SPREAD 
     bottom = d3.random.normal(s, 0.08)()
-    # bottom = MAX_CONE_SPREAD * Math.random()
-    # height = DEFAULT_OBJECT_VOLUME
+    
     h = DEFAULT_OBJECT_VOLUME
     height = d3.random.normal(h, 0.2)()
-    # height = MAX_CONE_VOLUME * Math.random()
-    geometry = new THREE.CylinderGeometry top, bottom, height
+    
+    CONE_RADIAL_SEGMENTS = 50
+    
+    geometry = new THREE.CylinderGeometry() # top, bottom, height
+    geometry.parameters =
+      radiusTop: top
+      radiusBottom: bottom
+      height: height
+      radialSegments: CONE_RADIAL_SEGMENTS
     geometry.parameters.openEnded = true
     geometry = geometry.clone()
-    # geometry.
-    # geometry = new THREE.CylinderGeometry CONE_TOP
-    # material = new THREE.MeshBasicMaterial
-    #   color: 0xff0000
+    
     material = new THREE.MeshPhongMaterial(
-      color: 0xff0000
-      shading: THREE.FlatShading
+      # color: 0xff0000
+      # shading: THREE.FlatShading
+      transparent: true
+      opacity: 0.2
       side: THREE.DoubleSide
     )
-    # material = new THREE.MeshPhongMaterial(
-    #   color: new THREE.Color 0, 0, 0
-    #   transparent: true
-    #   opacity: 0.4
-    #   # wireframe: true
-    #   shading: THREE.FlatShading
-    # )
 
     cone = new THREE.Mesh geometry, material
+    cone.castShadow = true
     cone.position.y = -cone.geometry.parameters.height/2
     coneParent.add cone
+    coneParent.castShadow = true
+    coneParent.receiveShadow = true
+    
     emitter.emit 'modelUpdate', (m) -> m
     emitter.emit 'coneAdded', coneParent
-
+    emitter.emit 'coneParentUpdate', coneParent
+    
 window.emitter = emitter
-  # obj = addObjectAtPoint new THREE.Vector3()
-
-dom.subscribe (d) -> 
-  hammertime = new Hammer(d.canvas);
-  hammertime.on 'pinchin', (ev) ->
-    alert('pinch')
-
-
-# addCone = dom
-#   .flatMap (dom) ->
-#     node = dom.sceneControls.select('add-cone').node()
-#     return stream.fromEvent node, 'click'
-#   .subscribe -> console.log 'add cone'
 
 updateConeControls = (dom) ->
   (data) ->
@@ -528,21 +488,9 @@ updateConeControls = (dom) ->
           .append('button')
           .classed('btn btn-secondary pull-right', true)
           .text 'add file'
-        # console.log 'added cone controls'
-        # emitter.emit 'domAdded', dom
-      #   butts = [{ name: 'add-file', html: 'add file' }]
-      #   card.append('div').classed('card-block', true)
-      #     .append('div').classed('btn-group', true)
-      #     .selectAll('button').data(butts)
-      #     .enter().append('button')
-      #     .classed('btn btn-secondary', true)
-      #     .attr { id: (d) -> d.name }
-      #     .html (d) -> d.html
-      #     .data data # re-set button data to object
-    # objectControls.select '.card-title'
-    #   .text (d) -> d.name
-    coneControls.exit().remove()
 
+    coneControls.exit().remove()
+  
 updateObjectControls = (dom) ->
   (data) ->
     objectControls = dom.sceneControls
@@ -563,25 +511,14 @@ updateObjectControls = (dom) ->
           .attr { id: 'add-cone' }
       .each ->
         emitter.emit 'domAdded', dom
-        # butts = [{ name: 'add-cone', html: 'add cone' }]
-        # card.append('div').classed('card-block', true)
-        #   .append('div').classed('btn-group', true)
-        #   .selectAll('button').data(butts)
-        #   .enter().append('button')
-        #   .classed('btn btn-secondary', true)
-        #   .attr { id: (d) -> d.name }
-        #   .html (d) -> d.html
-        #   .data data # re-set button data to THREE Object
-    # objectControls.select '.card-title'
-    #   .text (d) -> d.name
     objectControls.exit().remove()
-
+  
 emitter('unselectObject')
   .flatMap (o) ->
     color = PARENT_SPHERE_COLOR
     return tweenColor(color) o
   .subscribe (update) -> emitter.emit 'modelUpdate', update
-
+  
 tweenColor = (color) -> (o) ->
   # sphere = o.getObjectByName 'parentSphere'
   sphere = o
@@ -592,7 +529,7 @@ tweenColor = (color) -> (o) ->
     .map (t) ->
       sphere.material.color = i t
       return (model) -> model
-
+  
 emitter('unselectOthers')
   .withLatestFrom emitter('modelState')
   .subscribe (arr) ->
@@ -600,13 +537,13 @@ emitter('unselectOthers')
     chil = model.room.children
     _.without chil, obj
       .forEach (o) -> emitter.emit 'unselectObject', o
-
-# ------------------------------------------------------- Emitters
+      
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Unselect Others
 
 
-
-# ------------------------------------------------------- Emitters
+    
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Edit Selected Object
 o = emitter('selectObject')
 m = emitter('modelState')
@@ -615,11 +552,11 @@ emitter 'editSelected'
   .map (arr) ->
     [object, model] = arr
     camera = model.camera
-    i =
+    i = 
       lookAt: d3.interpolate camera._lookAt, object.position
       zoom: d3.interpolate camera.zoom, EDIT_MODE_ZOOM
       phi: d3.interpolate camera.position._polar.phi, degToRad EDIT_MODE_PHI
-
+      
     update = (t) -> (c) ->
       position = c.position
       polar = position._polar
@@ -634,13 +571,13 @@ emitter 'editSelected'
     return update
   .subscribe (update) ->
     emitter.emit 'tweenCamera', { update, duration: 500 }
-
-# ------------------------------------------------------- Emitters
+    
+# ------------------------------------------------------- Emitters 
 # ------------------------------------ Tween Sphere Volume
 # emitter 'tweenSphereVolume'
 #   .subscribe (sphere) ->
 #     end = DEFAULT_OBJECT_VOLUME
-#     i =
+#     i = 
 #       volume: d3.interpolate sphere._volume, end
 #     tweenStream 500, 'sphere'
 #       .map (t) ->
@@ -650,7 +587,7 @@ emitter 'editSelected'
 #         (err) ->
 #         (done) -> emitter.emit 'sphereAdded'
 #       )
-
+      
 emitter 'tweenInSphere'
   .subscribe (sphere) ->
     currentGeom = sphere.geometry
@@ -673,15 +610,15 @@ emitter 'tweenInSphere'
         (err) ->
         (done) -> emitter.emit 'sphereAdded'
       )
-
+  
 # ------------------------------------------------------- Functions
 getMouseFrom = (node) ->
   (event) ->
     event.mouse = d3.mouse node
     return event
-
+    
 getNdcFromMouse = (event, ndc) ->
-  event.ndc =
+  event.ndc = 
     x: ndc.x event.mouse[0]
     y: ndc.y event.mouse[1]
   return event
@@ -710,7 +647,7 @@ addMain = (selection) ->
 getClientSize = (element) ->
   width: element.clientWidth
   height: element.clientHeight
-
+  
 addSceneControls = (selection) ->
   selection.append('div')
     .classed 'container', true
@@ -719,7 +656,7 @@ addSceneControls = (selection) ->
       position: 'absolute'
       right: '0'
       top: '1%'
-
+      
 getModeButtons = (sceneControls) ->
   butts = [
     { name: 'object', html: 'add object' }
@@ -736,7 +673,7 @@ getModeButtons = (sceneControls) ->
         .classed 'btn btn-secondary', true
         .attr 'id', (d) -> d.name
         .html (d) -> d.html ? d.name
-
+        
 addCameraControls = (main) ->
   cameraControls = main
     .append('div').classed 'container', true
@@ -749,8 +686,6 @@ addCameraControls = (main) ->
     .append('div').classed 'col-xs-12', true
     .append('div').classed "cameraControls", true
   buttons = [
-    { name: "north" }, { name: "top" }
-    { name: "phi_45", html: '45' }
     { name: "camera", html: materialIcon '3d_rotation' }
     { name: "zoomIn", html: materialIcon 'zoom_in' }
     { name: "zoomOut", html: materialIcon 'zoom_out' }
@@ -761,20 +696,20 @@ addCameraControls = (main) ->
     .attr "id", (d) -> d.name
     .html (d) -> d.html ? d.name
   return cameraControls
-
+  
 materialIcon = (text) ->
   "<i class='material-icons' style='display: block'>#{text}</i>"
-
+  
 updateNdcDomain = (s) ->
   (d) ->
     d.x.domain [0, s.width]
     d.y.domain [0, s.height]
     return d
-
+  
 firstNdcScales = ->
   x: d3.scale.linear().range [-1, 1]
   y: d3.scale.linear().range [1, -1]
-
+  
 getRoomObject = (room) ->
   # geometry = new THREE.BoxGeometry room.width, room.height, room.length
   # material = new THREE.MeshBasicMaterial
@@ -783,9 +718,9 @@ getRoomObject = (room) ->
   roomObject = new THREE.Object3D()
   roomObject.name = 'room'
   return roomObject
-
+  
 getInitialScene = (roomObject) ->
-  # edges = new THREE.EdgesHelper roomObject, 0x00ff00
+  # edges = new THREE.EdgesHelper roomObject, 0x00ff00 
   mainObject = getMainObject()
   floor = getFloor()
   mainObject.add floor
@@ -794,7 +729,7 @@ getInitialScene = (roomObject) ->
   scene = new THREE.Scene()
   scene.add mainObject
   return scene
-
+  
 getMainObject = ->
   mainObject = new THREE.Object3D()
   # floor = getFloor()
@@ -802,32 +737,40 @@ getMainObject = ->
   # axisHelper = new THREE.AxisHelper 5
   # mainObject.add axisHelper
   return mainObject
-
+  
 getFloor = ->
   FLOOR_SIZE = 100
-  FLOOR_GRID_COLOR = new THREE.Color 0.9, 0.9, 0.9
+  # FLOOR_GRID_COLOR = new THREE.Color 0.9, 0.9, 0.9
+  FLOOR_GRID_COLOR = new THREE.Color 0, 0, 0
   floorGeom = new THREE.PlaneGeometry FLOOR_SIZE, FLOOR_SIZE
-  floorMat = new THREE.MeshBasicMaterial
-    # color: (new THREE.Color(0.1,0.2,0.1)),
-    side: THREE.DoubleSide,
-    depthWrite: false
-    # wireframe: true
+  
+  # floorMat = new THREE.MeshBasicMaterial
+  #   # color: (new THREE.Color(0.1,0.2,0.1)), 
+  #   side: THREE.DoubleSide, 
+  #   depthWrite: false
+  #   # wireframe: true
+  
   floorMat = new THREE.MeshPhongMaterial(
     # color: (new THREE.Color(0.1,0.2,0.1))
     side: THREE.DoubleSide
+    depthWrite: false
   )
-  floor = new THREE.Mesh floorGeom, floorMat
+  floor = new THREE.Mesh floorGeom, floorMat 
   floor.name = 'floor'
   floor.rotateX Math.PI/2
   floor.position.setY -ROOM_SIZE.height/2
-
-  # grid = new THREE.GridHelper FLOOR_SIZE/2, 2
-  # grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
-  # grid.rotateX Math.PI/2
-  # grid.material.depthWrite = false
-  # floor.add grid
+  
+  grid = new THREE.GridHelper FLOOR_SIZE/2, 2
+  grid.setColors FLOOR_GRID_COLOR, FLOOR_GRID_COLOR
+  grid.rotateX Math.PI/2
+  grid.material.transparent = true
+  grid.material.opacity = 0.1
+  grid.material.linewidth = 3
+  grid.material.depthWrite = false
+  floor.add grid
+  
   return floor
-
+  
 getFirstCamera = ->
   c = new THREE.OrthographicCamera()
   c.zoom = INITIAL_ZOOM
@@ -842,7 +785,7 @@ getFirstCamera = ->
   c.up.copy new THREE.Vector3 0, 1, 0
   c.updateProjectionMatrix()
   return c
-
+  
 # NOTE: See http://mathworld.wolfram.com/SphericalCoordinates.html
 polarToVector = (o) ->
   { radius, theta, phi } = o
@@ -850,7 +793,7 @@ polarToVector = (o) ->
   y = radius * Math.sin(theta) * Math.sin(phi)
   z = radius * Math.cos(phi)
   return new THREE.Vector3 y, z, x
-
+  
 setCameraSize = (s) ->
   (c) ->
     [ c.left, c.right ] = [-1, 1].map (d) -> d * s.width/2
@@ -866,40 +809,47 @@ tweenStream = (duration, name) ->
       .duration duration
       .tween name, -> (t) -> observer.onNext t
       .each "end", -> observer.onCompleted()
-
+  
 firstModel = ->
   m = {}
   m.camera = getFirstCamera()
   m.room = getRoomObject ROOM_SIZE
   m.scene = getInitialScene m.room
   m.floor = m.scene.getObjectByName 'floor'
-
-  # light = new THREE.PointLight 0xffffff
-  # light = new THREE.DirectionalLight 0xffffff, 0.5
-  spotLight = light = new THREE.SpotLight 0xffffff, 1
-  light.position.setY 50
-  light.castShadow = true
   
-  spotLight.shadowMapWidth = 2000;
-  spotLight.shadowMapHeight = 2000;
-  # # spotLight.shadowCameraNear = 30;
-  # spotLight.shadowCameraFar = 200;
-  # spotLight.exponent = 2
-  # spotLight.shadowCameraFov = 30;
+  # directional = new THREE.DirectionalLight 0xffffff, 0.95
+  # directional.position.setY 100
+  # directional.castShadow = true
+  # directional.near = 0.1
+  # f = 10
+  # directional.shadowCameraLeft = -f
+  # directional.shadowCameraRight = f
+  # directional.shadowCameraTop = f
+  # directional.shadowCameraBottom = -f
+  # directional.shadowDarkness = 0.2
+  # # directional.shadowCameraVisible = true
   
-  spotLight.shadowBias = 0.0001;
-  spotLight.shadowDarkness = 0.2;
+  # m.scene.add directional
   
-  # light.shadowCameraVisible = true
-  m.scene.add light
-
+  spotLight = new THREE.SpotLight 0xffffff, 0.95
+  spotLight.position.setY 100
+  spotLight.castShadow = true
+  spotLight.shadowMapWidth = 4000
+  spotLight.shadowMapHeight = 4000
+  # spotLight.shadowBias = 0.0001
+  spotLight.shadowDarkness = 0.2
+  spotLight.exponent = 1
+  
+  # spotLight.shadowCameraVisible = true
+  m.scene.add spotLight
+  
   m.floor.receiveShadow = true
-
+  
   hemisphere = new THREE.HemisphereLight( 0, 0xffffff, 0.8 );
   m.scene.add hemisphere
-
+  
   return m
-
+  
 firstDom = ->
   dom = {}
   dom.main = main = addMain d3.select 'body'
@@ -908,7 +858,7 @@ firstDom = ->
   dom.modeButtons = getModeButtons dom.sceneControls
   dom.cameraControls = addCameraControls main
   return dom
-
+  
 fromD3drag = (selection) ->
   handler = d3.behavior.drag()
   selection.call handler
@@ -919,9 +869,69 @@ fromD3dragHandler = (drag) ->
     drag.on 'dragstart', -> observer.onNext d3.event
       .on 'drag', -> observer.onNext d3.event
       .on 'dragend', -> observer.onNext d3.event
-
+      
 apply = (o, fn) -> fn o
 
 degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
 
+# emitter 'addTrajectory'
+#   .subscribe (object) ->
+#     console.log object
+
+emitter 'mockup'
+  .withLatestFrom emitter('modelState'), (a,b) -> b
+  .subscribe (model) ->
+    console.info 'Start mockup.'
+    # console.log model
+    p = new THREE.Vector3 -7, -1.5, 3
+    sphere = addObjectAtPoint p
+    
+    # emitter 'coneAdded'
+    #   .subscribe (coneParent) ->
+    #     debugger
+    
+    emitter.emit 'addCone', sphere
+    # emitter.emit 'addTrajectory', sphere
+    
+    _room = do ->
+      w = ROOM_SIZE.width
+      l = ROOM_SIZE.length
+      geom = new THREE.PlaneGeometry w, l
+      mat = new THREE.LineBasicMaterial({ 
+        color: "#f00" 
+        depthWrite: false
+        side: THREE.DoubleSide
+      })
+      obj = new THREE.Mesh geom, mat
+      obj.rotateX Math.PI/2
+      obj.position.setY -ROOM_SIZE.height/2
+      obj.receiveShadow = true
+      obj.updateMatrixWorld()
+      line = new THREE.EdgesHelper obj, 0
+      line.material.linewidth = 5
+      line.material.transparent = true
+      line.material.opacity = 0.3
+      line.receiveShadow = true
+      return line
+      
+    # _zone = do ->
+  #     splinepts = [];
+		# 	splinepts.push( new THREE.Vector2 ( 70, 20 ) );
+		# 	splinepts.push( new THREE.Vector2 ( 80, 90 ) );
+		# 	splinepts.push( new THREE.Vector2 ( -30, 70 ) );
+		# 	splinepts.push( new THREE.Vector2 ( 0, 0 ) );
+
+		# 	splineShape = new THREE.Shape();
+		# 	splineShape.moveTo( 0, 0 );
+		# 	splineShape.splineThru( splinepts );
+			
+		# 	points = splineShape.createPointsGeometry()
+      
+    model.scene.add _room
+    
+    emitter.emit 'modelUpdate', (m) -> m
+    
+    
+    
 emitter.emit 'start'
+emitter.emit 'mockup'
