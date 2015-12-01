@@ -346,10 +346,12 @@ addObjectAtPoint = (p) ->
     transparent: true
     opacity: 0.3
     shading: THREE.FlatShading
+    side: THREE.DoubleSide
   )
   
   sphere = new THREE.Mesh geometry, material
   sphere.castShadow = true
+  sphere.receiveShadow = true
   sphere.name = 'parentSphere'
   sphere._volume = 0
 
@@ -448,8 +450,10 @@ emitter 'addCone'
     )
 
     cone = new THREE.Mesh geometry, material
+    cone.castShadow = true
     cone.position.y = -cone.geometry.parameters.height/2
     coneParent.add cone
+    coneParent.castShadow = true
     emitter.emit 'modelUpdate', (m) -> m
     emitter.emit 'coneAdded', coneParent
     
@@ -815,15 +819,15 @@ firstModel = ->
   # m.scene.add directional
   
   spotLight = new THREE.SpotLight 0xffffff, 0.95
-  spotLight.position.setY 80
+  spotLight.position.setY 100
   spotLight.castShadow = true
-  spotLight.shadowMapWidth = 2000
-  spotLight.shadowMapHeight = 2000
+  spotLight.shadowMapWidth = 4000
+  spotLight.shadowMapHeight = 4000
   # spotLight.shadowBias = 0.0001
   spotLight.shadowDarkness = 0.2
   spotLight.exponent = 1
   
-  spotLight.shadowCameraVisible = true
+  # spotLight.shadowCameraVisible = true
   m.scene.add spotLight
   
   m.floor.receiveShadow = true
@@ -857,15 +861,58 @@ apply = (o, fn) -> fn o
 
 degToRad = d3.scale.linear().domain([0,360]).range [0,2*Math.PI]
 
+# emitter 'addTrajectory'
+#   .subscribe (object) ->
+#     console.log object
+
 emitter 'mockup'
   .withLatestFrom emitter('modelState'), (a,b) -> b
   .subscribe (model) ->
     console.info 'Start mockup.'
-    console.log model
+    # console.log model
     p = new THREE.Vector3 -7, -1.5, 3
-    addObjectAtPoint p
+    sphere = addObjectAtPoint p
     
-    # _room = new THREE.
+    emitter.emit 'addCone', sphere
+    # emitter.emit 'addTrajectory', sphere
+    
+    _room = do ->
+      w = ROOM_SIZE.width
+      l = ROOM_SIZE.length
+      geom = new THREE.PlaneGeometry w, l
+      mat = new THREE.LineBasicMaterial({ 
+        color: "#f00" 
+        depthWrite: false
+        side: THREE.DoubleSide
+      })
+      obj = new THREE.Mesh geom, mat
+      obj.rotateX Math.PI/2
+      obj.position.setY -ROOM_SIZE.height/2
+      obj.receiveShadow = true
+      obj.updateMatrixWorld()
+      line = new THREE.EdgesHelper obj, 0
+      line.material.linewidth = 5
+      line.material.transparent = true
+      line.material.opacity = 0.3
+      line.receiveShadow = true
+      return line
+      
+    # _zone = do ->
+  #     splinepts = [];
+		# 	splinepts.push( new THREE.Vector2 ( 70, 20 ) );
+		# 	splinepts.push( new THREE.Vector2 ( 80, 90 ) );
+		# 	splinepts.push( new THREE.Vector2 ( -30, 70 ) );
+		# 	splinepts.push( new THREE.Vector2 ( 0, 0 ) );
+
+		# 	splineShape = new THREE.Shape();
+		# 	splineShape.moveTo( 0, 0 );
+		# 	splineShape.splineThru( splinepts );
+			
+		# 	points = splineShape.createPointsGeometry()
+      
+    model.scene.add _room
+    
+    emitter.emit 'modelUpdate', (m) -> m
     
     
     
