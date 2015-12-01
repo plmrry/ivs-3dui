@@ -444,11 +444,12 @@ emitter 'addCone'
     
     geometry = new THREE.CylinderGeometry() # top, bottom, height
     geometry.parameters =
-      radiusTop: top
+      radiusTop: CONE_TOP
       radiusBottom: bottom
       height: height
+      openEnded: true
       radialSegments: CONE_RADIAL_SEGMENTS
-    geometry.parameters.openEnded = true
+    # geometry.parameters.openEnded = true
     geometry = geometry.clone()
     
     material = new THREE.MeshPhongMaterial(
@@ -460,6 +461,7 @@ emitter 'addCone'
     )
 
     cone = new THREE.Mesh geometry, material
+    cone.name = 'cone'
     cone.castShadow = true
     cone.position.y = -cone.geometry.parameters.height/2
     coneParent.add cone
@@ -469,6 +471,12 @@ emitter 'addCone'
     emitter.emit 'modelUpdate', (m) -> m
     emitter.emit 'coneAdded', coneParent
     emitter.emit 'coneParentUpdate', coneParent
+    
+emitter 'coneParentUpdate'
+  .subscribe (coneParent) ->
+    cone = coneParent.getObjectByName 'cone'
+    p = cone.geometry.parameters
+    # debugger
     
 window.emitter = emitter
 
