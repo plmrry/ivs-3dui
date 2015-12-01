@@ -420,6 +420,11 @@ emitter 'selectCone'
     updateConeControls(dom) [object]
     # emitter.emit 'domUpdated', dom
     
+getConeParentWithParams = (params) ->
+  coneParent = new THREE.Object3D()
+  Object.assign coneParent params
+  return coneParent
+    
 emitter 'addCone'
   .subscribe (obj) ->
     
@@ -429,6 +434,11 @@ emitter 'addCone'
     coneParent._phi = Math.random() * (Math.PI * 2)
     coneParent._volume = DEFAULT_OBJECT_VOLUME
     coneParent._spread = DEFAULT_CONE_SPREAD
+    
+    params =
+      _theta: Math.random() * (Math.PI * 2)
+      _phi: Math.random() * (Math.PI * 2)
+      
     # coneParent.rotateX Math.random() * (Math.PI * 2)
     # coneParent.rotateZ Math.random() * (Math.PI * 2)
     obj.add coneParent
