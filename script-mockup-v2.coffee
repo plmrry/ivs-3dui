@@ -354,6 +354,7 @@ addObjectAtPoint = (p) ->
   sphere.receiveShadow = true
   sphere.name = 'parentSphere'
   sphere._volume = 0
+  sphere.renderOrder = 1
 
   object = sphere
   DEFAULT_OBJECT_HEIGHT = 1
@@ -424,12 +425,12 @@ emitter 'addCone'
     
     i = obj.children.length
     coneParent = new THREE.Object3D()
-    coneParent._theta = 0
-    coneParent._phi = 0
+    coneParent._theta = Math.random() * (Math.PI * 2)
+    coneParent._phi = Math.random() * (Math.PI * 2)
     coneParent._volume = DEFAULT_OBJECT_VOLUME
     coneParent._spread = DEFAULT_CONE_SPREAD
-    coneParent.rotateX Math.random() * (Math.PI * 2)
-    coneParent.rotateZ Math.random() * (Math.PI * 2)
+    # coneParent.rotateX Math.random() * (Math.PI * 2)
+    # coneParent.rotateZ Math.random() * (Math.PI * 2)
     obj.add coneParent
     top = CONE_TOP
 
@@ -439,13 +440,22 @@ emitter 'addCone'
     h = DEFAULT_OBJECT_VOLUME
     height = d3.random.normal(h, 0.2)()
     
-    geometry = new THREE.CylinderGeometry top, bottom, height
+    CONE_RADIAL_SEGMENTS = 50
+    
+    geometry = new THREE.CylinderGeometry() # top, bottom, height
+    geometry.parameters =
+      radiusTop: top
+      radiusBottom: bottom
+      height: height
+      radialSegments: CONE_RADIAL_SEGMENTS
     geometry.parameters.openEnded = true
     geometry = geometry.clone()
     
     material = new THREE.MeshPhongMaterial(
-      color: 0xff0000
-      shading: THREE.FlatShading
+      # color: 0xff0000
+      # shading: THREE.FlatShading
+      transparent: true
+      opacity: 0.2
       side: THREE.DoubleSide
     )
 
@@ -454,8 +464,11 @@ emitter 'addCone'
     cone.position.y = -cone.geometry.parameters.height/2
     coneParent.add cone
     coneParent.castShadow = true
+    coneParent.receiveShadow = true
+    
     emitter.emit 'modelUpdate', (m) -> m
     emitter.emit 'coneAdded', coneParent
+    emitter.emit 'coneParentUpdate', coneParent
     
 window.emitter = emitter
 
@@ -872,6 +885,10 @@ emitter 'mockup'
     # console.log model
     p = new THREE.Vector3 -7, -1.5, 3
     sphere = addObjectAtPoint p
+    
+    # emitter 'coneAdded'
+    #   .subscribe (coneParent) ->
+    #     debugger
     
     emitter.emit 'addCone', sphere
     # emitter.emit 'addTrajectory', sphere
