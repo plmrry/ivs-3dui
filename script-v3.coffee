@@ -882,6 +882,7 @@ firstModel = ->
   
   spotLight.shadowMapWidth = 2000;
   spotLight.shadowMapHeight = 2000;
+
   # # spotLight.shadowCameraNear = 30;
   # spotLight.shadowCameraFar = 200;
   # spotLight.exponent = 2
