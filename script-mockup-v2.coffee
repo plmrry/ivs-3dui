@@ -696,11 +696,12 @@ getModeButtons = (sceneControls) ->
   return sceneControls
     .append('div').classed 'row', true
     .append('div').classed 'col-xs-12', true
+      .style 'margin-top': '-12px'
     .append('div').classed 'btn-group modes pull-right', true
     .call (group) ->
       group.selectAll('button').data butts
         .enter().append('button')
-        .classed 'btn btn-secondary', true
+        .classed 'btn btn-lg btn-primary', true
         .attr 'id', (d) -> d.name
         .html (d) -> d.html ? d.name
 
@@ -942,21 +943,23 @@ emitter 'mockup'
     
     highlightObject coneParent.getObjectByName 'cone'
     
+    wid = dom.sceneControls.node().clientWidth * 0.6
+    
     dom.sceneControls
       .append('div')
       .classed 'card', true
-      .style 'height', '20rem'
+      .style 'height', "#{wid}px"
     
     # dom.subscribe (dom) ->
     dom.sceneControls
-      .append('div').attr({ id: "coneControls" })
+      .append('div')
       .classed 'card', true
       .call (card) ->
         card.append('div').classed('card-block', true)
           .call (block) ->
             block.append('h6')
               .classed('card-title', true)
-              .text('cone1.2')
+              .text('Cone 1.2')
             block.append('table')
               .classed('table table-sm', true)
               .append('tbody')
@@ -974,7 +977,8 @@ emitter 'mockup'
                       .text('Volume')
                     tr.append('td')
                       .classed('value', true)
-                      .append('span').text(coneParent._volume)
+                      .append('span')
+                      .text("#{coneParent._volume} dB")
                     tr.append('td')
                       .classed('param', true)
                       .text('Pitch')
@@ -1001,9 +1005,111 @@ emitter 'mockup'
                       .classed('value', true)
                       .append('span')
                       .text('Delete')
-          # .append('button')
-          # .classed('btn btn-secondary pull-right', true)
-          # .text 'add file'
+                      
+        card.append('div').classed('card-block', true)
+          .call (block) ->
+            block.append('h6').classed('card-title', true)
+              .text('Object 1')
+            block.append('table')
+              .classed('table table-sm', true)
+              .append('tbody')
+              .call (tbody) ->
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td').classed('param', true)
+                      .text('File')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text('object.wav')
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td').classed('param', true)
+                      .text('Volume')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text('95%')
+                    tr.append('td').classed('param', true)
+                      .text('Cones')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text('2')
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('x')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text(sphere.position.x + "m")
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Pitch')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text ((degToRad.invert(sphere.rotation.x)) + "°")
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('y')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text(sphere.position.y + "m")
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Yaw')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text ((degToRad.invert(sphere.rotation.z)) + "°")
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('z')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text(sphere.position.z + "m")
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .classed('value', true)
+                      .attr 'colspan', 2
+                      .append('span')
+                      .text('Delete')
+                    tr.append('td')
+                      .classed('value', true)
+                      .attr 'colspan', 2
+                      .append('span')
+                      .text('Duplicate')
+                   
+        card.append('div').classed('card-block', true)
+          .call (block) ->
+            block.append('h6').classed('card-title', true)
+              .text('Trajectory')
+            block.append('table')
+              .classed('table table-sm', true)
+              .append('tbody')
+              .call (tbody) ->
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Speed')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text('0.5m/s')
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .attr 'colspan', 2
+                      .classed('value', true)
+                      .append('span')
+                      .text('Stop')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span')
+                      .text('Delete')
+
           
     # dom.sceneControls
     #   .append('div').classed('row', true)
@@ -1011,76 +1117,77 @@ emitter 'mockup'
     #   .append('div').classed('col-xs-12', true)
     #   .append('div').classed('card', true)
     #   .call (card) ->
-    #     card.append('div').classed('card-block', true)
-    #       .call (block) ->
-    #         block.append('h6').classed('card-title', true)
-    #           .text('object1')
-    #         block.append('table')
-    #           .classed('table table-sm', true)
-    #           .append('tbody')
-    #           .call (tbody) ->
-    #             tbody.append('tr')
-    #               .call (tr) ->
-    #                 tr.append('td').classed('param', true)
-    #                   .text('File')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span').text('object.wav')
-    #             tbody.append('tr')
-    #               .call (tr) ->
-    #                 tr.append('td').classed('param', true)
-    #                   .text('Volume')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span').text('95%')
-    #             tbody.append('tr')
-    #               .call (tr) ->
-    #                 tr.append('td')
-    #                   .classed('param', true)
-    #                   .text('x')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span').text(sphere.position.x + "m")
-    #                 tr.append('td')
-    #                   .classed('param', true)
-    #                   .text('Pitch')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span').text ((degToRad.invert(sphere.rotation.x)) + "°")
-    #             tbody.append('tr')
-    #               .call (tr) ->
-    #                 tr.append('td')
-    #                   .classed('param', true)
-    #                   .text('y')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span').text(sphere.position.y + "m")
-    #                 tr.append('td')
-    #                   .classed('param', true)
-    #                   .text('Yaw')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span').text ((degToRad.invert(sphere.rotation.z)) + "°")
-    #             tbody.append('tr')
-    #               .call (tr) ->
-    #                 tr.append('td')
-    #                   .classed('param', true)
-    #                   .text('z')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span').text(sphere.position.z + "m")
-    #             tbody.append('tr')
-    #               .call (tr) ->
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .attr 'colspan', 2
-    #                   .append('span')
-    #                   .text('Delete')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .attr 'colspan', 2
-    #                   .append('span')
-    #                   .text('Duplicate')
+        # card.append('div').classed('card-block', true)
+        #   .call (block) ->
+        #     block.append('h6').classed('card-title', true)
+        #       .text('Object 1')
+        #     block.append('table')
+        #       .classed('table table-sm', true)
+        #       .append('tbody')
+        #       .call (tbody) ->
+        #         tbody.append('tr')
+        #           .call (tr) ->
+        #             tr.append('td').classed('param', true)
+        #               .text('File')
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .append('span').text('object.wav')
+        #         tbody.append('tr')
+        #           .call (tr) ->
+        #             tr.append('td').classed('param', true)
+        #               .text('Volume')
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .append('span').text('95%')
+        #         tbody.append('tr')
+        #           .call (tr) ->
+        #             tr.append('td')
+        #               .classed('param', true)
+        #               .text('x')
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .append('span').text(sphere.position.x + "m")
+        #             tr.append('td')
+        #               .classed('param', true)
+        #               .text('Pitch')
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .append('span').text ((degToRad.invert(sphere.rotation.x)) + "°")
+        #         tbody.append('tr')
+        #           .call (tr) ->
+        #             tr.append('td')
+        #               .classed('param', true)
+        #               .text('y')
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .append('span').text(sphere.position.y + "m")
+        #             tr.append('td')
+        #               .classed('param', true)
+        #               .text('Yaw')
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .append('span').text ((degToRad.invert(sphere.rotation.z)) + "°")
+        #         tbody.append('tr')
+        #           .call (tr) ->
+        #             tr.append('td')
+        #               .classed('param', true)
+        #               .text('z')
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .append('span').text(sphere.position.z + "m")
+        #         tbody.append('tr')
+        #           .call (tr) ->
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .attr 'colspan', 2
+        #               .append('span')
+        #               .text('Delete')
+        #             tr.append('td')
+        #               .classed('value', true)
+        #               .attr 'colspan', 2
+        #               .append('span')
+        #               .text('Duplicate')
+                      
     # dom.sceneControls
     #   .append('div').classed('row', true)
     #     .attr id: 'objectControls'
