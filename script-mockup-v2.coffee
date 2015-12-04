@@ -17,11 +17,11 @@ DEFAULT_OBJECT_HEIGHT = 0
 PARENT_SPHERE_COLOR = new THREE.Color 0, 0, 0
 
 ROOM_SIZE =
-  width: 15
-  length: 10
+  width: 25
+  length: 15
   height: 3
 
-DEFAULT_OBJECT_VOLUME = ROOM_SIZE.width * 0.05
+DEFAULT_OBJECT_VOLUME = 1
 DEFAULT_CONE_SPREAD = 0.3
 MAX_CONE_SPREAD = 2
 MAX_CONE_VOLUME = 2
@@ -62,7 +62,7 @@ renderer = dom
       antialias: true
     first.shadowMap.enabled = true
     first.shadowMap.type = THREE.PCFSoftShadowMap
-    # first.setClearColor 'white'
+    # first.setClearColor 0xff0000
     return size.scan (r, s) ->
       r.setSize s.width, s.height
       return r
@@ -347,7 +347,7 @@ addObjectAtPoint = (p) ->
     color: PARENT_SPHERE_COLOR
     transparent: true
     opacity: 0.3
-    shading: THREE.FlatShading
+    # shading: THREE.FlatShading
     side: THREE.DoubleSide
   )
 
@@ -356,7 +356,22 @@ addObjectAtPoint = (p) ->
   sphere.receiveShadow = true
   sphere.name = 'parentSphere'
   sphere._volume = 0
-  sphere.renderOrder = 1
+  sphere.renderOrder = 10
+  
+  lineGeom = new THREE.Geometry()
+  _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
+  lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
+  lineGeom.vertices.push new THREE.Vector3 0, 100, 0
+  lineGeom.computeLineDistances()
+      
+  s = 0.3
+  mat = new THREE.LineDashedMaterial
+    color: 0, linewidth: 1, dashSize: s, gapSize: s,
+    transparent: true, opacity: 0.2
+        
+  line = new THREE.Line(lineGeom, mat)
+  
+  sphere.add line
 
   object = sphere
   DEFAULT_OBJECT_HEIGHT = 1
@@ -445,10 +460,12 @@ getConeParentWithParams = (params) ->
     transparent: true
     opacity: 0.2
     side: THREE.DoubleSide
+    # depthWrite: false
   )
   cone = new THREE.Mesh geometry, material
   cone.name = 'cone'
   cone.castShadow = true
+  cone.renderOrder = 1
   cone.receiveShadow = true
   coneParent.add cone
   return coneParent
@@ -941,6 +958,36 @@ emitter 'mockup'
     # console.log model
     
     do ->
+      p = new THREE.Vector3 -2, 1, 3
+      sphere = addObjectAtPoint p
+      
+    do ->
+      p = new THREE.Vector3 -3, 1, -4
+      sphere = addObjectAtPoint p
+      
+      addConeParentWithParams({
+        _volume: 2
+        _spread: 0.2
+        _theta: degToRad -60
+        _phi: degToRad 10
+      })(sphere)
+      
+      addConeParentWithParams({
+        _volume: 2
+        _spread: 0.3
+        _theta: degToRad -90
+        _phi: degToRad -70
+      })(sphere)
+      
+      addConeParentWithParams({
+        _volume: 2
+        _spread: 0.3
+        _theta: degToRad -120
+        _phi: degToRad -90
+      })(sphere)
+      
+    
+    do ->
       p = new THREE.Vector3 4, 2, -2
       sphere = addObjectAtPoint p
       
@@ -975,20 +1022,20 @@ emitter 'mockup'
         obj.castShadow = true
         return obj
         
-      lineGeom = new THREE.Geometry()
-      _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
-      lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
-      lineGeom.vertices.push new THREE.Vector3 0, 100, 0
-      lineGeom.computeLineDistances()
+      # lineGeom = new THREE.Geometry()
+      # _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
+      # lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
+      # lineGeom.vertices.push new THREE.Vector3 0, 100, 0
+      # lineGeom.computeLineDistances()
       
-      s = 0.3
-      mat = new THREE.LineDashedMaterial
-        color: 0, linewidth: 1, dashSize: s, gapSize: s,
-        transparent: true, opacity: 0.2
+      # s = 0.3
+      # mat = new THREE.LineDashedMaterial
+      #   color: 0, linewidth: 1, dashSize: s, gapSize: s,
+      #   transparent: true, opacity: 0.2
         
-      line = new THREE.Line(lineGeom, mat)
+      # line = new THREE.Line(lineGeom, mat)
   
-      sphere.add line
+      # sphere.add line
   
       sphere.add _trajectory
     
@@ -996,11 +1043,11 @@ emitter 'mockup'
       p = new THREE.Vector3 -7, -0.4, 3
       sphere = addObjectAtPoint p
       
-      lineGeom = new THREE.Geometry()
-      _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
-      lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
-      lineGeom.vertices.push new THREE.Vector3 0, 100, 0
-      lineGeom.computeLineDistances()
+      # lineGeom = new THREE.Geometry()
+      # _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
+      # lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
+      # lineGeom.vertices.push new THREE.Vector3 0, 100, 0
+      # lineGeom.computeLineDistances()
         
       addConeParentWithParams({
         _volume: 2
@@ -1039,33 +1086,159 @@ emitter 'mockup'
         return obj
       sphere.add _trajectory
       
-      lineGeom = new THREE.Geometry()
-      _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
-      lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
-      lineGeom.vertices.push new THREE.Vector3 0, 100, 0
-      lineGeom.computeLineDistances()
+      # lineGeom = new THREE.Geometry()
+      # _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
+      # lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
+      # lineGeom.vertices.push new THREE.Vector3 0, 100, 0
+      # lineGeom.computeLineDistances()
       
-      s = 0.3
-      mat = new THREE.LineDashedMaterial
-        color: 0, linewidth: 1, dashSize: s, gapSize: s,
-        transparent: true, opacity: 0.2
+      # s = 0.3
+      # mat = new THREE.LineDashedMaterial
+      #   color: 0, linewidth: 1, dashSize: s, gapSize: s,
+      #   transparent: true, opacity: 0.2
         
-      line = new THREE.Line(lineGeom, mat)
+      # line = new THREE.Line(lineGeom, mat)
   
-      sphere.add line
+      # sphere.add line
       
       return sphere
     
-    coneParent = _spoof.children[0]
+    coneParent = _spoof.children[1]
     
     highlightObject coneParent.getObjectByName 'cone'
     
     wid = dom.sceneControls.node().clientWidth * 0.6
     
-    dom.sceneControls
+    port = dom.sceneControls
       .append('div')
       .classed 'card', true
       .style 'height', "#{wid}px"
+      
+    _canv = port.append "canvas"
+    _rend = new THREE.WebGLRenderer(
+      canvas: _canv.node()
+      antialias: true
+    )
+    _rend.setClearColor 'white'
+    _scene = new THREE.Scene()
+    _rend.setSize port.node().clientWidth, port.node().clientHeight
+    
+    cloned = _spoof.clone()
+    
+    spotLight = new THREE.SpotLight 0xffffff, 0.95
+    spotLight.position.setY 100
+    spotLight.castShadow = true
+    spotLight.shadowMapWidth = 4000
+    spotLight.shadowMapHeight = 4000
+    # spotLight.shadowBias = 0.0001
+    spotLight.shadowDarkness = 0.2
+    spotLight.exponent = 1
+    
+    hemisphere = new THREE.HemisphereLight( 0, 0xffffff, 0.8 );
+    _scene.add hemisphere
+  
+    # spotLight.shadowCameraVisible = true
+    _scene.add spotLight
+    
+    c = new THREE.OrthographicCamera()
+    c.zoom = INITIAL_ZOOM
+    c._lookAt = new THREE.Vector3()
+    c.position._polar =
+      radius: CAMERA_RADIUS
+      theta: degToRad INITIAL_THETA
+      phi: degToRad INITIAL_PHI
+    c.position._relative = polarToVector c.position._polar
+    c.position.addVectors c.position._relative, c._lookAt
+    c.lookAt cloned.position
+    c.up.copy new THREE.Vector3 0, 1, 0
+    s = { width: port.node().clientWidth, height: port.node().clientHeight }
+    [ c.left, c.right ] = [-1, 1].map (d) -> d * s.width/2
+    [ c.bottom, c.top ] = [-1, 1].map (d) -> d * s.height/2
+    c.updateProjectionMatrix()
+    camera = c
+    
+    _scene.add cloned
+    
+    # _rend.render(_scene, camera)
+
+    # render = -> 
+    #   requestAnimationFrame( render );
+    #   console.log 'render'
+    #   cube.rotation.x += 0.1;
+    #   _rend.render(_scene, camera);
+    # render();
+    i = 0
+    d3.timer ->
+      i++
+      sc = new THREE.Scene()
+      sc.add spotLight
+      cloned = _spoof.clone()
+      cloned.remove( cloned.children[0] )
+      cloned.remove( cloned.children[2] )
+      cloned.rotateY degToRad 45
+      # cloned.children[1].material.color = new THREE.Color 0, 0, 1
+      sc.add cloned
+      # cloned.material.color = new THREE.Color 0, 0, 1
+      # cloned.children[0].children[0].material.color = new THREE.Color 0, 0, 1
+      _rend.render sc, camera
+      if i is 40
+        return true
+      return false
+    
+    
+    
+    canvas = dom.main.append("canvas")
+      .style(
+        position: 'absolute'
+        bottom: '70px', right: 0
+      )
+      .node()
+
+    
+    # d3.timer ->
+    #   cube.rotation.y = model.camera.position._polar.theta
+    #   return false
+      
+    # lines = new THREE.EdgesHelper cube, 0
+    # lines.material.transparent = true
+    # lines.material.opacity = 0.1
+    # lines.material.linewidth = 5
+    
+    
+    
+    ss = 200
+    
+    __camera = new THREE.PerspectiveCamera( 75, ss/ss, 0.1, 1000 );
+    __camera.position.z = 5;
+    
+    __renderer = new THREE.WebGLRenderer(
+      canvas: canvas
+      antialias: true
+      alpha: true
+    );
+    __renderer.setSize( ss, ss );
+    
+    # 
+    __geometry = new THREE.BoxGeometry( 1, 1, 1 );
+    __material = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true } );
+    __cube = new THREE.Mesh( __geometry, __material );
+    # __cube.rotation.y = model.camera.position._polar.theta
+    # __cube.rotation.z = model.camera.position._polar.phi
+    # __cube.updateMatrixWorld()
+    
+    lines = new THREE.EdgesHelper __cube, 0
+    lines.material.transparent = true
+    lines.material.opacity = 0.5
+    lines.material.linewidth = 1
+    
+    lines.rotation.y = -model.camera.position._polar.theta
+    lines.rotation.x = model.camera.position._polar.phi
+    # lines.rotateX 1.1
+    lines.updateMatrix()
+    # lines.updateMatrixWorld()
+
+    __scene = new THREE.Scene()
+    __scene.add( lines );
     
     # dom.subscribe (dom) ->
     dom.sceneControls
@@ -1264,6 +1437,33 @@ emitter 'mockup'
       
       geometry = new THREE.ShapeGeometry shape
       
+      material = new THREE.MeshPhongMaterial(
+        color: 0xff0000
+        # shading: THREE.FlatShading
+        transparent: true
+        opacity: 0.2
+        side: THREE.DoubleSide
+        depthWrite: false
+      )
+      obj = new THREE.Mesh geometry, material
+      obj.rotateX Math.PI/2
+      obj.position.setY -ROOM_SIZE.height/2
+      return obj
+
+    model.scene.add _zone
+    
+    do ->
+      curve = new THREE.ClosedSplineCurve3([
+        new THREE.Vector2 0, 0
+        new THREE.Vector2 0, 2
+        new THREE.Vector2 2, 6
+        new THREE.Vector2 5, 0
+      ]);
+      
+      shape = new THREE.Shape()
+      shape.fromPoints curve.getPoints 50
+      
+      geometry = new THREE.ShapeGeometry shape
       
       material = new THREE.MeshPhongMaterial(
         color: 0xff0000
@@ -1271,17 +1471,70 @@ emitter 'mockup'
         transparent: true
         opacity: 0.2
         side: THREE.DoubleSide
+        depthWrite: false
       )
       obj = new THREE.Mesh geometry, material
       obj.rotateX Math.PI/2
-      # obj.position.setY -ROOM_SIZE.height/2
-      return obj
+      obj.position.setY -ROOM_SIZE.height/2
+      obj.position.setX -4
+      obj.position.setZ -4
+      obj.rotateZ degToRad 45
+      model.scene.add obj
 
-    model.scene.add _zone
+    do ->
+      geometry = new THREE.SphereGeometry 0.5, 30, 30
 
-
+      material = new THREE.MeshPhongMaterial(
+        color: PARENT_SPHERE_COLOR
+        transparent: true
+        opacity: 0.9
+        # wireframe: true
+        # shading: THREE.FlatShading
+        # side: THREE.DoubleSide
+      )
+    
+      sphere = new THREE.Mesh geometry, material
+      sphere.castShadow = true
+      sphere.receiveShadow = true
+      sphere.name = 'parentSphere'
+      sphere._volume = 0
+      sphere.renderOrder = 10
+      
+      _nose = new THREE.TetrahedronGeometry(0.3)
+      nose = new THREE.Mesh _nose, material
+      nose.castShadow = true
+      nose.rotateY degToRad 0
+      nose.rotateZ degToRad -45
+      nose.rotateX degToRad -45
+      nose.rotateX degToRad 90
+      nose.position.setX -0.7
+      
+      # sphere = new THREE.Object3D()
+      sphere.add nose
+      
+      sphere.position.copy new THREE.Vector3 5, 0, 1
+      sphere.rotateY degToRad 90
+      
+      model.scene.add sphere
 
     emitter.emit 'modelUpdate', (m) -> m
+    
+    d3.timer ->
+      # cube.rotation.y += degToRad 1
+      # __cube.rotation.y += 
+      lines = new THREE.EdgesHelper __cube, 0
+      lines.material.transparent = true
+      lines.material.opacity = 0.5
+      lines.material.linewidth = 1
+      y = model.camera.position._polar.theta
+      console.log y
+      lines.rotation.y = y
+      lines.updateMatrix()
+      __scene.add lines
+      console.log __cube.rotation.y
+      # console.log model.camera.position._polar.theta
+		  __renderer.render __scene, __camera
+		  return false
 
 
 
