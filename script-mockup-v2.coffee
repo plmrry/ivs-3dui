@@ -1038,6 +1038,22 @@ emitter 'mockup'
         obj.castShadow = true
         return obj
       sphere.add _trajectory
+      
+      lineGeom = new THREE.Geometry()
+      _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
+      lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
+      lineGeom.vertices.push new THREE.Vector3 0, 100, 0
+      lineGeom.computeLineDistances()
+      
+      s = 0.3
+      mat = new THREE.LineDashedMaterial
+        color: 0, linewidth: 1, dashSize: s, gapSize: s,
+        transparent: true, opacity: 0.2
+        
+      line = new THREE.Line(lineGeom, mat)
+  
+      sphere.add line
+      
       return sphere
     
     coneParent = _spoof.children[0]
@@ -1234,18 +1250,21 @@ emitter 'mockup'
     model.scene.add _room
 
     _zone = do ->
-      splineShape = new THREE.Shape()
-      splineShape.moveTo( -2, -2 );
-      splinepts = [
-        new THREE.Vector2 1, -2
+      curve = new THREE.ClosedSplineCurve3([
+        new THREE.Vector2 5, -2
         new THREE.Vector2 8, 6
         new THREE.Vector2 1, 3
         new THREE.Vector2 -2, 7
         new THREE.Vector2 -5, 0
         new THREE.Vector2 -2, -2
-      ]
-      splineShape.splineThru( splinepts );
-      geometry = new THREE.ShapeGeometry splineShape
+      ]);
+      
+      shape = new THREE.Shape()
+      shape.fromPoints curve.getPoints 50
+      
+      geometry = new THREE.ShapeGeometry shape
+      
+      
       material = new THREE.MeshPhongMaterial(
         color: 0xff0000
         # shading: THREE.FlatShading
@@ -1255,7 +1274,7 @@ emitter 'mockup'
       )
       obj = new THREE.Mesh geometry, material
       obj.rotateX Math.PI/2
-      obj.position.setY -ROOM_SIZE.height/2
+      # obj.position.setY -ROOM_SIZE.height/2
       return obj
 
     model.scene.add _zone
