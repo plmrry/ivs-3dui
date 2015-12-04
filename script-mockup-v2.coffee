@@ -695,7 +695,7 @@ addSceneControls = (selection) ->
     .append('div').classed 'btn-group file', true
     .call (group) ->
       btns = [
-        '<i class="material-icons" style="display: block">volume_off</i>'
+        '<i class="material-icons" style="display: block">volume_up</i>'
         '<i class="material-icons" style="display: block">save</i>'
         '<i class="material-icons" style="display: block">open_in_browser</i>'
       ]
@@ -952,25 +952,95 @@ emitter 'mockup'
             _theta: degToRad t
             _phi: degToRad p
           )(sphere)
-    
-    p = new THREE.Vector3 -7, -0.4, 3
-    sphere = addObjectAtPoint p
+          
+      _trajectory = do ->
+        sampleClosedSpline = new THREE.ClosedSplineCurve3([
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(2, 1, -2),
+          new THREE.Vector3(2, -1, -2),
+          new THREE.Vector3(3, 2, 1),
+          new THREE.Vector3(3, -1, 2)
+        ]);
+        geometry = new THREE.TubeGeometry(
+          sampleClosedSpline, 100, 0.05, 8, true
+        );
+        mat = new THREE.MeshPhongMaterial(
+          color: 0x000000
+          # shading: THREE.FlatShading
+          transparent: true
+          opacity: 0.5
+          # side: THREE.DoubleSide
+        )
+        obj = new THREE.Mesh geometry, mat
+        obj.castShadow = true
+        return obj
+        
+      lineGeom = new THREE.Geometry()
+      _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
+      lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
+      lineGeom.vertices.push new THREE.Vector3 0, 100, 0
+      lineGeom.computeLineDistances()
       
-    addConeParentWithParams({
-      _volume: 2
-      _spread: 0.5
-      _theta: 0
-      _phi: Math.PI/2
-    })(sphere)
+      s = 0.3
+      mat = new THREE.LineDashedMaterial
+        color: 0, linewidth: 1, dashSize: s, gapSize: s,
+        transparent: true, opacity: 0.2
+        
+      line = new THREE.Line(lineGeom, mat)
+  
+      sphere.add line
+  
+      sphere.add _trajectory
     
-    addConeParentWithParams({
-      _volume: 1.2
-      _spread: 0.7
-      _theta: Math.PI * 0.3
-      _phi: - Math.PI * 0.1
-    })(sphere)
+    _spoof = do ->
+      p = new THREE.Vector3 -7, -0.4, 3
+      sphere = addObjectAtPoint p
+      
+      lineGeom = new THREE.Geometry()
+      _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
+      lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
+      lineGeom.vertices.push new THREE.Vector3 0, 100, 0
+      lineGeom.computeLineDistances()
+        
+      addConeParentWithParams({
+        _volume: 2
+        _spread: 0.5
+        _theta: 0
+        _phi: Math.PI/2
+      })(sphere)
+      
+      addConeParentWithParams({
+        _volume: 1.2
+        _spread: 0.7
+        _theta: Math.PI * 0.3
+        _phi: - Math.PI * 0.1
+      })(sphere)
+      
+      _trajectory = do ->
+        sampleClosedSpline = new THREE.ClosedSplineCurve3([
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(4, -1, -4),
+          new THREE.Vector3(9, 1, -4),
+          new THREE.Vector3(4, 2, 4),
+          new THREE.Vector3(-4, -1, 4)
+        ]);
+        geometry = new THREE.TubeGeometry(
+          sampleClosedSpline, 100, 0.05, 8, true
+        );
+        mat = new THREE.MeshPhongMaterial(
+          color: 0x000000
+          # shading: THREE.FlatShading
+          transparent: true
+          opacity: 0.5
+          # side: THREE.DoubleSide
+        )
+        obj = new THREE.Mesh geometry, mat
+        obj.castShadow = true
+        return obj
+      sphere.add _trajectory
+      return sphere
     
-    coneParent = sphere.children[0]
+    coneParent = _spoof.children[0]
     
     highlightObject coneParent.getObjectByName 'cone'
     
@@ -1065,7 +1135,7 @@ emitter 'mockup'
                       .text('x')
                     tr.append('td')
                       .classed('value', true)
-                      .append('span').text(sphere.position.x + "m")
+                      .append('span').text(_spoof.position.x + "m")
                     tr.append('td').classed('param', true)
                       .text('Cones')
                     tr.append('td')
@@ -1078,13 +1148,13 @@ emitter 'mockup'
                       .text('y')
                     tr.append('td')
                       .classed('value', true)
-                      .append('span').text(sphere.position.y + "m")
+                      .append('span').text(_spoof.position.y + "m")
                     tr.append('td')
                       .classed('param', true)
                       .text('Pitch')
                     tr.append('td')
                       .classed('value', true)
-                      .append('span').text ((degToRad.invert(sphere.rotation.x)) + "°")
+                      .append('span').text ((degToRad.invert(_spoof.rotation.x)) + "°")
                 tbody.append('tr')
                   .call (tr) ->
                     tr.append('td')
@@ -1092,13 +1162,13 @@ emitter 'mockup'
                       .text('z')
                     tr.append('td')
                       .classed('value', true)
-                      .append('span').text(sphere.position.z + "m")
+                      .append('span').text(_spoof.position.z + "m")
                     tr.append('td')
                       .classed('param', true)
                       .text('Yaw')
                     tr.append('td')
                       .classed('value', true)
-                      .append('span').text ((degToRad.invert(sphere.rotation.z)) + "°")
+                      .append('span').text ((degToRad.invert(_spoof.rotation.z)) + "°")
                 tbody.append('tr')
                   .call (tr) ->
                     tr.append('td')
@@ -1190,29 +1260,7 @@ emitter 'mockup'
 
     model.scene.add _zone
 
-    _trajectory = do ->
-      sampleClosedSpline = new THREE.ClosedSplineCurve3([
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(4, -1, -4),
-        new THREE.Vector3(9, 1, -4),
-        new THREE.Vector3(4, 2, 4),
-        new THREE.Vector3(-4, -1, 4)
-      ]);
-      geometry = new THREE.TubeGeometry(
-        sampleClosedSpline, 100, 0.05, 8, true
-      );
-      mat = new THREE.MeshPhongMaterial(
-        color: 0x000000
-        # shading: THREE.FlatShading
-        transparent: true
-        opacity: 0.5
-        # side: THREE.DoubleSide
-      )
-      obj = new THREE.Mesh geometry, mat
-      obj.castShadow = true
-      return obj
 
-    sphere.add _trajectory
 
     emitter.emit 'modelUpdate', (m) -> m
 
