@@ -1220,7 +1220,7 @@ emitter 'mockup'
     
     # 
     __geometry = new THREE.BoxGeometry( 1, 1, 1 );
-    __material = new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true } );
+    __material = new THREE.MeshBasicMaterial( { color: 0, wireframe: true } );
     __cube = new THREE.Mesh( __geometry, __material );
     # __cube.rotation.y = model.camera.position._polar.theta
     # __cube.rotation.z = model.camera.position._polar.phi
@@ -1237,8 +1237,8 @@ emitter 'mockup'
     lines.updateMatrix()
     # lines.updateMatrixWorld()
 
-    __scene = new THREE.Scene()
-    __scene.add( lines );
+    # __scene = new THREE.Scene()
+    # __scene.add( lines );
     
     # dom.subscribe (dom) ->
     dom.sceneControls
@@ -1519,22 +1519,47 @@ emitter 'mockup'
 
     emitter.emit 'modelUpdate', (m) -> m
     
-    d3.timer ->
-      # cube.rotation.y += degToRad 1
-      # __cube.rotation.y += 
-      lines = new THREE.EdgesHelper __cube, 0
-      lines.material.transparent = true
-      lines.material.opacity = 0.5
-      lines.material.linewidth = 1
-      y = model.camera.position._polar.theta
-      console.log y
-      lines.rotation.y = y
-      lines.updateMatrix()
+    __cube.updateMatrix()
+    lines = new THREE.EdgesHelper __cube, 0
+    lines.updateMatrix()
+    # __cube.add lines
+    foo = () ->
+      requestAnimationFrame foo
+      __scene = new THREE.Scene()
+      # __cube.rotation.y = -model.camera.position._polar.theta
+      # __cube.rotation.z = model.camera.position._polar.phi
+      # __cube.updateMatrix()
+      lines.rotation.y = -model.camera.position._polar.theta
+      lines.rotation.z = model.camera.position._polar.phi
+      lines.updateMatrix() 
+      # lines.updateMatrix()
+      
+      # lines.updateMatrix()
       __scene.add lines
-      console.log __cube.rotation.y
-      # console.log model.camera.position._polar.theta
-		  __renderer.render __scene, __camera
-		  return false
+      __renderer.render __scene, __camera
+    foo()
+    
+    # render = ->
+    #   requestAnimationFrame render
+    #   # cube.rotation.y += degToRad 1
+    #   # __cube.rotation.y += 
+    #   __scene = new THREE.Scene()
+    #   __cube.rotation.y = model.camera.position._polar.theta
+    #   lines = new THREE.EdgesHelper __cube, 0
+    #   lines.material.transparent = true
+    #   lines.material.opacity = 0.5
+    #   lines.material.linewidth = 1
+    #   y = model.camera.position._polar.theta
+    #   console.log y
+    #   lines.rotation.y = y
+    #   lines.updateMatrix()
+    #   __scene.add __cube
+    #   console.log __cube.rotation.y
+    #   # console.log model.camera.position._polar.theta
+		  # __renderer.render __scene, __camera
+		  # return false
+		  
+		
 
 
 
