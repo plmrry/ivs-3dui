@@ -361,7 +361,8 @@ addObjectAtPoint = (p) ->
   object = sphere
   DEFAULT_OBJECT_HEIGHT = 1
   y = DEFAULT_OBJECT_HEIGHT
-  object.position.set p.x, y, p.z
+  # object.position.set p.x, p.y, p.z
+  object.position.copy p
   update = (model) ->
     i = model.room.children.length
     object.name = "object#{i}"
@@ -681,6 +682,28 @@ getClientSize = (element) ->
   height: element.clientHeight
 
 addSceneControls = (selection) ->
+  selection.append 'div'
+    .classed 'container', true
+    .attr id: 'fileControls'
+    .style
+      position: 'absolute'
+      left: 0
+      top: '1%'
+    .append('div').classed 'row', true
+    .append('div').classed 'col-xs-12', true
+      .style 'margin-top': '-12px'
+    .append('div').classed 'btn-group file', true
+    .call (group) ->
+      btns = [
+        '<i class="material-icons" style="display: block">volume_off</i>'
+        '<i class="material-icons" style="display: block">save</i>'
+        '<i class="material-icons" style="display: block">open_in_browser</i>'
+      ]
+      group.selectAll('button').data btns
+        .enter().append 'button'
+        .classed 'btn btn-lg btn-secondary', true
+        .html (d) -> d
+      
   selection.append('div')
     .classed 'container', true
     .attr id: 'sceneControls'
@@ -916,14 +939,22 @@ emitter 'mockup'
     [model, dom] = arr
     console.info 'Start mockup.'
     # console.log model
-    p = new THREE.Vector3 -7, -1.5, 3
-    sphere = addObjectAtPoint p
     
-    coneParams1 =
-      _volume: 2
-      _spread: 0.5
-      _theta: 0
-      _phi: Math.PI/2
+    do ->
+      p = new THREE.Vector3 4, 2, -2
+      sphere = addObjectAtPoint p
+      
+      [0,90,180,270].map (t) ->
+        [0,90,180,270].map (p) ->
+          addConeParentWithParams(
+            _volume: 1.5
+            _spread: 0.5
+            _theta: degToRad t
+            _phi: degToRad p
+          )(sphere)
+    
+    p = new THREE.Vector3 -7, -0.4, 3
+    sphere = addObjectAtPoint p
       
     addConeParentWithParams({
       _volume: 2
@@ -966,12 +997,12 @@ emitter 'mockup'
               .call (tbody) ->
                 tbody.append('tr')
                   .call (tr) ->
-                    tr.append('td').classed('param', true).text('File')
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('File')
                     tr.append('td')
                       .classed('value', true)
                       .append('span').text('cone.wav')
-                tbody.append('tr')
-                  .call (tr) ->
                     tr.append('td')
                       .classed('param', true)
                       .text('Volume')
@@ -979,12 +1010,6 @@ emitter 'mockup'
                       .classed('value', true)
                       .append('span')
                       .text("#{coneParent._volume} dB")
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Pitch')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text (degToRad.invert coneParent._phi) + "°"
                 tbody.append('tr')
                   .call (tr) ->
                     tr.append('td')
@@ -995,16 +1020,23 @@ emitter 'mockup'
                       .append('span').text(coneParent._spread)
                     tr.append('td')
                       .classed('param', true)
+                      .text('Pitch')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text (degToRad.invert coneParent._phi) + "°"
+                tbody.append('tr')
+                  .call (tr) ->
+                    tr.append('td')
+                      .attr 'colspan', 2
+                      .classed('value', true)
+                      .append('span')
+                      .text('Delete')
+                    tr.append('td')
+                      .classed('param', true)
                       .text('Yaw')
                     tr.append('td')
                       .classed('value', true)
                       .append('span').text (degToRad.invert coneParent._theta) + "°"
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span')
-                      .text('Delete')
                       
         card.append('div').classed('card-block', true)
           .call (block) ->
@@ -1021,18 +1053,11 @@ emitter 'mockup'
                     tr.append('td')
                       .classed('value', true)
                       .append('span').text('object.wav')
-                tbody.append('tr')
-                  .call (tr) ->
                     tr.append('td').classed('param', true)
                       .text('Volume')
                     tr.append('td')
                       .classed('value', true)
                       .append('span').text('95%')
-                    tr.append('td').classed('param', true)
-                      .text('Cones')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text('2')
                 tbody.append('tr')
                   .call (tr) ->
                     tr.append('td')
@@ -1041,12 +1066,11 @@ emitter 'mockup'
                     tr.append('td')
                       .classed('value', true)
                       .append('span').text(sphere.position.x + "m")
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Pitch')
+                    tr.append('td').classed('param', true)
+                      .text('Cones')
                     tr.append('td')
                       .classed('value', true)
-                      .append('span').text ((degToRad.invert(sphere.rotation.x)) + "°")
+                      .append('span').text('2')
                 tbody.append('tr')
                   .call (tr) ->
                     tr.append('td')
@@ -1057,10 +1081,10 @@ emitter 'mockup'
                       .append('span').text(sphere.position.y + "m")
                     tr.append('td')
                       .classed('param', true)
-                      .text('Yaw')
+                      .text('Pitch')
                     tr.append('td')
                       .classed('value', true)
-                      .append('span').text ((degToRad.invert(sphere.rotation.z)) + "°")
+                      .append('span').text ((degToRad.invert(sphere.rotation.x)) + "°")
                 tbody.append('tr')
                   .call (tr) ->
                     tr.append('td')
@@ -1069,6 +1093,12 @@ emitter 'mockup'
                     tr.append('td')
                       .classed('value', true)
                       .append('span').text(sphere.position.z + "m")
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Yaw')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text ((degToRad.invert(sphere.rotation.z)) + "°")
                 tbody.append('tr')
                   .call (tr) ->
                     tr.append('td')
@@ -1093,15 +1123,6 @@ emitter 'mockup'
                 tbody.append('tr')
                   .call (tr) ->
                     tr.append('td')
-                      .classed('param', true)
-                      .text('Speed')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text('0.5m/s')
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .attr 'colspan', 2
                       .classed('value', true)
                       .append('span')
                       .text('Stop')
@@ -1109,153 +1130,50 @@ emitter 'mockup'
                       .classed('value', true)
                       .append('span')
                       .text('Delete')
-
-          
-    # dom.sceneControls
-    #   .append('div').classed('row', true)
-    #     .attr id: 'objectControls'
-    #   .append('div').classed('col-xs-12', true)
-    #   .append('div').classed('card', true)
-    #   .call (card) ->
-        # card.append('div').classed('card-block', true)
-        #   .call (block) ->
-        #     block.append('h6').classed('card-title', true)
-        #       .text('Object 1')
-        #     block.append('table')
-        #       .classed('table table-sm', true)
-        #       .append('tbody')
-        #       .call (tbody) ->
-        #         tbody.append('tr')
-        #           .call (tr) ->
-        #             tr.append('td').classed('param', true)
-        #               .text('File')
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .append('span').text('object.wav')
-        #         tbody.append('tr')
-        #           .call (tr) ->
-        #             tr.append('td').classed('param', true)
-        #               .text('Volume')
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .append('span').text('95%')
-        #         tbody.append('tr')
-        #           .call (tr) ->
-        #             tr.append('td')
-        #               .classed('param', true)
-        #               .text('x')
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .append('span').text(sphere.position.x + "m")
-        #             tr.append('td')
-        #               .classed('param', true)
-        #               .text('Pitch')
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .append('span').text ((degToRad.invert(sphere.rotation.x)) + "°")
-        #         tbody.append('tr')
-        #           .call (tr) ->
-        #             tr.append('td')
-        #               .classed('param', true)
-        #               .text('y')
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .append('span').text(sphere.position.y + "m")
-        #             tr.append('td')
-        #               .classed('param', true)
-        #               .text('Yaw')
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .append('span').text ((degToRad.invert(sphere.rotation.z)) + "°")
-        #         tbody.append('tr')
-        #           .call (tr) ->
-        #             tr.append('td')
-        #               .classed('param', true)
-        #               .text('z')
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .append('span').text(sphere.position.z + "m")
-        #         tbody.append('tr')
-        #           .call (tr) ->
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .attr 'colspan', 2
-        #               .append('span')
-        #               .text('Delete')
-        #             tr.append('td')
-        #               .classed('value', true)
-        #               .attr 'colspan', 2
-        #               .append('span')
-        #               .text('Duplicate')
-                      
-    # dom.sceneControls
-    #   .append('div').classed('row', true)
-    #     .attr id: 'objectControls'
-    #   .append('div').classed('col-xs-12', true)
-    #   .append('div').classed('card', true)
-    #   .call (card) ->
-    #     card.append('div').classed('card-block', true)
-    #       .call (block) ->
-    #         block.append('h6').classed('card-title', true)
-    #           .text('trajectory')
-    #         block.append('table')
-    #           .classed('table table-sm', true)
-    #           .append('tbody')
-    #           .call (tbody) ->
-    #             tbody.append('tr')
-    #               .call (tr) ->
-    #                 tr.append('td')
-    #                   .classed('param', true)
-    #                   .text('Speed')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span').text('0.5m/s')
-    #             tbody.append('tr')
-    #               .call (tr) ->
-    #                 tr.append('td')
-    #                   .attr 'colspan', 2
-    #                   .classed('value', true)
-    #                   .append('span')
-    #                   .text('Stop')
-    #                 tr.append('td')
-    #                   .classed('value', true)
-    #                   .append('span')
-    #                   .text('Delete')
+                    tr.append('td')
+                      .classed('param', true)
+                      .text('Speed')
+                    tr.append('td')
+                      .classed('value', true)
+                      .append('span').text('0.5m/s')
 
     _room = do ->
       w = ROOM_SIZE.width
       l = ROOM_SIZE.length
       geom = new THREE.PlaneGeometry w, l
       mat = new THREE.LineBasicMaterial({
-        color: "#f00"
+        color: "#000"
         depthWrite: false
         side: THREE.DoubleSide
+        transparent: true
+        opacity: 0.05
       })
       obj = new THREE.Mesh geom, mat
       obj.rotateX Math.PI/2
       obj.position.setY -ROOM_SIZE.height/2
       obj.receiveShadow = true
       obj.updateMatrixWorld()
-      line = new THREE.EdgesHelper obj, 0
-      line.material.linewidth = 5
-      line.material.transparent = true
-      line.material.opacity = 0.3
-      line.receiveShadow = true
-      return line
+      return obj
+      # line = new THREE.EdgesHelper obj, 0
+      # line.material.linewidth = 5
+      # line.material.transparent = true
+      # line.material.opacity = 0.3
+      # line.receiveShadow = true
+      # return line
 
     model.scene.add _room
 
     _zone = do ->
+      splineShape = new THREE.Shape()
+      splineShape.moveTo( -2, -2 );
       splinepts = [
         new THREE.Vector2 1, -2
-        new THREE.Vector2 7, 2
-        new THREE.Vector2 3, 9
-        new THREE.Vector2 -3, 7
-        new THREE.Vector2 -2, 4
-        # new THREE.Vector2 0, 0
+        new THREE.Vector2 8, 6
+        new THREE.Vector2 1, 3
+        new THREE.Vector2 -2, 7
+        new THREE.Vector2 -5, 0
+        new THREE.Vector2 -2, -2
       ]
-      splineShape = new THREE.Shape()
-      splineShape.moveTo( 0, 0 );
       splineShape.splineThru( splinepts );
       geometry = new THREE.ShapeGeometry splineShape
       material = new THREE.MeshPhongMaterial(
@@ -1275,10 +1193,10 @@ emitter 'mockup'
     _trajectory = do ->
       sampleClosedSpline = new THREE.ClosedSplineCurve3([
         new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(4, 0, -4),
-        new THREE.Vector3(9, 0, -4),
-        new THREE.Vector3(4, 0, 4),
-        new THREE.Vector3(-4, 0, 4)
+        new THREE.Vector3(4, -1, -4),
+        new THREE.Vector3(9, 1, -4),
+        new THREE.Vector3(4, 2, 4),
+        new THREE.Vector3(-4, -1, 4)
       ]);
       geometry = new THREE.TubeGeometry(
         sampleClosedSpline, 100, 0.05, 8, true
