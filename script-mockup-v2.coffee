@@ -17,8 +17,8 @@ DEFAULT_OBJECT_HEIGHT = 0
 PARENT_SPHERE_COLOR = new THREE.Color 0, 0, 0
 
 ROOM_SIZE =
-  width: 25
-  length: 15
+  width: 20
+  length: 18
   height: 3
 
 DEFAULT_OBJECT_VOLUME = 1
@@ -255,6 +255,7 @@ canvasDragStart
     obj = int.room[0].object
     return (model) ->
       obj.position.add delta
+      console.log obj.position
       return model
   .subscribe (update) ->
     emitter.emit 'modelUpdate', update
@@ -263,7 +264,8 @@ canvasDragStart
 # ------------------------------------ Camera Position
 dom
   .flatMap (dom) ->
-    cameraMove = dom.cameraControls.select '#camera'
+    # cameraMove = dom.cameraControls.select '#camera'
+    cameraMove = dom.miniCube
     fromD3drag cameraMove
   .filter (e) -> e.type is 'drag'
   .map (e) ->
@@ -288,7 +290,7 @@ dom
 dom
   .flatMap (dom) ->
     a = ZOOM_AMOUNT
-    zooms = [['In',a],['Out',1/a]].map (arr) ->
+    zooms = [['Out',1/a],['In',a]].map (arr) ->
       node = dom.cameraControls.select("#zoom#{arr[0]}").node()
       stream.fromEvent node, 'click'
         .map -> arr[1]
@@ -338,7 +340,7 @@ emitter 'addObject'
     p = intersects[0]?.point
     addObjectAtPoint p
 
-addObjectAtPoint = (p) ->
+addObjectAtPoint = (p, volume) ->
   console.info "Add object at", p
 
   geometry = new THREE.SphereGeometry 0.1, 30, 30
@@ -355,11 +357,11 @@ addObjectAtPoint = (p) ->
   sphere.castShadow = true
   sphere.receiveShadow = true
   sphere.name = 'parentSphere'
-  sphere._volume = 0
+  sphere._volume = volume or 1
   sphere.renderOrder = 10
   
   lineGeom = new THREE.Geometry()
-  _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
+  _lineBottom = -p.y + (-ROOM_SIZE.height/2)
   lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
   lineGeom.vertices.push new THREE.Vector3 0, 100, 0
   lineGeom.computeLineDistances()
@@ -398,7 +400,9 @@ emitter 'objectAdded'
 # ------------------------------------------------------- Emitters
 # ------------------------------------ Object Selected
 highlightObject = (o) ->
-  color = new THREE.Color 0, 0, 1
+  # color = new THREE.Color 0, 0, 1
+  color = new THREE.Color "#99ebff"
+  color = new THREE.Color "#66c2ff"
   tweenColor(color) o
     .subscribe (up) -> emitter.emit 'modelUpdate', (m) -> m
   
@@ -458,7 +462,7 @@ getConeParentWithParams = (params) ->
   geometry = geometry.clone()
   material = new THREE.MeshPhongMaterial(
     transparent: true
-    opacity: 0.2
+    opacity: 0.5
     side: THREE.DoubleSide
     # depthWrite: false
   )
@@ -644,7 +648,9 @@ emitter 'tweenInSphere'
     geomType = currentGeom.type
     params = currentGeom.parameters
     start = params.radius
-    end = DEFAULT_OBJECT_VOLUME
+    # end = DEFAULT_OBJECT_VOLUME
+    console.log sphere._volume
+    end = sphere._volume
     i =
       radius: d3.interpolate start, end
     tweenStream 500, 'sphere'
@@ -757,9 +763,9 @@ addCameraControls = (main) ->
     .append('div').classed 'col-xs-12', true
     .append('div').classed "cameraControls", true
   buttons = [
-    { name: "camera", html: materialIcon '3d_rotation' }
-    { name: "zoomIn", html: materialIcon 'zoom_in' }
+    # { name: "camera", html: materialIcon '3d_rotation' }
     { name: "zoomOut", html: materialIcon 'zoom_out' }
+    { name: "zoomIn", html: materialIcon 'zoom_in' }
   ]
   butts = cameraControls.selectAll("button").data(buttons)
   butts.enter().append("button")
@@ -821,11 +827,15 @@ getFloor = ->
   #   depthWrite: false
   #   # wireframe: true
 
+  c = 0.46
   floorMat = new THREE.MeshPhongMaterial(
-    # color: (new THREE.Color(0.1,0.2,0.1))
+    color: (new THREE.Color c,c,c)
     side: THREE.DoubleSide
     depthWrite: false
   )
+  e = 0.5
+  floorMat.emissive = new THREE.Color e,e,e
+  # floorMat.emissive = new THREE.Color 0, 0, 0
   floor = new THREE.Mesh floorGeom, floorMat
   floor.name = 'floor'
   floor.rotateX Math.PI/2
@@ -901,6 +911,9 @@ firstModel = ->
   # # directional.shadowCameraVisible = true
 
   # m.scene.add directional
+  
+  # ambient = new THREE.AmbientLight "#777"
+  # m.scene.add ambient
 
   spotLight = new THREE.SpotLight 0xffffff, 0.95
   spotLight.position.setY 100
@@ -909,6 +922,7 @@ firstModel = ->
   spotLight.shadowMapHeight = 4000
   # spotLight.shadowBias = 0.0001
   spotLight.shadowDarkness = 0.2
+  spotLight.intensity = 1
   spotLight.exponent = 1
 
   # spotLight.shadowCameraVisible = true
@@ -924,6 +938,12 @@ firstModel = ->
 firstDom = ->
   dom = {}
   dom.main = main = addMain d3.select 'body'
+  dom.miniCube = dom.main.append("canvas")
+    .attr 'id', 'miniCube'
+    .style(
+      position: 'absolute'
+      bottom: '31px', right: '21px'
+    )
   dom.canvas = main.append('canvas').node()
   dom.sceneControls = addSceneControls main
   dom.modeButtons = getModeButtons dom.sceneControls
@@ -957,13 +977,27 @@ emitter 'mockup'
     console.info 'Start mockup.'
     # console.log model
     
+    dom.main.append 'div'
+      .style(
+        position: 'absolute'
+        'font-size': '0.6rem'
+        right: '128px'
+        bottom: '65px'
+      )
+      .append 'span'
+      .style(
+        'border-bottom': '1px dotted #333'
+        'font-size': '0.8rem'
+      )
+      .text 'Altitude Mode'
+    
     do ->
-      p = new THREE.Vector3 -2, 1, 3
-      sphere = addObjectAtPoint p
+      p = new THREE.Vector3 4, 2, 16
+      sphere = addObjectAtPoint p, 0.6
       
     do ->
-      p = new THREE.Vector3 -3, 1, -4
-      sphere = addObjectAtPoint p
+      p = new THREE.Vector3 -3, 2.5, -4
+      sphere = addObjectAtPoint p, 1.2
       
       addConeParentWithParams({
         _volume: 2
@@ -980,6 +1014,13 @@ emitter 'mockup'
       })(sphere)
       
       addConeParentWithParams({
+        _volume: 3
+        _spread: 1.2
+        _theta: degToRad 40
+        _phi: degToRad 0
+      })(sphere)
+      
+      addConeParentWithParams({
         _volume: 2
         _spread: 0.3
         _theta: degToRad -120
@@ -988,7 +1029,7 @@ emitter 'mockup'
       
     
     do ->
-      p = new THREE.Vector3 4, 2, -2
+      p = new THREE.Vector3 4, 4, -2
       sphere = addObjectAtPoint p
       
       [0,90,180,270].map (t) ->
@@ -1005,8 +1046,8 @@ emitter 'mockup'
           new THREE.Vector3(0, 0, 0),
           new THREE.Vector3(2, 1, -2),
           new THREE.Vector3(2, -1, -2),
-          new THREE.Vector3(3, 2, 1),
-          new THREE.Vector3(3, -1, 2)
+          new THREE.Vector3(3, 2, 3),
+          new THREE.Vector3(3, -1, 6)
         ]);
         geometry = new THREE.TubeGeometry(
           sampleClosedSpline, 100, 0.05, 8, true
@@ -1021,27 +1062,13 @@ emitter 'mockup'
         obj = new THREE.Mesh geometry, mat
         obj.castShadow = true
         return obj
-        
-      # lineGeom = new THREE.Geometry()
-      # _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
-      # lineGeom.vertices.push new THREE.Vector3 0, _lineBottom, 0
-      # lineGeom.vertices.push new THREE.Vector3 0, 100, 0
-      # lineGeom.computeLineDistances()
-      
-      # s = 0.3
-      # mat = new THREE.LineDashedMaterial
-      #   color: 0, linewidth: 1, dashSize: s, gapSize: s,
-      #   transparent: true, opacity: 0.2
-        
-      # line = new THREE.Line(lineGeom, mat)
-  
-      # sphere.add line
   
       sphere.add _trajectory
+      sphere.position.copy new THREE.Vector3 2, 4, -10
     
     _spoof = do ->
-      p = new THREE.Vector3 -7, -0.4, 3
-      sphere = addObjectAtPoint p
+      p = new THREE.Vector3 -7, -0.5, 3
+      sphere = addObjectAtPoint p, 0.7
       
       # lineGeom = new THREE.Geometry()
       # _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
@@ -1083,8 +1110,23 @@ emitter 'mockup'
         )
         obj = new THREE.Mesh geometry, mat
         obj.castShadow = true
-        return obj
-      sphere.add _trajectory
+        sampleClosedSpline.points.forEach (p) ->
+          geometry = new THREE.SphereGeometry 0.2, 30, 30
+          material = new THREE.MeshPhongMaterial(
+            color: PARENT_SPHERE_COLOR
+            transparent: true
+            opacity: 0.5
+          )
+          controlPoint = new THREE.Mesh geometry, material
+          controlPoint.castShadow = true
+          controlPoint.receiveShadow = true
+          controlPoint.name = 'parentSphere'
+          controlPoint._volume = 0
+          controlPoint.renderOrder = 10
+          controlPoint.position.copy p
+          obj.add controlPoint
+          
+        sphere.add obj
       
       # lineGeom = new THREE.Geometry()
       # _lineBottom = -sphere.position.y + (-ROOM_SIZE.height/2)
@@ -1131,8 +1173,10 @@ emitter 'mockup'
     spotLight.shadowMapWidth = 4000
     spotLight.shadowMapHeight = 4000
     # spotLight.shadowBias = 0.0001
-    spotLight.shadowDarkness = 0.2
-    spotLight.exponent = 1
+    spotLight.shadowDarkness = 0.001
+    # spotLight.exponent = 1
+    
+    # debugger
     
     hemisphere = new THREE.HemisphereLight( 0, 0xffffff, 0.8 );
     _scene.add hemisphere
@@ -1141,7 +1185,7 @@ emitter 'mockup'
     _scene.add spotLight
     
     c = new THREE.OrthographicCamera()
-    c.zoom = INITIAL_ZOOM
+    c.zoom = INITIAL_ZOOM * 1.5
     c._lookAt = new THREE.Vector3()
     c.position._polar =
       radius: CAMERA_RADIUS
@@ -1184,217 +1228,246 @@ emitter 'mockup'
       if i is 40
         return true
       return false
-    
-    
-    
-    canvas = dom.main.append("canvas")
-      .style(
-        position: 'absolute'
-        bottom: '70px', right: 0
-      )
-      .node()
-
-    
-    # d3.timer ->
-    #   cube.rotation.y = model.camera.position._polar.theta
-    #   return false
       
-    # lines = new THREE.EdgesHelper cube, 0
-    # lines.material.transparent = true
-    # lines.material.opacity = 0.1
-    # lines.material.linewidth = 5
-    
-    
-    
-    ss = 200
-    
-    __camera = new THREE.PerspectiveCamera( 75, ss/ss, 0.1, 1000 );
-    __camera.position.z = 5;
-    
-    __renderer = new THREE.WebGLRenderer(
-      canvas: canvas
-      antialias: true
-      alpha: true
-    );
-    __renderer.setSize( ss, ss );
-    
-    # 
-    __geometry = new THREE.BoxGeometry( 1, 1, 1 );
-    __material = new THREE.MeshBasicMaterial( { color: 0, wireframe: true } );
-    __cube = new THREE.Mesh( __geometry, __material );
-    # __cube.rotation.y = model.camera.position._polar.theta
-    # __cube.rotation.z = model.camera.position._polar.phi
-    # __cube.updateMatrixWorld()
-    
-    lines = new THREE.EdgesHelper __cube, 0
-    lines.material.transparent = true
-    lines.material.opacity = 0.5
-    lines.material.linewidth = 1
-    
-    lines.rotation.y = -model.camera.position._polar.theta
-    lines.rotation.x = model.camera.position._polar.phi
-    # lines.rotateX 1.1
-    lines.updateMatrix()
-    # lines.updateMatrixWorld()
-
-    # __scene = new THREE.Scene()
-    # __scene.add( lines );
-    
-    # dom.subscribe (dom) ->
     dom.sceneControls
       .append('div')
       .classed 'card', true
       .call (card) ->
         card.append('div').classed('card-block', true)
+          .style
+            'border-top': 'none'
           .call (block) ->
             block.append('h6')
               .classed('card-title', true)
               .text('Cone 1.2')
-            block.append('table')
-              .classed('table table-sm', true)
-              .append('tbody')
-              .call (tbody) ->
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('File')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text('cone.wav')
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Volume')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span')
-                      .text("#{coneParent._volume} dB")
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Spread')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text(coneParent._spread)
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Pitch')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text (degToRad.invert coneParent._phi) + "°"
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .attr 'colspan', 2
-                      .classed('value', true)
-                      .append('span')
-                      .text('Delete')
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Yaw')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text (degToRad.invert coneParent._theta) + "°"
-                      
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'File'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .append('span')
+                  .text('cone.wav')
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Volume'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .append('span')
+                  .text("#{coneParent._volume} dB")
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Spread'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .append('span')
+                  .append('span').text(coneParent._spread)
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Pitch'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .append('span')
+                  .append('span').text (degToRad.invert coneParent._phi) + "°"
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-6', true
+                  .append 'span'
+                  .classed 'value', true
+                  .text 'Delete'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Yaw'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .append('span').text (degToRad.invert coneParent._theta) + "°"
         card.append('div').classed('card-block', true)
           .call (block) ->
             block.append('h6').classed('card-title', true)
               .text('Object 1')
-            block.append('table')
-              .classed('table table-sm', true)
-              .append('tbody')
-              .call (tbody) ->
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td').classed('param', true)
-                      .text('File')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text('object.wav')
-                    tr.append('td').classed('param', true)
-                      .text('Volume')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text('95%')
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('x')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text(_spoof.position.x + "m")
-                    tr.append('td').classed('param', true)
-                      .text('Cones')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text('2')
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('y')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text(_spoof.position.y + "m")
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Pitch')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text ((degToRad.invert(_spoof.rotation.x)) + "°")
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('z')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text(_spoof.position.z + "m")
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Yaw')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text ((degToRad.invert(_spoof.rotation.z)) + "°")
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .classed('value', true)
-                      .attr 'colspan', 2
-                      .append('span')
-                      .text('Delete')
-                    tr.append('td')
-                      .classed('value', true)
-                      .attr 'colspan', 2
-                      .append('span')
-                      .text('Duplicate')
-                   
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'File'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text 'None'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Volume'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text "95%"
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'x'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text "#{_spoof.position.x} m"
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Cones'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text 2
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'y'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text "#{_spoof.position.y} m"
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Pitch'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text "#{degToRad.invert(_spoof.rotation.x)}°"
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'z'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text "#{_spoof.position.z} m"
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Yaw'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text "#{degToRad.invert(_spoof.rotation.z)}°"
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'value', true
+                  .text 'Delete'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'value', true
+                  .text 'Duplicate'
+                row.append 'div'
+                  .classed 'col-xs-6', true
+                  .append('span')
+                  .classed 'value', true
+                  .style(
+                    'border-bottom': 'none'
+                    color: "#333"
+                    opacity: 0.4
+                  )
+                  .text('Add Trajectory')
         card.append('div').classed('card-block', true)
           .call (block) ->
             block.append('h6').classed('card-title', true)
               .text('Trajectory')
-            block.append('table')
-              .classed('table table-sm', true)
-              .append('tbody')
-              .call (tbody) ->
-                tbody.append('tr')
-                  .call (tr) ->
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span')
-                      .text('Stop')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span')
-                      .text('Delete')
-                    tr.append('td')
-                      .classed('param', true)
-                      .text('Speed')
-                    tr.append('td')
-                      .classed('value', true)
-                      .append('span').text('0.5m/s')
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Speed'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text '0.5 m/s'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'value', true
+                  .text 'Pause'
+            block.append('div')
+              .classed 'row parameter', true
+              .call (row) ->
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'key', true
+                  .text 'Resolution'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed('value', true)
+                  .text '4'
+                row.append 'div'
+                  .classed 'col-xs-3', true
+                  .append 'span'
+                  .classed 'value', true
+                  .text 'Delete'
+                    
 
     _room = do ->
       w = ROOM_SIZE.width
@@ -1485,9 +1558,10 @@ emitter 'mockup'
       geometry = new THREE.SphereGeometry 0.5, 30, 30
 
       material = new THREE.MeshPhongMaterial(
-        color: PARENT_SPHERE_COLOR
+        # color: PARENT_SPHERE_COLOR
+        color: new THREE.Color "#00ffcc"
         transparent: true
-        opacity: 0.9
+        opacity: 0.5
         # wireframe: true
         # shading: THREE.FlatShading
         # side: THREE.DoubleSide
@@ -1500,42 +1574,97 @@ emitter 'mockup'
       sphere._volume = 0
       sphere.renderOrder = 10
       
+      _neck = new THREE.CylinderGeometry(0.2, 0.2, 0.5)
+      neck = new THREE.Mesh _neck, material
+      neck.position.y = -0.7
+      neck.castShadow = true
+      
+      sphere.add neck
+      
       _nose = new THREE.TetrahedronGeometry(0.3)
+      # _nose = new THREE.CylinderGeometry(0.2, 0.2, 0.5)
       nose = new THREE.Mesh _nose, material
       nose.castShadow = true
+      # nose.rotateX degToRad 90
+      # nose.rotateZ degToRad 90
+      # nose.position.setX -0.7
       nose.rotateY degToRad 0
       nose.rotateZ degToRad -45
       nose.rotateX degToRad -45
       nose.rotateX degToRad 90
-      nose.position.setX -0.7
+      nose.position.setX -0.5
       
       # sphere = new THREE.Object3D()
       sphere.add nose
       
-      sphere.position.copy new THREE.Vector3 5, 0, 1
+      sphere.position.copy new THREE.Vector3 5, 2, 1
       sphere.rotateY degToRad 90
+      
+      sphere.scale = 0.5
       
       model.scene.add sphere
 
     emitter.emit 'modelUpdate', (m) -> m
+
+    # canvas = dom.main.append("canvas")
+    #   .attr 'id', 'miniCube'
+    #   .style(
+    #     position: 'absolute'
+    #     bottom: '31px', right: '21px'
+    #   )
+    #   .node()
+    canvas = dom.miniCube.node()
+
+    ss = 100
+    
+    __camera = new THREE.PerspectiveCamera( 75, ss/ss, 0.1, 1000 );
+    __camera.position.z = 2;
+    
+    __renderer = new THREE.WebGLRenderer(
+      canvas: canvas
+      antialias: true
+      alpha: true
+    );
+    __renderer.setSize( ss, ss );
+
+    __geometry = new THREE.BoxGeometry( 1, 1, 1 );
+    __material = new THREE.MeshBasicMaterial( { color: 0, wireframe: true } );
+    __cube = new THREE.Mesh( __geometry, __material );
+    
+    # lines = new THREE.EdgesHelper __cube, 0
+    # lines.material.transparent = true
+    # lines.material.opacity = 0.5
+    # lines.material.linewidth = 1
+    
+    # lines.rotation.y = -model.camera.position._polar.theta
+    # lines.rotation.x = model.camera.position._polar.phi
+
+    # lines.updateMatrix()
     
     __cube.updateMatrix()
     lines = new THREE.EdgesHelper __cube, 0
-    lines.updateMatrix()
-    # __cube.add lines
+    lines.matrixAutoUpdate = true
+    
+    little = new THREE.Object3D()
+    
+    little.add lines
+    
+    x = 0.3
+    grid = new THREE.GridHelper x*2 + 0.31, x
+    grid.rotateZ degToRad 90
+    
+    little.add grid
+    
+    __scene = new THREE.Scene()
+    
+    __scene.add little
+    
     foo = () ->
       requestAnimationFrame foo
-      __scene = new THREE.Scene()
-      # __cube.rotation.y = -model.camera.position._polar.theta
-      # __cube.rotation.z = model.camera.position._polar.phi
-      # __cube.updateMatrix()
-      lines.rotation.y = -model.camera.position._polar.theta
-      lines.rotation.z = model.camera.position._polar.phi
-      lines.updateMatrix() 
-      # lines.updateMatrix()
+
+      little.rotation.y = -model.camera.position._polar.theta
+      little.rotation.z = model.camera.position._polar.phi
       
-      # lines.updateMatrix()
-      __scene.add lines
       __renderer.render __scene, __camera
     foo()
     
