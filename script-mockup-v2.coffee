@@ -977,25 +977,13 @@ emitter 'mockup'
     console.info 'Start mockup.'
     # console.log model
     
-    dom.main.append 'div'
-      .style(
-        position: 'absolute'
-        'font-size': '0.6rem'
-        right: '128px'
-        bottom: '65px'
-      )
-      .append 'span'
-      .style(
-        'border-bottom': '1px dotted #333'
-        'font-size': '0.8rem'
-      )
-      .text 'Altitude Mode'
+
     
     do ->
       p = new THREE.Vector3 4, 2, 16
       sphere = addObjectAtPoint p, 0.6
       
-    do ->
+    big = do ->
       p = new THREE.Vector3 -3, 2.5, -4
       sphere = addObjectAtPoint p, 1.2
       
@@ -1026,6 +1014,13 @@ emitter 'mockup'
         _theta: degToRad -120
         _phi: degToRad -90
       })(sphere)
+      
+      return sphere
+      
+    isIpad = navigator.userAgent.match(/iPad/i) isnt null
+    
+    if (isIpad is true)
+      highlightObject big
       
     
     do ->
@@ -1110,21 +1105,22 @@ emitter 'mockup'
         )
         obj = new THREE.Mesh geometry, mat
         obj.castShadow = true
-        sampleClosedSpline.points.forEach (p) ->
-          geometry = new THREE.SphereGeometry 0.2, 30, 30
-          material = new THREE.MeshPhongMaterial(
-            color: PARENT_SPHERE_COLOR
-            transparent: true
-            opacity: 0.5
-          )
-          controlPoint = new THREE.Mesh geometry, material
-          controlPoint.castShadow = true
-          controlPoint.receiveShadow = true
-          controlPoint.name = 'parentSphere'
-          controlPoint._volume = 0
-          controlPoint.renderOrder = 10
-          controlPoint.position.copy p
-          obj.add controlPoint
+        if (not isIpad)
+          sampleClosedSpline.points.forEach (p) ->
+            geometry = new THREE.SphereGeometry 0.2, 30, 30
+            material = new THREE.MeshPhongMaterial(
+              color: PARENT_SPHERE_COLOR
+              transparent: true
+              opacity: 0.5
+            )
+            controlPoint = new THREE.Mesh geometry, material
+            controlPoint.castShadow = true
+            controlPoint.receiveShadow = true
+            controlPoint.name = 'parentSphere'
+            controlPoint._volume = 0
+            controlPoint.renderOrder = 10
+            controlPoint.position.copy p
+            obj.add controlPoint
           
         sphere.add obj
       
@@ -1147,93 +1143,138 @@ emitter 'mockup'
     
     coneParent = _spoof.children[1]
     
-    highlightObject coneParent.getObjectByName 'cone'
+    isIpad = navigator.userAgent.match(/iPad/i) isnt null
+    
+    if (not isIpad)
+      highlightObject coneParent.getObjectByName 'cone'
+      
+    if (isIpad is true)
+      _spoof = big
+    
     
     wid = dom.sceneControls.node().clientWidth * 0.6
     
-    port = dom.sceneControls
-      .append('div')
-      .classed 'card', true
-      .style 'height', "#{wid}px"
-      
-    _canv = port.append "canvas"
-    _rend = new THREE.WebGLRenderer(
-      canvas: _canv.node()
-      antialias: true
-    )
-    _rend.setClearColor 'white'
-    _scene = new THREE.Scene()
-    _rend.setSize port.node().clientWidth, port.node().clientHeight
     
-    cloned = _spoof.clone()
     
-    spotLight = new THREE.SpotLight 0xffffff, 0.95
-    spotLight.position.setY 100
-    spotLight.castShadow = true
-    spotLight.shadowMapWidth = 4000
-    spotLight.shadowMapHeight = 4000
-    # spotLight.shadowBias = 0.0001
-    spotLight.shadowDarkness = 0.001
-    # spotLight.exponent = 1
+    # console.info "isipad", isIpad
     
-    # debugger
+    if (not isIpad)
+      (
+        port = dom.sceneControls
+          .append('div')
+          .classed 'card', true
+          .style 'height', "#{wid}px"
+        _canv = port.append "canvas"
+        _rend = new THREE.WebGLRenderer(
+          canvas: _canv.node()
+          antialias: true
+        )
+        _rend.setClearColor 'white'
+        _scene = new THREE.Scene()
+        _rend.setSize port.node().clientWidth, port.node().clientHeight
+        cloned = _spoof.clone()
+        spotLight = new THREE.SpotLight 0xffffff, 0.95
+        spotLight.position.setY 100
+        spotLight.castShadow = true
+        spotLight.shadowMapWidth = 4000
+        spotLight.shadowMapHeight = 4000
+        spotLight.shadowDarkness = 0.001
+        hemisphere = new THREE.HemisphereLight( 0, 0xffffff, 0.8 );
+        _scene.add hemisphere
+        _scene.add spotLight
+        c = new THREE.OrthographicCamera()
+        c.zoom = INITIAL_ZOOM * 1.5
+        c._lookAt = new THREE.Vector3()
+        c.position._polar =
+          radius: CAMERA_RADIUS
+          theta: degToRad INITIAL_THETA
+          phi: degToRad INITIAL_PHI
+        c.position._relative = polarToVector c.position._polar
+        c.position.addVectors c.position._relative, c._lookAt
+        c.lookAt cloned.position
+        c.up.copy new THREE.Vector3 0, 1, 0
+        s = { width: port.node().clientWidth, height: port.node().clientHeight }
+        [ c.left, c.right ] = [-1, 1].map (d) -> d * s.width/2
+        [ c.bottom, c.top ] = [-1, 1].map (d) -> d * s.height/2
+        c.updateProjectionMatrix()
+        camera = c
+        _scene.add cloned
+        i = 0
+        d3.timer ->
+          i++
+          sc = new THREE.Scene()
+          sc.add spotLight
+          cloned = _spoof.clone()
+          cloned.remove( cloned.children[0] )
+          cloned.remove( cloned.children[2] )
+          cloned.rotateY degToRad 45
+          sc.add cloned
+          _rend.render sc, camera
+          if i is 40
+            return true
+          return false
+      )
     
-    hemisphere = new THREE.HemisphereLight( 0, 0xffffff, 0.8 );
-    _scene.add hemisphere
-  
-    # spotLight.shadowCameraVisible = true
-    _scene.add spotLight
-    
-    c = new THREE.OrthographicCamera()
-    c.zoom = INITIAL_ZOOM * 1.5
-    c._lookAt = new THREE.Vector3()
-    c.position._polar =
-      radius: CAMERA_RADIUS
-      theta: degToRad INITIAL_THETA
-      phi: degToRad INITIAL_PHI
-    c.position._relative = polarToVector c.position._polar
-    c.position.addVectors c.position._relative, c._lookAt
-    c.lookAt cloned.position
-    c.up.copy new THREE.Vector3 0, 1, 0
-    s = { width: port.node().clientWidth, height: port.node().clientHeight }
-    [ c.left, c.right ] = [-1, 1].map (d) -> d * s.width/2
-    [ c.bottom, c.top ] = [-1, 1].map (d) -> d * s.height/2
-    c.updateProjectionMatrix()
-    camera = c
-    
-    _scene.add cloned
-    
-    # _rend.render(_scene, camera)
-
-    # render = -> 
-    #   requestAnimationFrame( render );
-    #   console.log 'render'
-    #   cube.rotation.x += 0.1;
-    #   _rend.render(_scene, camera);
-    # render();
-    i = 0
-    d3.timer ->
-      i++
-      sc = new THREE.Scene()
-      sc.add spotLight
-      cloned = _spoof.clone()
-      cloned.remove( cloned.children[0] )
-      cloned.remove( cloned.children[2] )
-      cloned.rotateY degToRad 45
-      # cloned.children[1].material.color = new THREE.Color 0, 0, 1
-      sc.add cloned
-      # cloned.material.color = new THREE.Color 0, 0, 1
-      # cloned.children[0].children[0].material.color = new THREE.Color 0, 0, 1
-      _rend.render sc, camera
-      if i is 40
-        return true
-      return false
+    # port = dom.sceneControls
+    #   .append('div')
+    #   .classed 'card', true
+    #   .style 'height', "#{wid}px"
+    # _canv = port.append "canvas"
+    # _rend = new THREE.WebGLRenderer(
+    #   canvas: _canv.node()
+    #   antialias: true
+    # )
+    # _rend.setClearColor 'white'
+    # _scene = new THREE.Scene()
+    # _rend.setSize port.node().clientWidth, port.node().clientHeight
+    # cloned = _spoof.clone()
+    # spotLight = new THREE.SpotLight 0xffffff, 0.95
+    # spotLight.position.setY 100
+    # spotLight.castShadow = true
+    # spotLight.shadowMapWidth = 4000
+    # spotLight.shadowMapHeight = 4000
+    # spotLight.shadowDarkness = 0.001
+    # hemisphere = new THREE.HemisphereLight( 0, 0xffffff, 0.8 );
+    # _scene.add hemisphere
+    # _scene.add spotLight
+    # c = new THREE.OrthographicCamera()
+    # c.zoom = INITIAL_ZOOM * 1.5
+    # c._lookAt = new THREE.Vector3()
+    # c.position._polar =
+    #   radius: CAMERA_RADIUS
+    #   theta: degToRad INITIAL_THETA
+    #   phi: degToRad INITIAL_PHI
+    # c.position._relative = polarToVector c.position._polar
+    # c.position.addVectors c.position._relative, c._lookAt
+    # c.lookAt cloned.position
+    # c.up.copy new THREE.Vector3 0, 1, 0
+    # s = { width: port.node().clientWidth, height: port.node().clientHeight }
+    # [ c.left, c.right ] = [-1, 1].map (d) -> d * s.width/2
+    # [ c.bottom, c.top ] = [-1, 1].map (d) -> d * s.height/2
+    # c.updateProjectionMatrix()
+    # camera = c
+    # _scene.add cloned
+    # i = 0
+    # d3.timer ->
+    #   i++
+    #   sc = new THREE.Scene()
+    #   sc.add spotLight
+    #   cloned = _spoof.clone()
+    #   cloned.remove( cloned.children[0] )
+    #   cloned.remove( cloned.children[2] )
+    #   cloned.rotateY degToRad 45
+    #   sc.add cloned
+    #   _rend.render sc, camera
+    #   if i is 40
+    #     return true
+    #   return false
       
     dom.sceneControls
       .append('div')
       .classed 'card', true
       .call (card) ->
         card.append('div').classed('card-block', true)
+          .attr 'id', 'cone-card'
           .style
             'border-top': 'none'
           .call (block) ->
@@ -1309,9 +1350,10 @@ emitter 'mockup'
                   .classed('value', true)
                   .append('span').text (degToRad.invert coneParent._theta) + "°"
         card.append('div').classed('card-block', true)
+          .attr 'id', 'object-card'
           .call (block) ->
             block.append('h6').classed('card-title', true)
-              .text('Object 1')
+              .text -> if isIpad then 'Object 2' else 'Object 1'
             block.append('div')
               .classed 'row parameter', true
               .call (row) ->
@@ -1357,7 +1399,7 @@ emitter 'mockup'
                   .classed 'col-xs-3', true
                   .append 'span'
                   .classed('value', true)
-                  .text 2
+                  .text -> if isIpad then 4 else 2
             block.append('div')
               .classed 'row parameter', true
               .call (row) ->
@@ -1421,13 +1463,15 @@ emitter 'mockup'
                   .classed 'col-xs-6', true
                   .append('span')
                   .classed 'value', true
+                  .attr 'id', 'add-trajectory'
                   .style(
                     'border-bottom': 'none'
-                    color: "#333"
+                    # color: "#333"
                     opacity: 0.4
                   )
                   .text('Add Trajectory')
         card.append('div').classed('card-block', true)
+          .attr 'id', 'trajectory-card'
           .call (block) ->
             block.append('h6').classed('card-title', true)
               .text('Trajectory')
@@ -1467,7 +1511,16 @@ emitter 'mockup'
                   .append 'span'
                   .classed 'value', true
                   .text 'Delete'
-                    
+                   
+    if (isIpad is true)
+      d3.select('#trajectory-card').remove()
+      d3.select('#cone-card').remove()
+      d3.select('#object-card').style 'border', 'none'
+      d3.select('#add-trajectory')
+        .style
+          'border-bottom': '1px dotted #333'
+          opacity: 1
+        
 
     _room = do ->
       w = ROOM_SIZE.width
@@ -1520,6 +1573,11 @@ emitter 'mockup'
       )
       obj = new THREE.Mesh geometry, material
       obj.rotateX Math.PI/2
+      
+      # if (isIpad is true)
+        # obj.rotateY Math.PI * 1.2
+        # obj.position.z += 3
+        
       obj.position.setY -ROOM_SIZE.height/2
       return obj
 
@@ -1552,7 +1610,9 @@ emitter 'mockup'
       obj.position.setX -4
       obj.position.setZ -4
       obj.rotateZ degToRad 45
-      model.scene.add obj
+      
+      if (not isIpad)
+        model.scene.add obj
 
     do ->
       geometry = new THREE.SphereGeometry 0.5, 30, 30
@@ -1597,8 +1657,18 @@ emitter 'mockup'
       # sphere = new THREE.Object3D()
       sphere.add nose
       
-      sphere.position.copy new THREE.Vector3 5, 2, 1
-      sphere.rotateY degToRad 90
+      isIpad = navigator.userAgent.match(/iPad/i) isnt null
+      
+      if (not isIpad)
+        sphere.position.copy new THREE.Vector3 5, 2, 1
+        sphere.rotateY degToRad 90
+        
+        
+      if isIpad is true
+        (
+          sphere.position.copy new THREE.Vector3 0, 2, -4
+          sphere.rotateY degToRad -50
+        )
       
       sphere.scale = 0.5
       
@@ -1606,88 +1676,79 @@ emitter 'mockup'
 
     emitter.emit 'modelUpdate', (m) -> m
 
-    # canvas = dom.main.append("canvas")
-    #   .attr 'id', 'miniCube'
-    #   .style(
-    #     position: 'absolute'
-    #     bottom: '31px', right: '21px'
-    #   )
-    #   .node()
-    canvas = dom.miniCube.node()
-
-    ss = 100
+    isIpad = navigator.userAgent.match(/iPad/i) isnt null
     
-    __camera = new THREE.PerspectiveCamera( 75, ss/ss, 0.1, 1000 );
-    __camera.position.z = 2;
-    
-    __renderer = new THREE.WebGLRenderer(
-      canvas: canvas
-      antialias: true
-      alpha: true
-    );
-    __renderer.setSize( ss, ss );
-
-    __geometry = new THREE.BoxGeometry( 1, 1, 1 );
-    __material = new THREE.MeshBasicMaterial( { color: 0, wireframe: true } );
-    __cube = new THREE.Mesh( __geometry, __material );
-    
-    # lines = new THREE.EdgesHelper __cube, 0
-    # lines.material.transparent = true
-    # lines.material.opacity = 0.5
-    # lines.material.linewidth = 1
-    
-    # lines.rotation.y = -model.camera.position._polar.theta
-    # lines.rotation.x = model.camera.position._polar.phi
-
-    # lines.updateMatrix()
-    
-    __cube.updateMatrix()
-    lines = new THREE.EdgesHelper __cube, 0
-    lines.matrixAutoUpdate = true
-    
-    little = new THREE.Object3D()
-    
-    little.add lines
-    
-    x = 0.3
-    grid = new THREE.GridHelper x*2 + 0.31, x
-    grid.rotateZ degToRad 90
-    
-    little.add grid
-    
-    __scene = new THREE.Scene()
-    
-    __scene.add little
-    
-    foo = () ->
-      requestAnimationFrame foo
-
-      little.rotation.y = -model.camera.position._polar.theta
-      little.rotation.z = model.camera.position._polar.phi
+    if (not isIpad)
+    # if (true)
+      canvas = dom.miniCube.node()
+      ss = 100
+      __camera = new THREE.PerspectiveCamera( 75, ss/ss, 0.1, 1000 );
+      __camera.position.z = 2;
+      __renderer = new THREE.WebGLRenderer(
+        canvas: canvas
+        antialias: true
+        alpha: true
+      );
+      __renderer.setSize( ss, ss );
+      __geometry = new THREE.BoxGeometry( 1, 1, 1 );
+      __material = new THREE.MeshBasicMaterial( { color: 0, wireframe: true } );
+      __cube = new THREE.Mesh( __geometry, __material );
+      __cube.updateMatrix()
+      lines = new THREE.EdgesHelper __cube, 0
+      lines.matrixAutoUpdate = true
+      little = new THREE.Object3D()
+      little.add lines
+      x = 0.3
+      grid = new THREE.GridHelper x*2 + 0.31, x
+      grid.rotateZ degToRad 90
+      little.add grid
+      offsetZ = 0.1
+      __scene = new THREE.Scene()
+      __scene.add little
+      foo = () ->
+        requestAnimationFrame foo
+        little.rotation.y = -model.camera.position._polar.theta
+        little.rotation.z = model.camera.position._polar.phi
+        little.rotation.x = 0.5
+        __renderer.render __scene, __camera
+      foo()
       
-      __renderer.render __scene, __camera
-    foo()
+    dom.main.append 'div'
+      .attr 'id', 'mode-text'
+      .style(
+        position: 'absolute'
+        'font-size': '0.6rem'
+        right: '128px'
+        bottom: '65px'
+      )
+      .append 'span'
+      .style(
+        'border-bottom': '1px dotted #333'
+        'font-size': '0.8rem'
+      )
+      .text 'Altitude Mode'
     
-    # render = ->
-    #   requestAnimationFrame render
-    #   # cube.rotation.y += degToRad 1
-    #   # __cube.rotation.y += 
-    #   __scene = new THREE.Scene()
-    #   __cube.rotation.y = model.camera.position._polar.theta
-    #   lines = new THREE.EdgesHelper __cube, 0
-    #   lines.material.transparent = true
-    #   lines.material.opacity = 0.5
-    #   lines.material.linewidth = 1
-    #   y = model.camera.position._polar.theta
-    #   console.log y
-    #   lines.rotation.y = y
-    #   lines.updateMatrix()
-    #   __scene.add __cube
-    #   console.log __cube.rotation.y
-    #   # console.log model.camera.position._polar.theta
-		  # __renderer.render __scene, __camera
-		  # return false
+    if (isIpad is true)  
+      dom.main.select '.cameraControls'
+        .remove()
+        
+      d3.select('#mode-text')
+        .style
+          right: '10px'
+          bottom: '10px'
+        .select 'span'
+        .text 'Lateral Mode'
+      
+      dom.main.select '#sceneControls'
+        .style 'width', '35vw'
+        
+      d3.selectAll('.parameter span')
+        .style 'font-size', '0.8rem'
+        
+      d3.selectAll('.row.parameter')
+        .style 'line-height', '2'
 		  
+	console.log 'test'
 		
 
 
