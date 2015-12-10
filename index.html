@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="https://cdn.rawgit.com/twbs/bootstrap/v4-dev/dist/css/bootstrap.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  
+
+  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/4.0.7/rx.all.js"></script>-->
+  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>-->
+  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r72/three.min.js"></script>-->
+  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.4/hammer.min.js"></script>-->
+  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>-->
+  
+
+  <script src="node_modules/rx/dist/rx.all.min.js"></script>
+  <script src="node_modules/hammerjs/hammer.min.js"></script>
+  <script src="node_modules/three/three.min.js"></script>
+  <script src="node_modules/underscore/underscore-min.js"></script>
+  <script src="node_modules/d3/d3.min.js"></script>
+
+  <title>Sound Objects</title>
+  
+  <style>
+    #sceneControls {
+      width: 25vw;
+    }
+    .card {
+      background: white;
+      opacity: 0.8;
+    }
+
+    .modes {
+      margin-bottom: .75rem;
+    }
+    .table th, .table td {
+      border-top: inherit;
+    }
+    .table td.param, .key {
+      font-weight: 700;
+    }
+    .table td.value span, .value span, span.value {
+      border-bottom: 1px dotted #333;
+    }
+    .table td, .parameter {
+      font-size: 0.6rem;
+      /*padding: 0.1rem;*/
+      padding-top: 0.3rem;
+      padding-bottom: 0.1rem;
+      
+    }
+    .card-block {
+      border-top: 0.1rem solid #777;
+      padding-top: 0.8rem;
+      padding-bottom: 0.8rem;
+      padding-left: 0.8rem;
+    }
+    #fileControls button, .cameraControls button {
+      background: none;
+      border: none;
+    }
+    .table {
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <script src="script-mockup-v2.js"></script>
+  
+  <!--<script type="text/coffeescript" src="script-mockup-v2.coffee"></script>-->
+  <!--<script src="http://coffeescript.org/extras/coffee-script.js"></script>-->
+  
+  <script>
+    if (!Object.assign) {
+      Object.defineProperty(Object, 'assign', {
+        enumerable: false,
+        configurable: true,
+        writable: true,
+        value: function(target) {
+          'use strict';
+          if (target === undefined || target === null) {
+            throw new TypeError('Cannot convert first argument to object');
+          }
+    
+          var to = Object(target);
+          for (var i = 1; i < arguments.length; i++) {
+            var nextSource = arguments[i];
+            if (nextSource === undefined || nextSource === null) {
+              continue;
+            }
+            nextSource = Object(nextSource);
+    
+            var keysArray = Object.keys(nextSource);
+            for (var nextIndex = 0, len = keysArray.length; nextIndex < len; nextIndex++) {
+              var nextKey = keysArray[nextIndex];
+              var desc = Object.getOwnPropertyDescriptor(nextSource, nextKey);
+              if (desc !== undefined && desc.enumerable) {
+                to[nextKey] = nextSource[nextKey];
+              }
+            }
+          }
+          return to;
+        }
+      });
+    }
+  </script>
+
+
+</body>
+</html>
