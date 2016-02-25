@@ -74,28 +74,36 @@ function makeStateDriver() {
 
 function makeD3DomDriver(selection) {
 	const container = d3.select(selection).style('border', '1px solid #666');
+	const subject$ = new Rx.ReplaySubject();
 
 	return function d3DomDriver(domUpdate$) {
 		
 		const container$ = domUpdate$
-			.startWith(container)
-			.scan((container, fn) => {
+			.subscribe(fn => {
 				if (typeof fn !== 'function') {
 					fn = makeUpdateFn(fn);
 				}
 				fn(container);
-				debug('dom:update')(container);
-				return container;
-			})
-			.shareReplay(1); // Otherwise this happens everytime someone else subscribes
+				subject$.onNext(container);
+			});
+		// 	.startWith(container)
+		// 	.scan((container, fn) => {
+		// 		if (typeof fn !== 'function') {
+		// 			fn = makeUpdateFn(fn);
+		// 		}
+		// 		fn(container);
+		// 		debug('dom:update')(container);
+		// 		return container;
+		// 	})
+		// 	.shareReplay(1); // Otherwise this happens everytime someone else subscribes
 			
-		container$.subscribe();
+		// container$.subscribe();
 		
 		return {
 			
 			select: function(selector) {
 				
-				let selection$ = container$.map(c => c.selectAll(selector));
+				let selection$ = subject$.map(c => c.selectAll(selector));
 
 				return {
 					

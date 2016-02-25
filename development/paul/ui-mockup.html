@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+<head>
+<style>
+
+</style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.16/d3.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/4.0.8/rx.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.4.4/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r74/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cyclejs-core/6.0.3/cycle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cyclejs-dom/9.1.0/cycle-dom.min.js"></script>
+
+<div id='app'></div>
+
+<script id='babel' type="text/babel">
+const stream = Rx.Observable;
+
+function main({DOM}) {
+  const i = d3.interpolate(32,500);
+  
+  const trans$ = DOM
+    .select('.transition')
+    .events('click');
+    
+  const delta$ = Rx.Observable.merge(
+    DOM.select('.decrement').events('click').map(ev => -1),
+    DOM.select('.increment').events('click').map(ev => +1)
+  ).map(delta => position => position + delta);
+  
+  const instant$ = DOM
+    .select('.move')
+    .events('click')
+    .map(ev => p => p + (32 - p));
+    
+  const transition$ = trans$
+    .flatMap(ev => {
+      return d3TweenStream(1000)
+        .scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
+        .map(({ t, dt }) => {
+          return p => {
+            let destination = 200;
+            let speed = (1-t) === 0 ? 0 : (destination - p)/(1 - t);
+            let step = p + dt * speed;
+            let next = t === 1 ? destination : step;
+            return next;
+          }
+        })
+    });
+    
+  // const test$ = d3TweenStream(1000)
+  //   .startWith({ t: 0, dt: 0, p: 32, dp: 0, dist: 500-32 })
+  //   .scan((last, t) => ({ 
+  //     t: t, 
+  //     trem: 1-t, 
+  //     dist: 500-i(t),
+  //     dt: t - last.t, 
+  //     p: i(t), 
+  //     dp: i(t) - last.p, 
+    // }))
+    // .do(console.log.bind(console))
+    // .do(({ t, dt }) => {
+    //   let pos = i(t);
+    //   console.log({ t, dt, pos })
+    // })
+    // .subscribe()
+    // .map(ev => stream.of(p => p + 10, p => p + 20))
+    // .flatMap(stream => stream)
+    // .map(ev => position => stream.just(p => p + 1).scan((p,fn) => fn(p), position))
+    // .map(ev => position => {
+    //   return {
+    //     start: position,
+    //     update$: stream.just(position => position + 1)
+    //   }
+    // })
+    // .do(console.log.bind(console))
+    // .flatMap(ev => position => {
+    //   let i = d3.interpolate(position,10);
+    //   return d3TweenStream(1000)
+    // })
+    
+  // const position$ = transition$
+  //   .startWith(0)
+  //   .scan((position, fn) => fn(position).scan((p, fn) => fn(p), position))
+  //   .do(console.log.bind(console))
+    
+  // const position$ = stream.just(0);
+  const update$ = stream
+    .merge(
+      delta$, instant$, transition$
+    );
+    
+  const position$ = update$
+    .startWith(0)
+    .scan((position, fn) => fn(position));
+  
+  // .scan((x,y) => x+y);
+  
+  // const position$ = count$
+  //   .combineLatest(
+  //     trans$.startWith(d => d),
+  //     (c,t) => c
+  //   )
+  //   .startWith(0)
+  
+  // const position$ = movement$
+  //   .startWith(0)
+  
+  return {
+    DOM: position$.map(position =>
+      CycleDOM.div([
+        CycleDOM.button('.decrement', 'Decrement'),
+        CycleDOM.button('.increment', 'Increment'),
+        CycleDOM.button('.move', 'Move to 32'),
+        CycleDOM.button('.transition', 'Transition +10'),
+        CycleDOM.p('position: ' + position)
+      ])
+    )
+  };
+}
+
+Cycle.run(main, {
+  DOM: CycleDOM.makeDOMDriver('#app')
+});
+
+function d3TweenStream(duration, name) {
+  return stream.create(function(observer) {
+    return d3.select({})
+      .transition()
+      .duration(duration)
+      .ease('linear')
+      .tween(name, function() {
+        return function(t) {
+          return observer.onNext(t);
+        };
+      })
+      .each("end", function() {
+        return observer.onCompleted();
+      });
+  });
+};
+</script>
+
+<script>
+  /* global d3, Babel */
+  'use strict';
+  const text = d3.select('#babel').text();
+  const compiled = Babel.transform(text, { presets: ['es2015'] }).code;
+  (new Function(compiled))();
+</script>
+
+</body>
+</html>

@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "nodemon": "nodemon --ignore build/ --ignore app/ ."
+    "nodemon": "nodemon --ignore app/ ."
   },
   "repository": {
     "type": "git",
@@ -24,6 +24,7 @@
     "express": "^4.13.4",
     "express-babelify-middleware": "^0.2.1",
     "rx": "^4.0.8",
+    "serve-index": "^1.7.3",
     "three": "^0.74.0"
   },
   "devDependencies": {
