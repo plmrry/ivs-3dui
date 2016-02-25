@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
 <head>
+  <title>UI Mockup</title>
 <style>
 
 </style>
@@ -51,43 +52,6 @@ function main({DOM}) {
         })
     });
     
-  // const test$ = d3TweenStream(1000)
-  //   .startWith({ t: 0, dt: 0, p: 32, dp: 0, dist: 500-32 })
-  //   .scan((last, t) => ({ 
-  //     t: t, 
-  //     trem: 1-t, 
-  //     dist: 500-i(t),
-  //     dt: t - last.t, 
-  //     p: i(t), 
-  //     dp: i(t) - last.p, 
-    // }))
-    // .do(console.log.bind(console))
-    // .do(({ t, dt }) => {
-    //   let pos = i(t);
-    //   console.log({ t, dt, pos })
-    // })
-    // .subscribe()
-    // .map(ev => stream.of(p => p + 10, p => p + 20))
-    // .flatMap(stream => stream)
-    // .map(ev => position => stream.just(p => p + 1).scan((p,fn) => fn(p), position))
-    // .map(ev => position => {
-    //   return {
-    //     start: position,
-    //     update$: stream.just(position => position + 1)
-    //   }
-    // })
-    // .do(console.log.bind(console))
-    // .flatMap(ev => position => {
-    //   let i = d3.interpolate(position,10);
-    //   return d3TweenStream(1000)
-    // })
-    
-  // const position$ = transition$
-  //   .startWith(0)
-  //   .scan((position, fn) => fn(position).scan((p, fn) => fn(p), position))
-  //   .do(console.log.bind(console))
-    
-  // const position$ = stream.just(0);
   const update$ = stream
     .merge(
       delta$, instant$, transition$
@@ -96,18 +60,6 @@ function main({DOM}) {
   const position$ = update$
     .startWith(0)
     .scan((position, fn) => fn(position));
-  
-  // .scan((x,y) => x+y);
-  
-  // const position$ = count$
-  //   .combineLatest(
-  //     trans$.startWith(d => d),
-  //     (c,t) => c
-  //   )
-  //   .startWith(0)
-  
-  // const position$ = movement$
-  //   .startWith(0)
   
   return {
     DOM: position$.map(position =>
