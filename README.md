@@ -18,6 +18,8 @@ npm start
 
 The server will start, with a default port of **9877**. For now, this is hard-coded into the server script.
 
+Go to `localhost:9877` to run the main application script. Right now it's nothing, really.
+
 ## Development
 
-Everything in the `development` is served statically. Point your browser at `localhost:9877/development/` to see a listing of development files and directories.
+Point your browser at `localhost:9877/development/` to see a listing of development files and directories.
