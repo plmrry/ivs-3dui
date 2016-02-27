@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@bitbucket.org/plmrry/ivs-3dui.git"
+    "url": "git+ssh://git@github.com/CreativeCodingLab/IVS-UI.git"
   },
   "author": "",
   "license": "ISC",
