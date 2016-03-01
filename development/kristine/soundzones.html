@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>spline drawer</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				margin:0px;
+				canvas { width: 100%; height: 100%; }
+			}
+		</style>
+		<script src="js/three.min.js"></script>
+		<script src="js/simplify.js"></script>
+
+		<script src="js/earcut.js"></script>
+		<script>
+			/*  ONLY GOOD FOR 2D. override three.js triangulate with earcut. still doesn't produce desired behavior with some non-simple paths */
+
+			THREE.ShapeUtils.triangulate = function ( contour, indices ) {
+
+				var n = contour.length;
+
+				if ( n < 3 ) return null;
+
+				var result = [],
+					verts = [],
+					vertIndices = [];
+
+				// flatten contour into 1d array e.g [x0,y0, x1,y1, x2,y2, ...]
+				var path = [];
+				contour.forEach(function(point) {
+					path.push(point.x);
+					path.push(point.y);
+				});
+				(function() {
+					var triangles = earcut(path);
+					var nTri = triangles.length;
+
+					for (var i = 0; i < nTri; i+=3) {
+						var a = triangles[i],
+						    b = triangles[i+1],
+						    c = triangles[i+2];
+						vertIndices.push([a, b, c]);
+						result.push( [ contour[ a ],
+						               contour[ b ],
+						               contour[ c ] ] );
+					}
+				})();
+
+				if ( indices ) return vertIndices;
+				return result;
+
+			};
+		</script>
+	</head>
+	<body>
+
+		<script>
+			var scene, camera, renderer,
+				width = window.innerWidth,
+				height = window.innerHeight;
+
+			var mouse = new THREE.Vector3();    // with 2d mouse coords
+			var isMouseDown = false;
+
+			// initialize scene, camera, and renderer
+			function init() {
+				var container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				camera = new THREE.OrthographicCamera( width/-2, width/2, height/-2,height/2, 1, 1000 );
+				camera.position.z = 1;	// <-- depth of room
+
+				scene = new THREE.Scene();
+				scene.add(camera);
+				scene.add( new THREE.AmbientLight( 0xf0f0f0 ) );
+
+				renderer = new THREE.WebGLRenderer({ antialias: true });
+				renderer.setClearColor( 0xf0f0f0 );
+				renderer.setSize( width, height );
+				container.appendChild( renderer.domElement );
+			
+				container.addEventListener( 'mousedown', onMouseDown, false );
+				container.addEventListener( 'mouseup', onMouseUp, false );
+				container.addEventListener( 'mouseleave', onMouseUp, false );
+				container.addEventListener( 'mousemove', onMouseMove, false );
+			}
+			init();
+
+			function setMousePosition2D(e) {
+				mouse.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
+				mouse.y = e.clientY - renderer.domElement.offsetTop +camera.top;
+				mouse.z = 0;
+			}
+
+			function onMouseDown(e) {
+				isMouseDown = true;
+				setMousePosition2D(e);
+   				drawing.beginAt(mouse.clone());
+			}
+			function onMouseUp(e) {
+				if (isMouseDown === true) {
+					var points = drawing.getPoints();
+					drawing.clear();
+
+					if (points.length >= 3)
+					{
+						console.log(new PathObject(points));
+					}
+				}
+				isMouseDown = false;
+			}
+			function onMouseMove(e) {
+				if (isMouseDown) {
+					setMousePosition2D(e);
+//					if (drawing.points.peek().distanceToSquared(mouse) > 10)
+						drawing.addPoint(mouse.clone());
+				}
+			}
+
+			function render() {
+				requestAnimationFrame( render );
+				renderer.render( scene, camera );
+			}
+			render();
+
+			function PathObject(points) {
+				this.points = points;
+				this.curve = (function(points) {
+					var curve = new THREE.CatmullRomCurve3(points);
+					curve.type = 'centripetal';
+					curve.closed = true;
+
+					var geometry = new THREE.Geometry();
+					geometry.vertices = curve.getPoints(100);
+
+					var material = new THREE.LineBasicMaterial({
+						color: 0xff0000,
+						linewidth:1,
+						transparent:true,
+						opacity:0.4
+					});
+
+					curve.mesh = new THREE.Line( geometry, material );
+					scene.add( curve.mesh );
+
+					return curve.mesh;
+				})(points);
+				this.pointObjects = (function(points) {
+					var pointObjects = [];
+					points.forEach(function(point) {
+						var geometry = new THREE.BoxGeometry( 5, 5, 5 );
+						var material = new THREE.MeshBasicMaterial( { color:0xff0000 } );
+						var pcube = new THREE.Mesh( geometry, material );
+						pcube.position.x = point.x;
+						pcube.position.y = point.y;
+						scene.add( pcube );
+						pointObjects.push(pcube);
+					});
+
+					return pointObjects;
+				})(points);
+				this.shape = convertToShape(points);
+
+				function convertToShape(points) {
+					var curve = new THREE.CatmullRomCurve3(points);
+					curve.type = 'centripetal';
+					curve.closed = true;
+
+					var shape = new THREE.Shape();
+					shape.fromPoints(curve.getPoints(100));
+
+					var geometry = new THREE.ShapeGeometry(shape);
+					var material = new THREE.MeshPhongMaterial({
+				        color: 0xff0000,
+				        transparent: true,
+				        opacity: 0.2,
+				        side: THREE.DoubleSide,
+				        depthWrite: false
+				    });
+
+				    var obj = new THREE.Mesh(geometry,material);
+				    scene.add(obj);
+
+				    return obj;
+				}
+
+
+			}
+
+			var drawing = {               // live drawing by mouse
+				points: [],               //    points on path
+				lines: [],                //    lines on the scene
+
+				endpoint: function() {
+					return this.points[this.points.length-1];
+				},
+
+				beginAt: function(point) {
+					this.points = [point];
+				},
+				addPoint: function(point) {
+					var material = new THREE.LineBasicMaterial({
+						color: 0xff0000
+					});
+					var geometry = new THREE.Geometry();
+					geometry.vertices.push(this.points.peek(), point);
+
+					var line = new THREE.Line(geometry,material);
+					scene.add(line);
+
+					this.points.push(point);
+					this.lines.push(line);
+				},
+				getPoints: function() {
+					var points = simplify(this.points,10,true); // :-\
+//					console.log(points.peek().distanceToSquared(points[0]));
+					if (points.peek().distanceToSquared(points[0]) < 100)
+						points.pop();
+					return points;
+				},
+				clear: function() {
+					this.lines.forEach(function(line) {
+						scene.remove(line);
+					});
+					this.lines = [];
+				}
+			};
+
+			Array.prototype.peek = function() { return this[this.length - 1]; }
+
+		</script>
+
+	</body>
+</html>
