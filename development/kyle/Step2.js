@@ -3,25 +3,15 @@ if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 var container;
 var camera, scene, renderer;
 var mouse, raycaster, isShiftDown = false;
+var isAdding = isRemoving = false;
 
 var interactiveCone, interactiveConeMaterial;
-
-var objects = new THREE.Object3D;
+var objects = new THREE.Object3D();
 
 init();
 render();
 
 function init() {
-
-    container = document.createElement( 'div' );
-    document.body.appendChild( container );
-
-    renderer = new THREE.WebGLRenderer( { antialias: true } );
-    renderer.setClearColor( 0xf0f0f0 );
-    renderer.setPixelRatio( window.devicePixelRatio );
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    container.appendChild( renderer.domElement );
-
 
     camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
     camera.position.set( 500, 800, 1300 );
@@ -31,13 +21,14 @@ function init() {
 
     interactiveConeGeo = new THREE.CylinderGeometry(100, 0, 600, 100, 1, true);
     interactiveConeGeo.translate(0, 300, 0);
-    // interactiveConeGeo.rotateX(Math.PI/2.);
+    interactiveConeGeo.rotateX(Math.PI/2.);
     interactiveConeMaterial = new THREE.MeshBasicMaterial({color: 0x80FFE5, opacity: 0.5});
     interactiveCone = new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
     interactiveCone.material.side = THREE.DoubleSide;
     interactiveCone.material.transparent = true;
-    scene.add( interactiveCone, objects );
+    interactiveCone.visible = false; // Make its visibility to off for now
 
+    scene.add( interactiveCone, objects );
 
     //
 
@@ -61,16 +52,41 @@ function init() {
     directionalLight.position.set( 1, 0.75, 0.5 ).normalize();
     scene.add( directionalLight );
 
+    renderer = new THREE.WebGLRenderer( { antialias: true } );
+    renderer.setClearColor( 0xf0f0f0 );
+    renderer.setPixelRatio( window.devicePixelRatio );
+    renderer.setSize( window.innerWidth, window.innerHeight );
+
+    container = document.getElementById('IVS');
+    container.appendChild( renderer.domElement );
+
+
     document.addEventListener( 'mousemove', onDocumentMouseMove, false );
     document.addEventListener( 'mousedown', onDocumentMouseDown, false );
     document.addEventListener( 'keydown', onDocumentKeyDown, false );
     document.addEventListener( 'keyup', onDocumentKeyUp, false );
 
+    document.getElementById("plus").addEventListener("click", onClickAdd, false);
+    document.getElementById("minus").addEventListener("click", onClickRemove, false);
     //
 
     window.addEventListener( 'resize', onWindowResize, false );
 
 }
+
+function onClickAdd() {
+
+    isAdding = true;
+    interactiveCone.visible = true;
+}
+
+function onClickRemove() {
+
+    isAdding = false;
+    isRemoving = true;
+    interactiveCone.visible = true;
+}
+
 
 function onWindowResize() {
 
@@ -87,19 +103,22 @@ function onDocumentMouseMove( event ) {
 
     mouse.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
 
-    raycaster.setFromCamera( mouse, camera );
+    if (isAdding) {
 
-    var intersects = raycaster.intersectObjects( objects.children );
+        raycaster.setFromCamera( mouse, camera );
 
-    if ( intersects.length > 0 ) {
+        var intersects = raycaster.intersectObjects( objects.children );
 
-        var intersect = intersects[ 0 ];
+        if ( intersects.length > 0 ) {
 
-        interactiveCone.lookAt(intersect.point);
+            var intersect = intersects[ 0 ];
 
+            interactiveCone.lookAt(intersect.point);
+
+        }
+
+        render();
     }
-
-    render();
 
 }
 
@@ -135,7 +154,7 @@ function onDocumentMouseDown( event ) {
 
             var placedCone = new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
             placedCone.lookAt(intersect.point);
-            // scene.add( placedCone );
+            scene.add( placedCone );
 
             objects.add( placedCone );
 
@@ -172,3 +191,4 @@ function render() {
     renderer.render( scene, camera );
 
 }
+
