@@ -3,7 +3,12 @@ if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 var container;
 var camera, scene, renderer;
 var mouse, raycaster, isShiftDown = false;
-var isAdding = isRemoving = false;
+var isAdding = isRemoving = isDragging = false;
+
+var previousMousePosition = {
+    x: 0,
+    y: 0
+}
 
 var interactiveCone, interactiveConeMaterial;
 var objects = new THREE.Object3D();
@@ -39,9 +44,9 @@ function init() {
 
     sphere = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( {color: 0xFFFFFF, opacity: 0.6 } ) );
     sphere.material.transparent = true;
-    scene.add( sphere );
-
+    sphere.name = "Sphere"
     objects.add( sphere );
+    objects.name = "Objects"
 
     // Lights
 
@@ -60,15 +65,14 @@ function init() {
     container = document.getElementById('IVS');
     container.appendChild( renderer.domElement );
 
-
     document.addEventListener( 'mousemove', onDocumentMouseMove, false );
     document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+    document.addEventListener( 'mouseup', onDocumentMouseUp, false );
     document.addEventListener( 'keydown', onDocumentKeyDown, false );
     document.addEventListener( 'keyup', onDocumentKeyUp, false );
 
     document.getElementById("plus").addEventListener("click", onClickAdd, false);
     document.getElementById("minus").addEventListener("click", onClickRemove, false);
-    //
 
     window.addEventListener( 'resize', onWindowResize, false );
 
@@ -77,6 +81,7 @@ function init() {
 function onClickAdd() {
 
     isAdding = true;
+    isRemoving = isDragging = false;
     interactiveCone.visible = true;
 }
 
@@ -97,7 +102,64 @@ function onWindowResize() {
 
 }
 
+
+function onDocumentMouseDown( event ) {
+    console.log('mouseDown', isDragging, isAdding, isRemoving);
+    event.preventDefault();
+
+    mouse.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
+
+    raycaster.setFromCamera( mouse, camera );
+
+    var intersects = raycaster.intersectObjects( objects.children );
+
+    if ( intersects.length > 0 ) {
+        console.log("intersects.length > 0", intersects);
+        var intersect = intersects[ 0 ];
+
+        // delete cone
+
+        if ( isRemoving ) {
+            console.log("\tisRemoving");
+            if ( intersect.object != sphere ) {
+
+                // scene.remove( intersect.object );
+
+                objects.remove( intersect.object );
+                isAdding = isRemoving = isDragging = false;
+            }
+
+        // create cone
+
+        } else if (isAdding) {
+            console.log("\tisAdding", intersect.point);
+            var placedCone = new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
+            placedCone.lookAt(intersect.point);
+
+            objects.add( placedCone );
+            interactiveCone.visible = false;
+            isAdding = isRemoving = isDragging = false;
+
+        } else {
+            console.log("\telse..", isDragging, isAdding, isRemoving);
+            if ( intersect.object === sphere ) {
+                isDragging = true;
+                isAdding = isRemoving = false;
+            }
+        }
+
+        render();
+
+    } else {
+        // isDragging = true;
+        isAdding = isRemoving = false;
+    }
+
+}
+
+
 function onDocumentMouseMove( event ) {
+    console.log('mouseMove', isDragging, isAdding, isRemoving);
 
     event.preventDefault();
 
@@ -118,55 +180,41 @@ function onDocumentMouseMove( event ) {
         }
 
         render();
+
+    } else if(isDragging) {
+        console.log("isDragging", isDragging, mouse.x, mouse.y);
+        var deltaMove = {
+            // x: mouse.x-previousMousePosition.x,
+            // y: mouse.y-previousMousePosition.y
+            x: event.offsetX-previousMousePosition.x,
+            y: event.offsetY-previousMousePosition.y
+        };
+
+        var deltaRotationQuaternion = new THREE.Quaternion()
+            .setFromEuler(new THREE.Euler(
+                toRadians(deltaMove.y * 1),
+                toRadians(deltaMove.x * 1),
+                0,
+                'XYZ'
+            ));
+
+        objects.quaternion.multiplyQuaternions(deltaRotationQuaternion, objects.quaternion);
+        render();
     }
+
+    previousMousePosition = {
+        // x: mouse.x,
+        // y: mouse.y
+        x: event.offsetX,
+        y: event.offsetY
+    };
 
 }
 
-function onDocumentMouseDown( event ) {
-
-    event.preventDefault();
-
-    mouse.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
-
-    raycaster.setFromCamera( mouse, camera );
-
-    var intersects = raycaster.intersectObjects( objects.children );
-
-    if ( intersects.length > 0 ) {
-
-        var intersect = intersects[ 0 ];
-
-        // delete cone
-
-        if ( isRemoving ) {
-
-            if ( intersect.object != sphere ) {
-
-                // scene.remove( intersect.object );
-
-                objects.remove( intersect.object );
-                isRemoving = false;
-            }
-
-        // create cone
-
-        } else {
-
-            if (isAdding) {
-
-                var placedCone = new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
-                placedCone.lookAt(intersect.point);
-
-                objects.add( placedCone );
-                isAdding = false;
-                interactiveCone.visible = false;
-
-            }
-
-        }
-
-        render();
-
+function onDocumentMouseUp( event ) {
+    console.log('mouseUp', isDragging, isAdding, isRemoving);
+    if (isDragging) {
+        isDragging = isAdding = isRemoving = false;
     }
 
 }
@@ -197,3 +245,48 @@ function render() {
 
 }
 
+
+
+// $(renderer.domElement).on('mousedown', function(e) {
+//     isDragging = true;
+// })
+// .on('mousemove', function(e) {
+//     //console.log(e);
+
+//     var deltaMove = {
+//         x: e.offsetX-previousMousePosition.x,
+//         y: e.offsetY-previousMousePosition.y
+//     };
+
+//     if(isDragging) {
+
+//         var deltaRotationQuaternion = new THREE.Quaternion()
+//             .setFromEuler(new THREE.Euler(
+//                 toRadians(deltaMove.y * 1),
+//                 toRadians(deltaMove.x * 1),
+//                 0,
+//                 'XYZ'
+//             ));
+
+//         objects.quaternion.multiplyQuaternions(deltaRotationQuaternion, objects.quaternion);
+//     }
+
+//     previousMousePosition = {
+//         x: e.offsetX,
+//         y: e.offsetY
+//     };
+// });
+// /* */
+
+// $(document).on('mouseup', function(e) {
+//     isDragging = false;
+// });
+
+
+function toRadians(angle) {
+    return angle * (Math.PI / 180);
+}
+
+function toDegrees(angle) {
+    return angle * (180 / Math.PI);
+}
