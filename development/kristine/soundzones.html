@@ -30,8 +30,7 @@
 				// flatten contour into 1d array e.g [x0,y0, x1,y1, x2,y2, ...]
 				var path = [];
 				contour.forEach(function(point) {
-					path.push(point.x);
-					path.push(point.y);
+					path.push(point.x, point.y);
 				});
 				(function() {
 					var triangles = earcut(path);
@@ -55,6 +54,7 @@
 		</script>
 	</head>
 	<body>
+		<button id="add-btn">add object</button>
 
 		<script>
 			var scene, camera, renderer,
@@ -63,6 +63,9 @@
 
 			var mouse = new THREE.Vector3();    // with 2d mouse coords
 			var isMouseDown = false;
+			var addMode = false;
+
+			var selectedObject = null;
 
 			// initialize scene, camera, and renderer
 			function init() {
@@ -85,8 +88,33 @@
 				container.addEventListener( 'mouseup', onMouseUp, false );
 				container.addEventListener( 'mouseleave', onMouseUp, false );
 				container.addEventListener( 'mousemove', onMouseMove, false );
+
+				document.querySelector('#add-btn').onclick = toggleAddMode;
+
+			}
+			function render() {
+				requestAnimationFrame( render );
+				renderer.render( scene, camera );
 			}
 			init();
+			render();
+
+
+			///////////////////////
+
+
+			function toggleAddMode() {
+				addMode = !addMode;
+				if (addMode) {
+					renderer.setClearColor(0xe0e0e0);
+					document.querySelector('#add-btn').innerHTML = 'cancel add';
+				}
+				else {
+					renderer.setClearColor(0xf0f0f0);
+					document.querySelector('#add-btn').innerHTML = 'add object';
+				}
+			}
+
 
 			function setMousePosition2D(e) {
 				mouse.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
@@ -95,37 +123,42 @@
 			}
 
 			function onMouseDown(e) {
+				// for drawing
 				isMouseDown = true;
-				setMousePosition2D(e);
-   				drawing.beginAt(mouse.clone());
+				if (addMode === true) {
+					setMousePosition2D(e);
+	   				drawing.beginAt(mouse.clone());
+				}
 			}
 			function onMouseUp(e) {
 				if (isMouseDown === true) {
-					var points = drawing.getPoints();
-					drawing.clear();
 
-					if (points.length >= 3)
-					{
-						console.log(new PathObject(points));
+					if (addMode === true) {
+						toggleAddMode();
+						var points = drawing.getPoints();
+						drawing.clear();
+
+						if (points.length >= 3)
+						{
+							console.log(new PathObject(points));
+						}						
 					}
 				}
 				isMouseDown = false;
 			}
 			function onMouseMove(e) {
 				if (isMouseDown) {
-					setMousePosition2D(e);
-//					if (drawing.points.peek().distanceToSquared(mouse) > 10)
-						drawing.addPoint(mouse.clone());
+					if (addMode === true) {
+						setMousePosition2D(e);
+						drawing.addPoint(mouse.clone());					
+					}
 				}
 			}
 
-			function render() {
-				requestAnimationFrame( render );
-				renderer.render( scene, camera );
-			}
-			render();
-
 			function PathObject(points) {
+				if (points.peek().distanceToSquared(points[0]) < 100)
+					points.pop(); // ? because it's closed?
+
 				this.points = points;
 				this.curve = (function(points) {
 					var curve = new THREE.CatmullRomCurve3(points);
@@ -133,7 +166,7 @@
 					curve.closed = true;
 
 					var geometry = new THREE.Geometry();
-					geometry.vertices = curve.getPoints(100);
+					geometry.vertices = curve.getPoints(200);
 
 					var material = new THREE.LineBasicMaterial({
 						color: 0xff0000,
@@ -145,7 +178,7 @@
 					curve.mesh = new THREE.Line( geometry, material );
 					scene.add( curve.mesh );
 
-					return curve.mesh;
+					return curve;
 				})(points);
 				this.pointObjects = (function(points) {
 					var pointObjects = [];
@@ -161,9 +194,10 @@
 
 					return pointObjects;
 				})(points);
-				this.shape = convertToShape(points);
+				this.shape = convertToShape(points); // don't want this to happen for a trajectory tho
 
 				function convertToShape(points) {
+
 					var curve = new THREE.CatmullRomCurve3(points);
 					curve.type = 'centripetal';
 					curve.closed = true;
@@ -186,16 +220,11 @@
 				    return obj;
 				}
 
-
 			}
 
 			var drawing = {               // live drawing by mouse
 				points: [],               //    points on path
 				lines: [],                //    lines on the scene
-
-				endpoint: function() {
-					return this.points[this.points.length-1];
-				},
 
 				beginAt: function(point) {
 					this.points = [point];
@@ -215,9 +244,6 @@
 				},
 				getPoints: function() {
 					var points = simplify(this.points,10,true); // :-\
-//					console.log(points.peek().distanceToSquared(points[0]));
-					if (points.peek().distanceToSquared(points[0]) < 100)
-						points.pop();
 					return points;
 				},
 				clear: function() {
