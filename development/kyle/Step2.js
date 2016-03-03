@@ -84,7 +84,7 @@ function onClickRemove() {
 
     isAdding = false;
     isRemoving = true;
-    interactiveCone.visible = true;
+    interactiveCone.visible = false;
 }
 
 
@@ -138,25 +138,30 @@ function onDocumentMouseDown( event ) {
 
         // delete cone
 
-        if ( isShiftDown ) {
+        if ( isRemoving ) {
 
             if ( intersect.object != sphere ) {
 
                 // scene.remove( intersect.object );
 
                 objects.remove( intersect.object );
-
+                isRemoving = false;
             }
 
         // create cone
 
         } else {
 
-            var placedCone = new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
-            placedCone.lookAt(intersect.point);
-            scene.add( placedCone );
+            if (isAdding) {
 
-            objects.add( placedCone );
+                var placedCone = new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
+                placedCone.lookAt(intersect.point);
+
+                objects.add( placedCone );
+                isAdding = false;
+                interactiveCone.visible = false;
+
+            }
 
         }
 
