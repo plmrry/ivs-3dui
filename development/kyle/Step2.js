@@ -10,6 +10,9 @@ var _inverse = new THREE.Matrix4();
 var _v4 = new THREE.Vector3();
 var _vector = new THREE.Vector3();
 
+var _plus = document.getElementById("plus");
+var _minus = document.getElementById("minus");
+
 var previousMousePosition = {
     x: 0,
     y: 0
@@ -50,16 +53,12 @@ function init() {
     var geometry = new THREE.SphereBufferGeometry( 300, 100, 100 );
     sphere = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( {color: 0xFFFFFF, opacity: 0.6 } ) );
     sphere.material.transparent = true;
-    sphere.name = "Sphere"
+    sphere.name = "Sphere";  // debugging purposes more than anything
     objects.add( sphere );
 
 
-    // face = new THREE.VertexNormalsHelper(sphere, 20, 0xff33ff);
-    // scene.add(face);
     // Lights
-
     var ambientLight = new THREE.AmbientLight( 0x606060 );
-
     var directionalLight = new THREE.DirectionalLight( 0xffffff );
     directionalLight.position.set( 1, 0.75, 0.5 ).normalize();
 
@@ -88,21 +87,20 @@ function init() {
     document.addEventListener( 'mousemove', onDocumentMouseMove, false );
     document.addEventListener( 'mousedown', onDocumentMouseDown, false );
     document.addEventListener( 'mouseup', onDocumentMouseUp, false );
-    document.addEventListener( 'keydown', onDocumentKeyDown, false );
-    document.addEventListener( 'keyup', onDocumentKeyUp, false );
 
-    document.getElementById("plus").addEventListener("click", onClickAdd, false);
-    document.getElementById("minus").addEventListener("click", onClickRemove, false);
+    _plus.addEventListener("click", onClickAdd, false);
+    _minus.addEventListener("click", onClickRemove, false);
 
     window.addEventListener( 'resize', onWindowResize, false );
 
 }
 
-function onClickAdd() {
 
+function onClickAdd() {
     isAdding = true;
     isRemoving = isDragging = false;
     interactiveCone.visible = true;
+    _plus.className = "on";
 }
 
 function onClickRemove() {
@@ -110,8 +108,8 @@ function onClickRemove() {
     isAdding = false;
     isRemoving = true;
     interactiveCone.visible = false;
+    _minus.className = "on";
 }
-
 
 function onWindowResize() {
 
@@ -138,7 +136,6 @@ function onDocumentMouseDown( event ) {
         var intersect = intersects[ 0 ];
 
         // delete cone
-
         if ( isRemoving ) {
             console.log("\tisRemoving");
             if ( intersect.object != sphere ) {
@@ -147,55 +144,44 @@ function onDocumentMouseDown( event ) {
 
                 objects.remove( intersect.object );
                 isAdding = isRemoving = isDragging = false;
+                _minus.className = "";
             }
 
         // create cone
-
         } else if (isAdding) {
             var placedCone = new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
-            // placedCone.lookAt(intersect.point);
-            // placedCone.visible = false;
-            // scene.add(placedCone);
-
-            var m = placedCone.quaternion.clone();
-            // _inverse.getInverse(objects.matrix);
-            // _v4.copy( intersect.point );
-            // _v4.applyMatrix4(_inverse);
-            // THREE.SceneUtils.attach( placedCone, scene, objects );
+            // First we need to add the cone to the parent
             objects.add( placedCone );
-            placedCone.lookAt( intersect.object.worldToLocal( intersect.point ) );
-            // placedCone.lookAt ( intersect.point );
 
-            // placedCone.quaternion.multiplyQuaternions(m, objects.quaternion);
-            // .matrix.makeRotationFromQuaternion (m);
-            console.log("\tisAdding", intersect.point, placedCone);
+            // then, we tell the cone (now a child of the parent object) to
+            // look at the postion of the intersected object's position,
+            // which has been converted from world coordinates to local
+            placedCone.lookAt( intersect.object.worldToLocal( intersect.point ) );
+
             interactiveCone.visible = false;
             isAdding = isRemoving = isDragging = false;
-            cameraControls.enableRotate = false;
+            _plus.className = "";
+
 
         } else {
-            console.log("\telse..", isDragging, isAdding, isRemoving, cameraControls.enableRotate);
+            console.log("\telse..", isDragging, isAdding, isRemoving);
             if ( intersect.object === sphere ) {
                 isDragging = true;
                 isAdding = isRemoving = false;
-                cameraControls.enableRotate = false;
+
             }
         }
 
         render();
 
     } else {
-        // isDragging = true;
         isAdding = isRemoving = false;
-        cameraControls.enableRotate = true;
     }
 
 }
 
 
 function onDocumentMouseMove( event ) {
-    // console.log('mouseMove', isDragging, isAdding, isRemoving, cameraControls.enableRotate);
-
     event.preventDefault();
 
     mouse.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
@@ -219,8 +205,6 @@ function onDocumentMouseMove( event ) {
     } else if(isDragging) {
         console.log("isDragging", isDragging); //, mouse.x, mouse.y);
         var deltaMove = {
-            // x: mouse.x-previousMousePosition.x,
-            // y: mouse.y-previousMousePosition.y
             x: event.offsetX-previousMousePosition.x,
             y: event.offsetY-previousMousePosition.y
         };
@@ -234,7 +218,6 @@ function onDocumentMouseMove( event ) {
             ));
 
         objects.quaternion.multiplyQuaternions(deltaRotationQuaternion, objects.quaternion);
-        // face.update();
         render();
 
     } else if (cameraControls.enableRotate) {
@@ -242,8 +225,6 @@ function onDocumentMouseMove( event ) {
     }
 
     previousMousePosition = {
-        // x: mouse.x,
-        // y: mouse.y
         x: event.offsetX,
         y: event.offsetY
     };
@@ -251,7 +232,7 @@ function onDocumentMouseMove( event ) {
 }
 
 function onDocumentMouseUp( event ) {
-    console.log('mouseUp', isDragging, isAdding, isRemoving, cameraControls.enableRotate);
+
     if (isDragging)
         isDragging = isAdding = isRemoving = false;
 
@@ -259,27 +240,6 @@ function onDocumentMouseUp( event ) {
         cameraControls.enableRotate = false;
 
 }
-
-function onDocumentKeyDown( event ) {
-
-    switch( event.keyCode ) {
-
-        case 16: isShiftDown = true; break;
-
-    }
-
-}
-
-function onDocumentKeyUp( event ) {
-
-    switch ( event.keyCode ) {
-
-        case 16: isShiftDown = false; break;
-
-    }
-
-}
-
 
 function animate() {
     requestAnimationFrame( animate );
@@ -293,43 +253,6 @@ function render() {
     renderer.render( scene, camera );
 
 }
-
-
-
-// $(renderer.domElement).on('mousedown', function(e) {
-//     isDragging = true;
-// })
-// .on('mousemove', function(e) {
-//     //console.log(e);
-
-//     var deltaMove = {
-//         x: e.offsetX-previousMousePosition.x,
-//         y: e.offsetY-previousMousePosition.y
-//     };
-
-//     if(isDragging) {
-
-//         var deltaRotationQuaternion = new THREE.Quaternion()
-//             .setFromEuler(new THREE.Euler(
-//                 toRadians(deltaMove.y * 1),
-//                 toRadians(deltaMove.x * 1),
-//                 0,
-//                 'XYZ'
-//             ));
-
-//         objects.quaternion.multiplyQuaternions(deltaRotationQuaternion, objects.quaternion);
-//     }
-
-//     previousMousePosition = {
-//         x: e.offsetX,
-//         y: e.offsetY
-//     };
-// });
-// /* */
-
-// $(document).on('mouseup', function(e) {
-//     isDragging = false;
-// });
 
 
 function toRadians(angle) {
