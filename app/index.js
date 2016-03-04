@@ -323,7 +323,7 @@ function makeCustomDriver() {
   spotLight.shadow.mapSize.height = 4000; 
   // spotLight.shadowMapWidth = 4000;
   // spotLight.shadowMapHeight = 4000;
-  spotLight.shadowDarkness = 0.2;
+  // spotLight.shadowDarkness = 0.2;
   spotLight.intensity = 1;
   spotLight.exponent = 1;
 
