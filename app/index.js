@@ -222,8 +222,27 @@ function setCameraSize2(s) {
 }
 
 function main({DOM}) {
+	
+	const view = {
+		renderers: [
+			{
+				name: 'main',
+				size: {
+					width: 500, height: 500
+				}
+			}
+		],
+		renderSets: [
+		  {
+		    rendererKey: 'main',
+		    sceneKey: 'main',
+		    cameraKey: 'main'
+		  }
+		]
+	};
+	
   return {
-    custom: stream.of(1,4,17)
+    custom: stream.of(view, view, view)
   };
 }
 
@@ -247,13 +266,13 @@ function makeCustomDriver() {
       border: '1px solid black'
     });
     
-  var main_renderer = new THREE.WebGLRenderer({
-    canvas: main_canvas.node(),
-    antialias: true
-  });
-  main_renderer.setSize(500, 500);
-  main_renderer.shadowMap.enabled = true;
-  main_renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // var main_renderer = new THREE.WebGLRenderer({
+  //   canvas: main_canvas.node(),
+  //   antialias: true
+  // });
+  // main_renderer.setSize(500, 500);
+  // main_renderer.shadowMap.enabled = true;
+  // main_renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   
   var room_size = {
     width: 20,
@@ -300,9 +319,11 @@ function makeCustomDriver() {
   var spotLight = new THREE.SpotLight(0xffffff, 0.95);
   spotLight.position.setY(100);
   spotLight.castShadow = true;
-  spotLight.shadowMapWidth = 4000;
-  spotLight.shadowMapHeight = 4000;
-  // spotLight.shadowDarkness = 0.2;
+  spotLight.shadow.mapSize.width = 4000;
+  spotLight.shadow.mapSize.height = 4000; 
+  // spotLight.shadowMapWidth = 4000;
+  // spotLight.shadowMapHeight = 4000;
+  spotLight.shadowDarkness = 0.2;
   spotLight.intensity = 1;
   spotLight.exponent = 1;
 
@@ -315,13 +336,55 @@ function makeCustomDriver() {
   var camera = getFirstCamera();
   setCameraSize2({ width: 500, height: 500 })(camera);
   
+  // const renderers = {
+  // 	main: main_renderer
+  // };
+  
+  const renderers = {};
+  
+  const scenes = {
+    main: new_scene
+  };
+  
+  const cameras = {
+    main: camera
+  };
+  
   return function customDriver(view$) {
-  	view$.subscribe(d => {
-  		console.log('view', d);
-  		main_renderer.render(new_scene, camera);
+  	view$.subscribe(view => {
+  		console.log('view', view);
+  		
+  		// renderers['main'].render(new_scene, camera);
+  		view.renderers.forEach(obj => {
+  		  if (typeof renderers[obj.name] === 'undefined') {
+  		    console.log('enter new renderer')
+  		    var main_renderer = new THREE.WebGLRenderer({
+            canvas: main_canvas.node(),
+            antialias: true
+          });
+          main_renderer.setSize(500, 500);
+          main_renderer.shadowMap.enabled = true;
+          main_renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderers[obj.name] = main_renderer;
+  		  }
+  		});
+  		
+  		view.renderSets.forEach(({rendererKey, sceneKey, cameraKey}) => {
+  			renderers[rendererKey].render(scenes[sceneKey], cameras[cameraKey]);
+  		});
+  		
   	});
   	return {};
   };
 }
 
 // start();
+
+// renderers['main'].render(scenes['main'], camera['main']);
+// stream.combineLatest(
+// 	renderer$.pluck('main'),
+// 	scene$.pluck('main'),
+// 	camera$.pluck('main')
+// )
+// renderers.filter(r => {
+//)
