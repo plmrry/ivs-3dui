@@ -1,9 +1,14 @@
 if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
-var container;
+var container, cameraControls;
 var camera, scene, renderer;
 var mouse, raycaster, isShiftDown = false;
 var isAdding = isRemoving = isDragging = false;
+var face;
+var _last = new THREE.Vector4();
+var _inverse = new THREE.Matrix4();
+var _v4 = new THREE.Vector3();
+var _vector = new THREE.Vector3();
 
 var previousMousePosition = {
     x: 0,
@@ -11,10 +16,10 @@ var previousMousePosition = {
 }
 
 var interactiveCone, interactiveConeMaterial;
-var objects = new THREE.Object3D();
+var objects;
 
 init();
-render();
+animate();
 
 function init() {
 
@@ -24,6 +29,11 @@ function init() {
 
     scene = new THREE.Scene();
 
+    objects = new THREE.Object3D();
+    objects.name = "Objects"
+    scene.add( objects );
+
+
     interactiveConeGeo = new THREE.CylinderGeometry(100, 0, 600, 100, 1, true);
     interactiveConeGeo.translate(0, 300, 0);
     interactiveConeGeo.rotateX(Math.PI/2.);
@@ -32,35 +42,45 @@ function init() {
     interactiveCone.material.side = THREE.DoubleSide;
     interactiveCone.material.transparent = true;
     interactiveCone.visible = false; // Make its visibility to off for now
-
-    scene.add( interactiveCone, objects );
-
-    //
+    scene.add( interactiveCone );
 
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 
     var geometry = new THREE.SphereBufferGeometry( 300, 100, 100 );
-
     sphere = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( {color: 0xFFFFFF, opacity: 0.6 } ) );
     sphere.material.transparent = true;
     sphere.name = "Sphere"
     objects.add( sphere );
-    objects.name = "Objects"
 
+
+    // face = new THREE.VertexNormalsHelper(sphere, 20, 0xff33ff);
+    // scene.add(face);
     // Lights
 
     var ambientLight = new THREE.AmbientLight( 0x606060 );
-    scene.add( ambientLight );
 
     var directionalLight = new THREE.DirectionalLight( 0xffffff );
     directionalLight.position.set( 1, 0.75, 0.5 ).normalize();
+
+    scene.add( ambientLight );
     scene.add( directionalLight );
+
 
     renderer = new THREE.WebGLRenderer( { antialias: true } );
     renderer.setClearColor( 0xf0f0f0 );
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setSize( window.innerWidth, window.innerHeight );
+
+
+    cameraControls = new THREE.OrbitControls( camera, renderer.domElement );
+    cameraControls.enableZoom = false;
+    cameraControls.enablePan = false;
+    cameraControls.enableRotate = false;
+    cameraControls.enableDamping = true;
+    cameraControls.target.set( 0, 0, 0 );
+    // cameraControls.addEventListener( 'change', render );
+
 
     container = document.getElementById('IVS');
     container.appendChild( renderer.domElement );
@@ -104,7 +124,7 @@ function onWindowResize() {
 
 
 function onDocumentMouseDown( event ) {
-    console.log('mouseDown', isDragging, isAdding, isRemoving);
+    console.log('mouseDown', isDragging, isAdding, isRemoving, cameraControls.enableRotate);
     event.preventDefault();
 
     mouse.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
@@ -114,7 +134,7 @@ function onDocumentMouseDown( event ) {
     var intersects = raycaster.intersectObjects( objects.children );
 
     if ( intersects.length > 0 ) {
-        console.log("intersects.length > 0", intersects);
+        console.log("intersects.length > 0", intersects[0].point);
         var intersect = intersects[ 0 ];
 
         // delete cone
@@ -132,19 +152,33 @@ function onDocumentMouseDown( event ) {
         // create cone
 
         } else if (isAdding) {
-            console.log("\tisAdding", intersect.point);
             var placedCone = new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
-            placedCone.lookAt(intersect.point);
+            // placedCone.lookAt(intersect.point);
+            // placedCone.visible = false;
+            // scene.add(placedCone);
 
+            var m = placedCone.quaternion.clone();
+            // _inverse.getInverse(objects.matrix);
+            // _v4.copy( intersect.point );
+            // _v4.applyMatrix4(_inverse);
+            // THREE.SceneUtils.attach( placedCone, scene, objects );
             objects.add( placedCone );
+            placedCone.lookAt( intersect.object.worldToLocal( intersect.point ) );
+            // placedCone.lookAt ( intersect.point );
+
+            // placedCone.quaternion.multiplyQuaternions(m, objects.quaternion);
+            // .matrix.makeRotationFromQuaternion (m);
+            console.log("\tisAdding", intersect.point, placedCone);
             interactiveCone.visible = false;
             isAdding = isRemoving = isDragging = false;
+            cameraControls.enableRotate = false;
 
         } else {
-            console.log("\telse..", isDragging, isAdding, isRemoving);
+            console.log("\telse..", isDragging, isAdding, isRemoving, cameraControls.enableRotate);
             if ( intersect.object === sphere ) {
                 isDragging = true;
                 isAdding = isRemoving = false;
+                cameraControls.enableRotate = false;
             }
         }
 
@@ -153,13 +187,14 @@ function onDocumentMouseDown( event ) {
     } else {
         // isDragging = true;
         isAdding = isRemoving = false;
+        cameraControls.enableRotate = true;
     }
 
 }
 
 
 function onDocumentMouseMove( event ) {
-    console.log('mouseMove', isDragging, isAdding, isRemoving);
+    // console.log('mouseMove', isDragging, isAdding, isRemoving, cameraControls.enableRotate);
 
     event.preventDefault();
 
@@ -176,13 +211,13 @@ function onDocumentMouseMove( event ) {
             var intersect = intersects[ 0 ];
 
             interactiveCone.lookAt(intersect.point);
-
+            console.log(intersect.point);
         }
 
         render();
 
     } else if(isDragging) {
-        console.log("isDragging", isDragging, mouse.x, mouse.y);
+        console.log("isDragging", isDragging); //, mouse.x, mouse.y);
         var deltaMove = {
             // x: mouse.x-previousMousePosition.x,
             // y: mouse.y-previousMousePosition.y
@@ -199,6 +234,10 @@ function onDocumentMouseMove( event ) {
             ));
 
         objects.quaternion.multiplyQuaternions(deltaRotationQuaternion, objects.quaternion);
+        // face.update();
+        render();
+
+    } else if (cameraControls.enableRotate) {
         render();
     }
 
@@ -212,10 +251,12 @@ function onDocumentMouseMove( event ) {
 }
 
 function onDocumentMouseUp( event ) {
-    console.log('mouseUp', isDragging, isAdding, isRemoving);
-    if (isDragging) {
+    console.log('mouseUp', isDragging, isAdding, isRemoving, cameraControls.enableRotate);
+    if (isDragging)
         isDragging = isAdding = isRemoving = false;
-    }
+
+    if (cameraControls.enableRotate)
+        cameraControls.enableRotate = false;
 
 }
 
@@ -236,6 +277,14 @@ function onDocumentKeyUp( event ) {
         case 16: isShiftDown = false; break;
 
     }
+
+}
+
+
+function animate() {
+    requestAnimationFrame( animate );
+    cameraControls.update();
+    render();
 
 }
 
