@@ -17,13 +17,6 @@ Selectable.prototype.querySelectorAll = function() {
 	return (this.children || (this.children = []));
 };
 
-// Selectable.prototype.querySelector = function(query) {
-//   debugger
-//   return this.children.filter(d => d.name === query);
-//   // let found = this.children.filter(d => d.name === query);
-//   // return (found.length ? found[0] : undefined);
-// };
-
 Selectable.prototype.appendChild = function(child) {
 	this.children.push(child);
 	return child;
@@ -130,6 +123,12 @@ function main({DOM}) {
 		scenes: [
 			{
 				id: 'main',
+				floors: [
+				  {
+				    type: 'floor',
+				    name: 'floor',
+				  }
+				],
 				sound_objects: [
 					{
 						type: 'sound_object',
@@ -161,7 +160,10 @@ function main({DOM}) {
 		],
 		cameras: [
 			{
-				id: 'main'
+				id: 'main',
+				size: {
+				  width: 500, height: 500
+				}
 			}
 		],
 		renderers: [
@@ -182,7 +184,7 @@ function main({DOM}) {
 	};
 	
 	return {
-		custom: stream.of(view, view, view)
+		custom: stream.of(view, view, view, view, view)
 	};
 }
 
@@ -221,9 +223,6 @@ function makeCustomDriver() {
 	spotLight.castShadow = true;
 	spotLight.shadow.mapSize.width = 4000;
 	spotLight.shadow.mapSize.height = 4000; 
-	// spotLight.shadowMapWidth = 4000;
-	// spotLight.shadowMapHeight = 4000;
-	// spotLight.shadowDarkness = 0.2;
 	spotLight.intensity = 1;
 	spotLight.exponent = 1;
 
@@ -289,7 +288,6 @@ function makeCustomDriver() {
 				
 		sound_objects
 			.each(function(d) {
-				debug('sound object')('each', 'each');
 				if (! _.isMatch(this.position, d.position)) {
 					debug('sound object')('set position', d.position);
 					this.position.copy(d.position);
@@ -337,7 +335,6 @@ function makeCustomDriver() {
 				});
 				let cone = new THREE.Mesh(geometry, material);
 				cone.name = 'cone';
-				// cone.renderOrder = 1;
 				cone.castShadow = true;
 				cone.receiveShadow = true;
 				
