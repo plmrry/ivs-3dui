@@ -104,8 +104,10 @@ function addConeParentWithParams(params) {
 
 function updateConeParent(coneParent) {
 	var cone, geom, newGeom, params;
-	coneParent.rotation.x = coneParent._phi;
-	coneParent.rotation.z = coneParent._theta;
+// 	coneParent.rotation.x = coneParent._phi;
+// 	coneParent.rotation.z = coneParent._theta;
+	coneParent.rotation.z = coneParent._phi;
+	coneParent.rotation.x = coneParent._theta;
 	cone = coneParent.getObjectByName('cone');
 	geom = cone.geometry;
 	params = geom.parameters;
@@ -259,22 +261,23 @@ function main({DOM}) {
 						id: 1,
 						position: {
 							x: 2,
-							y: 0,
+							y: -0.5,
 							z: 1
 						},
-						volume: 1,
+						volume: 0.8,
 						cones: [
 							{
 								volume: 2,
 								spread: 0.5,
-								theta: 0,
-								phi: Math.PI * 0.5
+								theta: Math.PI * 0.5,
+								phi: 0,
+								selected: true
 							},
 							{
 								volume: 1.2,
 								spread: 0.7,
-								theta: Math.PI * 0.3,
-								phi: -Math.PI * 0.1
+								theta: -Math.PI * 0.1,
+								phi: Math.PI * 0.3
 							}
 						]
 					}
@@ -350,15 +353,19 @@ function makeCustomDriver() {
 	addConeParentWithParams({
 		_volume: 2,
 		_spread: 0.5,
-		_theta: 0,
-		_phi: Math.PI / 2
+		// _theta: 0,
+		// _phi: Math.PI / 2
+		_theta: Math.PI /2,
+		_phi: 0
 	})(sphere);
 	
 	addConeParentWithParams({
 		_volume: 1.2,
 		_spread: 0.7,
-		_theta: Math.PI * 0.3,
-		_phi: -Math.PI * 0.1
+		// _theta: Math.PI * 0.3,
+		// _phi: -Math.PI * 0.1
+		_theta: -Math.PI * 0.1,
+		_phi: Math.PI * 0.3
 	})(sphere);
 	
 	var color = new THREE.Color("#66c2ff");
@@ -468,9 +475,66 @@ function makeCustomDriver() {
 			
 		cones
 			.enter()
-			// .append(function(d) {
-			// 	debugger
-			// })
+			.append(function(d) {
+				let CONE_BOTTOM = 0.01;
+				let CONE_RADIAL_SEGMENTS = 50;
+				let params = {
+					radiusBottom: CONE_BOTTOM,
+					openEnded: true,
+					radialSegments: CONE_RADIAL_SEGMENTS
+				}
+				let geometry = new THREE.CylinderGeometry(
+					params.radiusTop,
+					params.radiusBottom,
+					params.height,
+					params.radialSegments,
+					params.heightSegments,
+					params.openEnded
+				);
+				let material = new THREE.MeshPhongMaterial({
+					transparent: true,
+					opacity: 0.5,
+					side: THREE.DoubleSide
+				});
+				cone = new THREE.Mesh(geometry, material);
+				cone.name = 'cone';
+				// cone.renderOrder = 1;
+				cone.castShadow = true;
+				cone.receiveShadow = true;
+				
+				let coneParent = new THREE.Object3D();
+				coneParent.add(cone);
+				
+				return coneParent;
+			});
+			
+		cones
+			.each(function(d) {
+				this.rotation.x = d.theta;
+				this.rotation.z = d.phi;
+				
+				let cone = this.children[0];
+				let params = cone.geometry.parameters;
+				let newParams = { height: d.volume, radiusTop: d.spread };
+				if (! _.isMatch(params, newParams)) {
+					debug('cone')('new geometry');
+					Object.assign(params, newParams);
+					let newGeom = new THREE.CylinderGeometry(
+						params.radiusTop,
+						params.radiusBottom,
+						params.height,
+						params.radialSegments,
+						params.heightSegments,
+						params.openEnded
+					);
+					cone.geometry.dispose();
+					cone.geometry = newGeom;
+					cone.position.y = cone.geometry.parameters.height / 2;
+				}
+				
+				let SELECTED_COLOR = new THREE.Color("#66c2ff");
+				if (d.selected === true) cone.material.color = SELECTED_COLOR;
+			})
 				 
 		let cameras = state.cameras.selectAll().data(view.cameras);
 		
