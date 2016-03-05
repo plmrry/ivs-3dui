@@ -52,82 +52,6 @@ var ROOM_SIZE = {
 
 var CONE_BOTTOM = 0.01;
 
-function getConeParentWithParams(params) {
-	var CONE_RADIAL_SEGMENTS, cone, coneParent, geometry, material;
-	coneParent = new THREE.Object3D();
-	Object.assign(coneParent, params);
-	coneParent.castShadow = true;
-	coneParent.receiveShadow = true;
-	CONE_RADIAL_SEGMENTS = 50;
-	var _pars = {
-		radiusBottom: CONE_BOTTOM,
-		openEnded: true,
-		radialSegments: CONE_RADIAL_SEGMENTS
-	};
-	geometry = new THREE.CylinderGeometry(
-		_pars.radiusTop,
-		_pars.radiusBottom,
-		_pars.height,
-		_pars.radialSegments,
-		_pars.heightSegments,
-		_pars.openEnded
-	);
-	geometry.parameters = {
-		radiusBottom: CONE_BOTTOM,
-		openEnded: true,
-		radialSegments: CONE_RADIAL_SEGMENTS
-	};
-	material = new THREE.MeshPhongMaterial({
-		transparent: true,
-		opacity: 0.5,
-		side: THREE.DoubleSide
-	});
-	cone = new THREE.Mesh(geometry, material);
-	cone.name = 'cone';
-	cone.castShadow = true;
-	cone.renderOrder = 1;
-	cone.receiveShadow = true;
-	coneParent.add(cone);
-	return coneParent;
-}
-
-function addConeParentWithParams(params) {
-	return function(obj) {
-		var coneParent, i;
-		coneParent = getConeParentWithParams(params);
-		updateConeParent(coneParent);
-		i = obj.children.length;
-		coneParent.name = "cone" + i;
-		return obj.add(coneParent);
-	};
-}
-
-function updateConeParent(coneParent) {
-	var cone, geom, newGeom, params;
-// 	coneParent.rotation.x = coneParent._phi;
-// 	coneParent.rotation.z = coneParent._theta;
-	coneParent.rotation.z = coneParent._phi;
-	coneParent.rotation.x = coneParent._theta;
-	cone = coneParent.getObjectByName('cone');
-	geom = cone.geometry;
-	params = geom.parameters;
-	params.height = coneParent._volume;
-	params.radiusTop = coneParent._spread;
-	newGeom = geom.clone();
-	var _pars = params;
-	newGeom = new THREE.CylinderGeometry(
-		_pars.radiusTop,
-		_pars.radiusBottom,
-		_pars.height,
-		_pars.radialSegments,
-		_pars.heightSegments,
-		_pars.openEnded
-	);
-	cone.geometry.dispose();
-	cone.geometry = newGeom;
-	return cone.position.y = cone.geometry.parameters.height / 2;
-}
-
 function getFirstCamera() {
 	var c = new THREE.OrthographicCamera();
 	c.zoom = INITIAL_ZOOM;
@@ -155,55 +79,6 @@ function polarToVector(o) {
 }
 
 var degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
-
-function fakeTweenInSphere(sphere) {
-	var currentGeom = sphere.geometry;
-	var params = currentGeom.parameters;
-	params.radius = 0.8;
-	console.log(params);
-	var newGeom = new THREE.SphereGeometry(
-		params.radius,
-		params.widthSegments,
-		params.heightSegments
-	)
-	sphere.geometry.dispose();
-	sphere.geometry = newGeom;
-}
-
-function addObjectAtPoint2(p, volume) {
-	console.info("Add object at", p);
-	var geometry = new THREE.SphereGeometry(0.1, 30, 30);
-	var material = new THREE.MeshPhongMaterial({
-		color: PARENT_SPHERE_COLOR,
-		transparent: true,
-		opacity: 0.3,
-		side: THREE.DoubleSide
-	});
-	var sphere = new THREE.Mesh(geometry, material);
-	sphere.castShadow = true;
-	sphere.receiveShadow = true;
-	sphere.name = 'parentSphere';
-	sphere._volume = volume || 1;
-	sphere.renderOrder = 10;
-	var lineGeom = new THREE.Geometry();
-	var _lineBottom = -p.y + (-ROOM_SIZE.height / 2);
-	lineGeom.vertices.push(new THREE.Vector3(0, _lineBottom, 0));
-	lineGeom.vertices.push(new THREE.Vector3(0, 100, 0));
-	lineGeom.computeLineDistances();
-	var dashSize = 0.3;
-	var mat = new THREE.LineDashedMaterial({
-		color: 0,
-		linewidth: 1,
-		dashSize: dashSize,
-		gapSize: dashSize,
-		transparent: true,
-		opacity: 0.2
-	});
-	var line = new THREE.Line(lineGeom, mat);
-	sphere.add(line);
-	sphere.position.copy(p);
-	return sphere;
-}
 
 function getFloor(room_size) {
 	var FLOOR_SIZE = 100;
@@ -339,42 +214,6 @@ function makeCustomDriver() {
 	
 	var new_scene = new THREE.Scene();
 	
-	function tweenColor2(color) {
-		return function(o) {
-			o.material.color = color;
-		};
-	}
-	
-	var p = new THREE.Vector3(-3, -0.5, 3);
-	var sphere = addObjectAtPoint2(p, 0.7);
-	sphere.name = 'another';
-	fakeTweenInSphere(sphere);
-	
-	addConeParentWithParams({
-		_volume: 2,
-		_spread: 0.5,
-		// _theta: 0,
-		// _phi: Math.PI / 2
-		_theta: Math.PI /2,
-		_phi: 0
-	})(sphere);
-	
-	addConeParentWithParams({
-		_volume: 1.2,
-		_spread: 0.7,
-		// _theta: Math.PI * 0.3,
-		// _phi: -Math.PI * 0.1
-		_theta: -Math.PI * 0.1,
-		_phi: Math.PI * 0.3
-	})(sphere);
-	
-	var color = new THREE.Color("#66c2ff");
-	var cone = sphere.children[1].getObjectByName('cone');
-	
-	tweenColor2(color)(cone);
-	
-	new_scene.add(sphere);
-	
 	var floor = getFloor(room_size);
 	
 	var spotLight = new THREE.SpotLight(0xffffff, 0.95);
@@ -496,7 +335,7 @@ function makeCustomDriver() {
 					opacity: 0.5,
 					side: THREE.DoubleSide
 				});
-				cone = new THREE.Mesh(geometry, material);
+				let cone = new THREE.Mesh(geometry, material);
 				cone.name = 'cone';
 				// cone.renderOrder = 1;
 				cone.castShadow = true;
@@ -583,16 +422,16 @@ function makeCustomDriver() {
 	};
 }
 
-function differentKeys(one, two) {
-	let length = [one, two]
-		.map(arr => _.values(arr))
-		.reduce(function(a,b) { let u = _; debugger })
-		// .reduce((a,b) => _.difference(a,b))
-		// .length
-	console.log(_.values(one), _.values(two))
-	console.log(length)
-	return true
-}
+// function differentKeys(one, two) {
+// 	let length = [one, two]
+// 		.map(arr => _.values(arr))
+// 		.reduce(function(a,b) { let u = _; debugger })
+// 		// .reduce((a,b) => _.difference(a,b))
+// 		// .length
+// 	console.log(_.values(one), _.values(two))
+// 	console.log(length)
+// 	return true
+// }
 
 function idIs(id) {
 	return function(d) {
@@ -644,3 +483,38 @@ function idIs(id) {
 			// renderers.filter(function(d) { debugger }).each(function(d) {
 			// 	console.log(d, this);
 			// })
+			
+// function addObjectAtPoint2(p, volume) {
+// 	console.info("Add object at", p);
+// 	var geometry = new THREE.SphereGeometry(0.1, 30, 30);
+// 	var material = new THREE.MeshPhongMaterial({
+// 		color: PARENT_SPHERE_COLOR,
+// 		transparent: true,
+// 		opacity: 0.3,
+// 		side: THREE.DoubleSide
+// 	});
+// 	var sphere = new THREE.Mesh(geometry, material);
+// 	sphere.castShadow = true;
+// 	sphere.receiveShadow = true;
+// 	sphere.name = 'parentSphere';
+// 	sphere._volume = volume || 1;
+// 	sphere.renderOrder = 10;
+// 	var lineGeom = new THREE.Geometry();
+// 	var _lineBottom = -p.y + (-ROOM_SIZE.height / 2);
+// 	lineGeom.vertices.push(new THREE.Vector3(0, _lineBottom, 0));
+// 	lineGeom.vertices.push(new THREE.Vector3(0, 100, 0));
+// 	lineGeom.computeLineDistances();
+// 	var dashSize = 0.3;
+// 	var mat = new THREE.LineDashedMaterial({
+// 		color: 0,
+// 		linewidth: 1,
+// 		dashSize: dashSize,
+// 		gapSize: dashSize,
+// 		transparent: true,
+// 		opacity: 0.2
+// 	});
+// 	var line = new THREE.Line(lineGeom, mat);
+// 	sphere.add(line);
+// 	sphere.position.copy(p);
+// 	return sphere;
+// }
