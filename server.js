@@ -15,7 +15,15 @@ app.set('port', 9877);
 
 var appPath = path.resolve(__dirname, 'app', 'index.js');
 
-const external = ['three/three.js', '@cycle/dom', '@cycle/core', 'rx', 'd3', 'debug'];
+const external = [
+  'three/three.js', 
+  '@cycle/dom', 
+  '@cycle/core', 
+  'rx', 
+  'd3', 
+  'debug',
+  'underscore'
+];
 app.use('/bundle.js', babelify(external));
 app.use('/app.js', babelify(appPath, { external: external }));
 
