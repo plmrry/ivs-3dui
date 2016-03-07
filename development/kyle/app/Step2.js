@@ -1,6 +1,6 @@
 if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
-var container, cameraControls;
+var container;
 var camera, scene, renderer;
 var mouse, raycaster, isShiftDown = false;
 var isAdding = isRemoving = isDragging = false;
@@ -72,15 +72,6 @@ function init() {
     renderer.setSize( window.innerWidth, window.innerHeight );
 
 
-    cameraControls = new THREE.OrbitControls( camera, renderer.domElement );
-    cameraControls.enableZoom = false;
-    cameraControls.enablePan = false;
-    cameraControls.enableRotate = false;
-    cameraControls.enableDamping = true;
-    cameraControls.target.set( 0, 0, 0 );
-    // cameraControls.addEventListener( 'change', render );
-
-
     container = document.getElementById('IVS');
     container.appendChild( renderer.domElement );
 
@@ -122,7 +113,7 @@ function onWindowResize() {
 
 
 function onDocumentMouseDown( event ) {
-    console.log('mouseDown', isDragging, isAdding, isRemoving, cameraControls.enableRotate);
+    console.log('mouseDown', isDragging, isAdding, isRemoving);
     event.preventDefault();
 
     mouse.set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
@@ -220,8 +211,6 @@ function onDocumentMouseMove( event ) {
         objects.quaternion.multiplyQuaternions(deltaRotationQuaternion, objects.quaternion);
         render();
 
-    } else if (cameraControls.enableRotate) {
-        render();
     }
 
     previousMousePosition = {
@@ -235,15 +224,10 @@ function onDocumentMouseUp( event ) {
 
     if (isDragging)
         isDragging = isAdding = isRemoving = false;
-
-    if (cameraControls.enableRotate)
-        cameraControls.enableRotate = false;
-
 }
 
 function animate() {
     requestAnimationFrame( animate );
-    cameraControls.update();
     render();
 
 }
