@@ -9,8 +9,8 @@
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/4.0.7/rx.all.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
-  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r72/three.min.js"></script>-->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r74/three.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r72/three.min.js"></script>
+  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r74/three.min.js"></script>-->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.4/hammer.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
   
@@ -49,24 +49,13 @@
     coneParent.castShadow = true;
     coneParent.receiveShadow = true;
     CONE_RADIAL_SEGMENTS = 50;
-    var _pars = {
-      radiusBottom: CONE_BOTTOM,
-      openEnded: true,
-      radialSegments: CONE_RADIAL_SEGMENTS
-    };
-    geometry = new THREE.CylinderGeometry(
-      _pars.radiusTop,
-      _pars.radiusBottom,
-      _pars.height,
-      _pars.radialSegments,
-      _pars.heightSegments,
-      _pars.openEnded
-    );
+    geometry = new THREE.CylinderGeometry();
     geometry.parameters = {
       radiusBottom: CONE_BOTTOM,
       openEnded: true,
       radialSegments: CONE_RADIAL_SEGMENTS
     };
+    geometry = geometry.clone();
     material = new THREE.MeshPhongMaterial({
       transparent: true,
       opacity: 0.5,
@@ -102,15 +91,6 @@
     params.height = coneParent._volume;
     params.radiusTop = coneParent._spread;
     newGeom = geom.clone();
-    var _pars = params;
-    newGeom = new THREE.CylinderGeometry(
-      _pars.radiusTop,
-      _pars.radiusBottom,
-      _pars.height,
-      _pars.radialSegments,
-      _pars.heightSegments,
-      _pars.openEnded
-    );
     cone.geometry.dispose();
     cone.geometry = newGeom;
     return cone.position.y = cone.geometry.parameters.height / 2;
@@ -148,11 +128,7 @@
     var currentGeom = sphere.geometry;
     var params = currentGeom.parameters;
     params.radius = 0.8;
-    var newGeom = new THREE.SphereGeometry(
-      params.radius,
-      params.widthSegments,
-      params.heightSegments
-    )
+    var newGeom = currentGeom.clone();
     sphere.geometry.dispose();
     sphere.geometry = newGeom;
   }

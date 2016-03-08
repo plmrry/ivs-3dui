@@ -1,9 +1,12 @@
+'use strict'
+
 var express = require('express');
 var path = require('path');
 var babelify = require('express-babelify-middleware');
 var serveIndex = require('serve-index');
 
-var app = module.exports = express();
+var app = express();
+
 app.set('port', 9877);
 
 //
@@ -12,7 +15,17 @@ app.set('port', 9877);
 
 var appPath = path.resolve(__dirname, 'app', 'index.js');
 
-app.use('/app.js', babelify(appPath));
+const external = [
+  'three/three.js', 
+  '@cycle/dom', 
+  '@cycle/core', 
+  'rx', 
+  'd3', 
+  'debug',
+  'underscore'
+];
+app.use('/bundle.js', babelify(external));
+app.use('/app.js', babelify(appPath, { external: external }));
 
 app.use(express.static(appPath));
 
@@ -33,3 +46,4 @@ var staticPath = path.resolve(__dirname, 'static');
 
 app.use('/', express.static(staticPath));
 
+module.exports = app;
