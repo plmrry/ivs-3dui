@@ -167,6 +167,8 @@
                         if (ghostSelector.visible === true) { // add curve pt
                             selection = activeObject.curve.mesh;
 
+                            // TODO add point to spline
+
                         }
                         else
     						selection = ray.intersectObjects(activeObject.children)[0].object;
@@ -210,6 +212,7 @@
 							// clear previous selection ?
 							if (activeObject)
 								activeObject.active = false;
+                            // TODO maybe not if i want to delete ? ? ? ? ?
 
 							activeObject = new PathObject(points);
 							soundObjects.push(activeObject);
@@ -233,6 +236,17 @@
 
 
 
+                        // TODO move sound object (calculate offset) 
+
+                        // TODO move point
+                        //   set cube position to mouse position
+                        //   update spline outline
+                        //   placeholder garbage
+                        if (ghostSelector.visible === true)
+                        {
+                            ghostSelector.position.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
+                            ghostSelector.position.y = e.clientY - renderer.domElement.offsetTop +camera.top;
+                        }
 
                     }
 				}
@@ -256,9 +270,9 @@
                         if (newHoverObject && newHoverObject.type === 'Line') {
                             // ghost object
                             ghostSelector.visible = true;
-                            ghostSelector.position.x = intersection[0].point.x;
-                            ghostSelector.position.y = intersection[0].point.y;
-                            ghostSelector.position.z = intersection[0].point.z;
+                            ghostSelector.position.x = intersection[Math.floor(intersection.length/2)].point.x;
+                            ghostSelector.position.y = intersection[Math.floor(intersection.length/2)].point.y;
+                            ghostSelector.position.z = intersection[Math.floor(intersection.length/2)].point.z;
                         }
                         else {
                             ghostSelector.visible = false;
