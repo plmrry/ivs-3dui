@@ -99,6 +99,7 @@ function main({DOM}) {
 				sound_objects: [
 					{
 						type: 'sound_object',
+						name: 'sound_object',
 						id: 1,
 						position: {
 							x: 2,
@@ -168,16 +169,27 @@ function makeCustomDriver() {
 		this.add(c); 
 		return c; 
 	};
-	THREE.Object3D.prototype.querySelectorAll = function () { 
-		return this.children; 
+	THREE.Object3D.prototype.querySelectorAll = function (query) { 
+		if (typeof query === 'undefined') return this.children;
+		return this.children.filter(d => _.isMatch(d, query));
 	};
 
-	const Selectable = function Selectable() {};
-	Selectable.prototype.querySelector = function(query) {
-		return d3.select(this).selectAll().filter(d => d.id === query).node();
+	const Selectable = function Selectable() {
+		this.children = [];
 	};
-	Selectable.prototype.querySelectorAll = function() {
-		return (this.children || (this.children = []));
+	Selectable.prototype.querySelector = function(query) {
+		if (typeof query === 'string') {
+			console.warn('query is string');
+			query = { id: query };
+		}
+		return d3.select(this)
+			.selectAll()
+			.filter(d => _.isMatch(d, query))
+			.node();
+	};
+	Selectable.prototype.querySelectorAll = function(query) {
+		if (typeof query === 'undefined') return this.children;
+		return this.children.filter(d => _.isMatch(d, query));
 	};
 	Selectable.prototype.appendChild = function(child) {
 		this.children.push(child);
@@ -252,56 +264,8 @@ function makeCustomDriver() {
 				debug('scene')('new scene');
 				return first_scene;
 			});
-				
-		let sound_objects = scenes
-			.selectAll()
-			.filter(function(d, i) { 
-				if (typeof d === 'undefined') return false;
-				if (typeof d.type === 'undefined') return false;
-				return d.type === 'sound_object';
-			})
-			.data(function(d) { return d.sound_objects });
 			
-		sound_objects
-			.enter()
-			.append(function(d) {
-				debug('sound object')('new object');
-				var geometry = new THREE.SphereGeometry(0.1, 30, 30);
-				var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
-				var material = new THREE.MeshPhongMaterial({
-					color: PARENT_SPHERE_COLOR,
-					transparent: true,
-					opacity: 0.3,
-					side: THREE.DoubleSide
-				});
-				var sphere = new THREE.Mesh(geometry, material);
-				sphere.castShadow = true;
-				sphere.receiveShadow = true;
-				sphere.name = 'parentSphere';
-				sphere._volume = 1;
-				sphere.renderOrder = 10;
-				return sphere;
-			});
-				
-		sound_objects
-			.each(function(d) {
-				if (! _.isMatch(this.position, d.position)) {
-					debug('sound object')('set position', d.position);
-					this.position.copy(d.position);
-				}
-				let params = this.geometry.parameters;
-				if (! _.isMatch(params, { radius: d.volume })) {
-					debug('sound object')('set radius', d.volume);
-					Object.assign(params, { radius: d.volume });
-					let newGeom = new THREE.SphereGeometry(
-						params.radius,
-						params.widthSegments,
-						params.heightSegments
-					);
-					this.geometry.dispose();
-					this.geometry = newGeom;
-				}
-			});
+		let sound_objects = updateSoundObjects(scenes);
 		
 		updateCones(sound_objects);
 				 
@@ -315,13 +279,13 @@ function makeCustomDriver() {
 
 		updateRenderers(view, state);
 		
-		state.renderers.select('main');
+		// state.renderers.select('main');
 			
 		view.renderSets
 			.forEach(({render_id, scene_id, camera_id}) => {
-				let renderer = state.renderers.select(render_id).node();
-				let scene = state.scenes.select(scene_id).node();
-				let camera = state.cameras.select(camera_id).node();
+				let renderer = state.renderers.select({ id: render_id }).node();
+				let scene = state.scenes.select({ id: scene_id }).node();
+				let camera = state.cameras.select({ id: camera_id }).node();
 				renderer.render(scene, camera);
 			});
 			
@@ -331,17 +295,66 @@ function makeCustomDriver() {
 	};
 }
 
+function updateSoundObjects(scenes) {
+
+	let sound_objects = scenes
+		.selectAll({ name: 'sound_object' })
+		.data(function(d) { return d.sound_objects });
+			
+	sound_objects
+		.enter()
+		.append(function(d) {
+			debug('sound object')('new object');
+			var geometry = new THREE.SphereGeometry(0.1, 30, 30);
+			var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
+			var material = new THREE.MeshPhongMaterial({
+				color: PARENT_SPHERE_COLOR,
+				transparent: true,
+				opacity: 0.3,
+				side: THREE.DoubleSide
+			});
+			var sphere = new THREE.Mesh(geometry, material);
+			sphere.castShadow = true;
+			sphere.receiveShadow = true;
+			// sphere.name = 'parentSphere';
+			sphere.name = d.name;
+			sphere._volume = 1;
+			sphere.renderOrder = 10;
+			return sphere;
+		});
+			
+	sound_objects
+		.each(function(d) {
+			if (! _.isMatch(this.position, d.position)) {
+				debug('sound object')('set position', d.position);
+				this.position.copy(d.position);
+			}
+			let params = this.geometry.parameters;
+			if (! _.isMatch(params, { radius: d.volume })) {
+				debug('sound object')('set radius', d.volume);
+				Object.assign(params, { radius: d.volume });
+				let newGeom = new THREE.SphereGeometry(
+					params.radius,
+					params.widthSegments,
+					params.heightSegments
+				);
+				this.geometry.dispose();
+				this.geometry = newGeom;
+			}
+		});
+		
+	return sound_objects;
+}
+
 function updateCones(sound_objects) {
 	let cones = sound_objects
 		.selectAll(function(d) { return this.children })
 		.data(function(d) { return d.cones });
-		
 	cones
 		.enter()
-		.append(getNewCone)
-		
+		.append(getNewCone);
 	cones
-		.each(updateOneCone)
+		.each(updateOneCone);
 }
 
 const latitude_to_theta = d3.scale.linear()
