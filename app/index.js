@@ -11,6 +11,7 @@ const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
 function getFirstCamera() {
+	const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
 	var CAMERA_RADIUS = 100;
 	var INITIAL_THETA = 80;
 	var INITIAL_PHI = 45;
@@ -39,8 +40,6 @@ function polarToVector(o) {
 	z = radius * Math.cos(phi);
 	return new THREE.Vector3(y, z, x);
 }
-
-var degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
 
 function getFloor(room_size) {
 	var FLOOR_SIZE = 100;
@@ -111,16 +110,18 @@ function main({DOM}) {
 							{
 								volume: 2,
 								spread: 0.5,
+								latitude: 45,
 								theta: Math.PI * 0.5,
 								phi: 0,
 								selected: true
 							},
-							{
-								volume: 1.2,
-								spread: 0.7,
-								theta: -Math.PI * 0.1,
-								phi: Math.PI * 0.3
-							}
+							// {
+							// 	volume: 1.2,
+							// 	spread: 0.7,
+							// 	latitude: 75,
+							// 	theta: Math.PI * 0.1,
+							// 	phi: Math.PI * 0.3
+							// }
 						]
 					}
 				]
@@ -172,11 +173,12 @@ function makeCustomDriver() {
 	};
 
 	const Selectable = function Selectable() {};
-
+	Selectable.prototype.querySelector = function(query) {
+		return d3.select(this).selectAll().filter(d => d.id === query).node();
+	};
 	Selectable.prototype.querySelectorAll = function() {
 		return (this.children || (this.children = []));
 	};
-	
 	Selectable.prototype.appendChild = function(child) {
 		this.children.push(child);
 		return child;
@@ -195,6 +197,11 @@ function makeCustomDriver() {
 		.style({
 			border: '1px solid black'
 		});
+		
+	var move_camera_button = container
+		.append('button')
+		.text('move_camera')
+		.style('height', '100px')
 	
 	var room_size = {
 		width: 20,
@@ -224,6 +231,7 @@ function makeCustomDriver() {
 	setCameraSize2({ width: 500, height: 500 })(camera);
 	
 	const state = {
+		dom: container,
 		renderers: d3.select(new Selectable()),
 		scenes: d3.select(new Selectable()),
 		cameras: d3.select(new Selectable())
@@ -294,72 +302,8 @@ function makeCustomDriver() {
 					this.geometry = newGeom;
 				}
 			});
-			
-		let cones = sound_objects
-			.selectAll(function(d) { return this.children })
-			.data(function(d) { return d.cones });
-			
-		cones
-			.enter()
-			.append(function(d) {
-				let CONE_BOTTOM = 0.01;
-				let CONE_RADIAL_SEGMENTS = 50;
-				let params = {
-					radiusBottom: CONE_BOTTOM,
-					openEnded: true,
-					radialSegments: CONE_RADIAL_SEGMENTS
-				}
-				let geometry = new THREE.CylinderGeometry(
-					params.radiusTop,
-					params.radiusBottom,
-					params.height,
-					params.radialSegments,
-					params.heightSegments,
-					params.openEnded
-				);
-				let material = new THREE.MeshPhongMaterial({
-					transparent: true,
-					opacity: 0.5,
-					side: THREE.DoubleSide
-				});
-				let cone = new THREE.Mesh(geometry, material);
-				cone.name = 'cone';
-				cone.castShadow = true;
-				cone.receiveShadow = true;
-				
-				let coneParent = new THREE.Object3D();
-				coneParent.add(cone);
-				
-				return coneParent;
-			});
-			
-		cones
-			.each(function(d) {
-				this.rotation.x = d.theta;
-				this.rotation.z = d.phi;
-				
-				let cone = this.children[0];
-				let params = cone.geometry.parameters;
-				let newParams = { height: d.volume, radiusTop: d.spread };
-				if (! _.isMatch(params, newParams)) {
-					debug('cone')('new geometry');
-					Object.assign(params, newParams);
-					let newGeom = new THREE.CylinderGeometry(
-						params.radiusTop,
-						params.radiusBottom,
-						params.height,
-						params.radialSegments,
-						params.heightSegments,
-						params.openEnded
-					);
-					cone.geometry.dispose();
-					cone.geometry = newGeom;
-					cone.position.y = cone.geometry.parameters.height / 2;
-				}
-				
-				let SELECTED_COLOR = new THREE.Color("#66c2ff");
-				if (d.selected === true) cone.material.color = SELECTED_COLOR;
-			})
+		
+		updateCones(sound_objects);
 				 
 		let cameras = state.cameras.selectAll().data(view.cameras);
 		
@@ -368,37 +312,16 @@ function makeCustomDriver() {
 				debug('camera')('new camera');
 				return first_camera;
 			});
+
+		updateRenderers(view, state);
 		
-		let renderers = state.renderers.selectAll().data(view.renderers);
-			
-		renderers
-			.enter()
-			.append(function(d) {
-				debug('renderer')('new renderer');
-				let rend = new THREE.WebGLRenderer({
-					canvas: main_canvas.node(),
-					antialias: true
-				});
-				rend.shadowMap.enabled = true;
-				rend.shadowMap.type = THREE.PCFSoftShadowMap;
-				return rend;
-			});
-				
-		renderers
-			.each(function(d) {
-				let current = this.getSize();
-				let diff = _.difference(_.values(current), _.values(d.size));
-				if (diff.length > 0) {
-					debug('renderer')('set size');
-					this.setSize(d.size.width, d.size.height);
-				}
-			});
+		state.renderers.select('main');
 			
 		view.renderSets
 			.forEach(({render_id, scene_id, camera_id}) => {
-				let renderer = renderers.filter(idIs(render_id)).node();
-				let scene = scenes.filter(idIs(scene_id)).node();
-				let camera = cameras.filter(idIs(camera_id)).node();
+				let renderer = state.renderers.select(render_id).node();
+				let scene = state.scenes.select(scene_id).node();
+				let camera = state.cameras.select(camera_id).node();
 				renderer.render(scene, camera);
 			});
 			
@@ -408,8 +331,120 @@ function makeCustomDriver() {
 	};
 }
 
+function updateCones(sound_objects) {
+	let cones = sound_objects
+		.selectAll(function(d) { return this.children })
+		.data(function(d) { return d.cones });
+		
+	cones
+		.enter()
+		.append(getNewCone)
+		
+	cones
+		.each(updateOneCone)
+}
+
+const latitude_to_theta = d3.scale.linear()
+	.domain([90, 0, -90])
+	.range([0, Math.PI/2, Math.PI]);
+
+function updateOneCone(d) {
+	// Update rotation
+	this.rotation.x = latitude_to_theta(d.latitude);
+	this.rotation.y = d.phi;
+	// If params change, update geometry
+	let cone = this.children[0];
+	let params = cone.geometry.parameters;
+	let newParams = { height: d.volume, radiusTop: d.spread };
+	if (! _.isMatch(params, newParams)) {
+		debug('cone')('new geometry');
+		Object.assign(params, newParams);
+		let newGeom = cylinder_geometry_from_params(params);
+		cone.geometry.dispose();
+		cone.geometry = newGeom;
+		cone.position.y = cone.geometry.parameters.height / 2;
+	}
+	// Update color
+	let SELECTED_COLOR = new THREE.Color("#66c2ff");
+	if (d.selected === true) cone.material.color = SELECTED_COLOR;
+}
+
+function cylinder_geometry_from_params(params) {
+	return new THREE.CylinderGeometry(
+		params.radiusTop,
+		params.radiusBottom,
+		params.height,
+		params.radialSegments,
+		params.heightSegments,
+		params.openEnded
+	);
+}
+
+function getNewCone() {
+	let CONE_BOTTOM = 0.01;
+	let CONE_RADIAL_SEGMENTS = 50;
+	let params = {
+		radiusBottom: CONE_BOTTOM,
+		openEnded: true,
+		radialSegments: CONE_RADIAL_SEGMENTS
+	}
+	let geometry = new THREE.CylinderGeometry(
+		params.radiusTop,
+		params.radiusBottom,
+		params.height,
+		params.radialSegments,
+		params.heightSegments,
+		params.openEnded
+	);
+	let material = new THREE.MeshPhongMaterial({
+		transparent: true,
+		opacity: 0.5,
+		side: THREE.DoubleSide
+	});
+	let cone = new THREE.Mesh(geometry, material);
+	cone.name = 'cone';
+	cone.castShadow = true;
+	cone.receiveShadow = true;
+	let coneParent = new THREE.Object3D();
+	coneParent.add(cone);
+	return coneParent;	
+}
+
+function updateRenderers(view, state, dom) {
+	let renderers = state.renderers.selectAll().data(view.renderers);
+	renderers
+		.enter()
+		.append(function(d) {
+			debug('renderer')('new renderer');
+			let rend = new THREE.WebGLRenderer({
+				canvas: state.dom.select('#main-canvas').node(),
+				antialias: true
+			});
+			rend.shadowMap.enabled = true;
+			rend.shadowMap.type = THREE.PCFSoftShadowMap;
+			return rend;
+		});
+	renderers
+		.each(function(d) {
+			let current = this.getSize();
+			let diff = _.difference(_.values(current), _.values(d.size));
+			if (diff.length > 0) {
+				debug('renderer')('set size');
+				this.setSize(d.size.width, d.size.height);
+			}
+		});
+}
+
 function idIs(id) {
 	return function(d) {
 		return d.id === id;
 	};
 }
+
+// const degToRadScale = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
+// var degToRadScale;
+
+// function degToRad() {
+// 	degToRadScale = degToRadScale || d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
+// 	return degToRadScale.apply(this, arguments);
+// }
