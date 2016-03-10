@@ -10,15 +10,6 @@ debug.enable('*');
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
-function polarToVector(o) {
-	var phi, radius, theta, x, y, z;
-	radius = o.radius, theta = o.theta, phi = o.phi;
-	x = radius * Math.cos(theta) * Math.sin(phi);
-	y = radius * Math.sin(theta) * Math.sin(phi);
-	z = radius * Math.cos(phi);
-	return new THREE.Vector3(y, z, x);
-}
-
 function getFloor(room_size) {
 	var FLOOR_SIZE = 100;
 	var floorGeom = new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE);
@@ -81,8 +72,7 @@ function main({custom}) {
 		.scan((a,b) => a+b)
 		.map(longitude_to_phi)
 		.map(phi => phi % (2 * Math.PI))
-		.map(phi => (phi < 0) ? (2 * Math.PI) + phi : phi)
-		// .do(log)
+		.map(phi => (phi < 0) ? (2 * Math.PI) + phi : phi);
 		
 	const polar_position$ = stream
 		.combineLatest(
@@ -541,20 +531,6 @@ function updateRenderers(view, state, dom) {
 		});
 }
 
-function idIs(id) {
-	return function(d) {
-		return d.id === id;
-	};
-}
-
-// const degToRadScale = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
-// var degToRadScale;
-
-// function degToRad() {
-// 	degToRadScale = degToRadScale || d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
-// 	return degToRadScale.apply(this, arguments);
-// }
-
 function Selectable() {
 	this.children = [];
 	this.querySelector = function(query) {
@@ -603,58 +579,3 @@ function observableFromD3Event(type) {
 			);
 	};
 }
-
-function getFirstCamera() {
-	const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
-	// var CAMERA_RADIUS = 100;
-	// var INITIAL_THETA = 80;
-	// var INITIAL_PHI = 45;
-	// var INITIAL_ZOOM = 40;
-	var c = new THREE.OrthographicCamera();
-	// c.zoom = INITIAL_ZOOM;
-	// c._lookAt = new THREE.Vector3();
-	// c.position._polar = {
-	// 	radius: CAMERA_RADIUS,
-	// 	theta: degToRad(INITIAL_THETA),
-	// 	phi: degToRad(INITIAL_PHI)
-	// };
-	// c.position._relative = polarToVector(c.position._polar);
-// 	c.position.addVectors(c.position._relative, new THREE.Vector3());
-	// c.lookAt(c._lookAt);
-	// c.lookAt({ x: 0, y: 0, z: 0 })
-	// c.up.copy(new THREE.Vector3(0, 1, 0));
-	// c.updateProjectionMatrix();
-	return c;
-}
-
-		// main_camera_position_x$.subscribe(d => console.log(d))
-		
-	// const main_camera_lookat_x$ = slider$
-	// 	.map(d => d.node.value);
-		
-	// main_camera_lookat_x$
-	// 	.do(console.log.bind(console))
-	// 	.subscribe()
-	
-	// const main_camera_latitude$ = slider$
-	// 	.filter(d => {
-	// 		return d.node.value <= 90 && d.node.value >= 10;
-	// 	});
-		
-	// const main_camera_position_polar_degrees$ = stream
-	// 	.of({
-	// 		radius: 100,
-	// 		theta_degrees: 80,
-	// 		phi_degrees: 45
-	// 	});
-		
-	// const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
-		
-	// const main_camera_position_polar_radians$ = main_camera_position_polar_degrees$
-	// 	.map(({radius,theta_degrees,phi_degrees}) => {
-	// 		return {
-	// 			radius,
-	// 			theta: degToRad(theta_degrees),
-	// 			phi: degToRad(phi_degrees),
-	// 		}
-	// 	})
