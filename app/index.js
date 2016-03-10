@@ -5,6 +5,7 @@ import d3 from 'd3';
 import Rx from 'rx';
 import THREE from 'three/three.js';
 import _ from 'underscore';
+import combineLatestObj from 'rx-combine-latest-obj';
 
 debug.enable('*');
 const stream = Rx.Observable;
@@ -57,13 +58,13 @@ function getFloor(room_size) {
 function main({custom}) {
 	const log = console.log.bind(console);
 	
-	// custom.scenes
-	//   .map(scenes => scenes.select({ name: 'main' }))
-	//   .map(scene => scene.select({ name: 'floor' }))
-	//   .map(floor => floor.node())
-	//   .distinctUntilChanged()
-	//   .do(log)
-	//   .subscribe()
+	custom.scenes
+	  .map(scenes => scenes.select({ name: 'main' }))
+	  .map(scene => scene.select({ name: 'floor' }))
+	  .map(floor => floor.node())
+	  // .distinctUntilChanged()
+	  .do(log)
+	  .subscribe()
 	
 	// custom.scenes
 	//   .map(scenes => scenes.select({ name: 'main' }))
@@ -153,19 +154,20 @@ function main({custom}) {
 			})
 		);
 		
-	const main_camera$ = stream
-		.combineLatest(
+	const size$ = stream
+		.of({ width: 400, height: 700 })
+		.shareReplay();
+		
+	const main_camera$ = combineLatestObj({
 			position$,
 			lookAt$,
-			(p,l) => ({ position: p, lookAt: l })
-		)
-		.map(({ position, lookAt }) => {
+			size$
+		})
+		.map(({ position, lookAt, size }) => {
 			return {
 				id: 'main',
 				name: 'main',
-				size: {
-				  width: 500, height: 500
-				},
+				size: size,
 				position: position,
 				zoom: 40,
 				lookAt: lookAt
@@ -175,13 +177,12 @@ function main({custom}) {
 	
 	const foo$ = stream.of(1,2);
 	
-	const view$ = stream
-		.combineLatest(
+	const view$ = combineLatestObj({
 			main_camera$,
-			foo$,
-			(main_camera, foo) => ({ main_camera, foo })
-		)
-		.map(({ main_camera, foo }) => {
+			size$,
+			foo$
+		})
+		.map(({ main_camera, size, foo }) => {
 			return {
 				scenes: [
 					{
@@ -259,9 +260,10 @@ function main({custom}) {
 						id: 'main',
 						name: 'main',
 						canvas: '#main-canvas',
-						size: {
-							width: 500, height: 500
-						}
+						size: size
+						// size: {
+						// 	width: 500, height: 500
+						// }
 					}
 				],
 				renderSets: [
@@ -334,6 +336,7 @@ function makeCustomDriver() {
 	return function customDriver(view$) {
 		const dom$ = new Rx.ReplaySubject();
 		const scenes$ = new Rx.ReplaySubject();
+		const state$ = new Rx.ReplaySubject();
 		view$.subscribe(view => {
 			debug('view')('view update');
 				
@@ -369,6 +372,7 @@ function makeCustomDriver() {
 			
 			dom$.onNext(state.dom);
 			scenes$.onNext(state.scenes);
+			state$.onNext(state);
 		});
 		
 		return {

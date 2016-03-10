@@ -25,6 +25,7 @@
     "express": "^4.13.4",
     "express-babelify-middleware": "^0.2.1",
     "rx": "^4.0.8",
+    "rx-combine-latest-obj": "^1.0.2",
     "serve-index": "^1.7.3",
     "three": "^0.74.0",
     "underscore": "^1.8.3"
