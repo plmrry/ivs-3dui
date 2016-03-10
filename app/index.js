@@ -10,6 +10,24 @@ debug.enable('*');
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
+THREE.Object3D.prototype.appendChild = function (c) { 
+	this.add(c); 
+	return c; 
+};
+THREE.Object3D.prototype.querySelector = function(query) {
+	let key = Object.keys(query)[0];
+	return this.getObjectByProperty(key, query[key]);
+};
+THREE.Object3D.prototype.querySelectorAll = function (query) { 
+	if (typeof query === 'undefined') return this.children;
+	return this.children.filter(d => _.isMatch(d, query));
+};
+d3.selection.prototype.nodes = function() {
+	let nodes = [];
+	this.each(function() { nodes.push(this); });
+	return nodes;
+};
+
 function getFloor(room_size) {
 	var FLOOR_SIZE = 100;
 	var floorGeom = new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE);
@@ -39,11 +57,21 @@ function getFloor(room_size) {
 function main({custom}) {
 	const log = console.log.bind(console);
 	
-	custom.scene
-	  .map(s => s.select({ name: 'main' }).node())
-	  .do(scene => { debugger })
-	  .do(log)
-	  .subscribe()
+	// custom.scenes
+	//   .map(scenes => scenes.select({ name: 'main' }))
+	//   .map(scene => scene.select({ name: 'floor' }))
+	//   .map(floor => floor.node())
+	//   .distinctUntilChanged()
+	//   .do(log)
+	//   .subscribe()
+	
+	// custom.scenes
+	//   .map(scenes => scenes.select({ name: 'main' }))
+	//   .map(scene => scene.selectAll({ name: 'sound_object' }))
+	//   .map(floor => floor.nodes())
+	//   .distinctUntilChanged()
+	//   .do(log)
+	//   .subscribe()
 
   const orbit$ = custom.dom
     .select('#orbit_camera')
@@ -193,6 +221,34 @@ function main({custom}) {
 										phi: 3
 									}
 								]
+							},
+							{
+								type: 'sound_object',
+								name: 'sound_object',
+								id: 1,
+								position: {
+									x: 3,
+									y: -0.5,
+									z: -1
+								},
+								volume: 0.8,
+								cones: [
+									{
+										volume: 2,
+										spread: 0.5,
+										latitude: 45,
+										theta: Math.PI * 0.5,
+										phi: 0,
+										selected: true
+									},
+									{
+										volume: 1.2,
+										spread: 0.7,
+										latitude: 110,
+										theta: Math.PI * 0.1,
+										phi: 3
+									}
+								]
 							}
 						]
 					}
@@ -231,19 +287,6 @@ Cycle.run(main, {
 const raycaster = new THREE.Raycaster();
 
 function makeCustomDriver() {
-	
-	THREE.Object3D.prototype.appendChild = function (c) { 
-		this.add(c); 
-		return c; 
-	};
-	THREE.Object3D.prototype.querySelector = function(query) {
-		let key = Object.keys(query)[0];
-		return this.getObjectByProperty(key, query[key]);
-	};
-	THREE.Object3D.prototype.querySelectorAll = function (query) { 
-		if (typeof query === 'undefined') return this.children;
-		return this.children.filter(d => _.isMatch(d, query));
-	};
 
 	var container = d3.select('body')
 		.append('div');
@@ -290,7 +333,7 @@ function makeCustomDriver() {
 	
 	return function customDriver(view$) {
 		const dom$ = new Rx.ReplaySubject();
-		const scene$ = new Rx.ReplaySubject();
+		const scenes$ = new Rx.ReplaySubject();
 		view$.subscribe(view => {
 			debug('view')('view update');
 				
@@ -325,7 +368,7 @@ function makeCustomDriver() {
 				});
 			
 			dom$.onNext(state.dom);
-			scene$.onNext(state.scenes);
+			scenes$.onNext(state.scenes);
 		});
 		
 		return {
@@ -352,7 +395,7 @@ function makeCustomDriver() {
 					};
 				}
 			},
-			scene: scene$
+			scenes: scenes$
 		};
 	};
 }
@@ -370,7 +413,7 @@ function updateCameras(view, state) {
 		
 	cameras
 		.each(function(d) {
-			// Update camera size if needed
+			/** Update camera size if needed */
 			if (! _.isMatch(this._size, d.size)) {
 				debug('camera')('update size');
 				var s = d.size;
@@ -379,7 +422,7 @@ function updateCameras(view, state) {
 				this.updateProjectionMatrix();
 				this._size = d.size;
 			}
-			// Always update lookAt and up with position!
+			/** Always update lookAt and up with position! */
 			if (! _.isMatch(this.position, d.position)) {
 			  debug('camera')('update position');
 			  this.position.copy(d.position);
@@ -387,28 +430,18 @@ function updateCameras(view, state) {
 			  this.up.copy(new THREE.Vector3(0, 1, 0));
 			  // this.updateProjectionMatrix();
 			}
-			// let cam = this;
-			// let floor = state.scenes
-			//   .select({ id: 'main' })
-			//   .select({ name: 'floor' })
-			//   .each(function(d) {
-			//     let ray = raycaster;
-			//     debugger
-			//   })
-			// Update camera zoom
+			/**
+			 * NOTE: You could, in theory, raycast from the middle of the camera's
+			 * view to the floor in order to get the "current lookat". But that's
+			 * a little crazy, don't you think?
+			 */
+			/** Update camera zoom */
 			if (this.zoom !== d.zoom) {
 				debug('camera')('update zoom');
 				this.zoom = d.zoom;
 				this.updateProjectionMatrix();
 			}
-			// Update camera lookAt
-		// 	if (! _.isMatch(this._lookAt, d.lookAt)) {
-		// 		debug('camera')('update lookAt');
-		// 		this.lookAt(d.lookAt);
-		// 		this._lookAt = d.lookAt;
-		// 	}
 		});
-	
 }
 
 function updateSoundObjects(scenes) {
@@ -570,20 +603,6 @@ function Selectable() {
 	this.querySelector = function(query) {
 		return this.children.filter(d => _.isMatch(d, query))[0];
 	};
-	// this.querySelector = function(query) {
-	// 	console.warn('selector', query)
-	// 	if (typeof query === 'string') {
-	// 		console.warn('query is string');
-	// 		query = { id: query };
-	// 	}
-	// 	console.warn(this.children)
-	// 	// console.warn(this.children.filter(d => _.isMatch(d, query))[0])
-	// 	return this.children.filter(d => _.isMatch(d, query))[0];
-	// 	return d3.select(this)
-	// 		.selectAll()
-	// 		.filter(d => _.isMatch(d, query))
-	// 		.node();
-	// };
 	this.querySelectorAll = function(query) {
 		if (typeof query === 'undefined') return this.children;
 		return this.children.filter(d => _.isMatch(d, query));
