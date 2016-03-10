@@ -58,21 +58,70 @@ function getFloor(room_size) {
 function main({custom}) {
 	const log = console.log.bind(console);
 	
-	custom.scenes
-	  .map(scenes => scenes.select({ name: 'main' }))
-	  .map(scene => scene.select({ name: 'floor' }))
-	  .map(floor => floor.node())
-	  // .distinctUntilChanged()
-	  .do(log)
-	  .subscribe()
+	const size$ = stream
+		.of({ width: 400, height: 700 })
+		.shareReplay();
 	
-	// custom.scenes
-	//   .map(scenes => scenes.select({ name: 'main' }))
-	//   .map(scene => scene.selectAll({ name: 'sound_object' }))
-	//   .map(floor => floor.nodes())
-	//   .distinctUntilChanged()
-	//   .do(log)
-	//   .subscribe()
+	const main_canvas_drag$ = custom.dom
+    .select('#main-canvas')
+    .d3dragHandler()
+    .events('drag');
+    
+  const mouse$ = main_canvas_drag$
+  	.map(({ node, event }) => { 
+  		let mouse = d3.mouse(node);
+  		return mouse;
+  	});
+    
+  const ndcScale$ = size$
+  	.map(updateNdcDomain)
+  	.scan(apply, {
+  		x: d3.scale.linear().range([-1, 1]),
+      y: d3.scale.linear().range([1, -1])
+  	});
+  	
+  const ndc$ = mouse$
+  	.withLatestFrom(
+  		ndcScale$,
+  		getNdcFromMouse
+  	);
+	
+	const floor$ = custom.scenes
+	  .map(scenes => scenes.select({ name: 'main' }))
+	  .filter(s => s.size() > 0)
+	  .map(scene => scene.select({ name: 'floor' }))
+	  .filter(s => s.size() > 0)
+	  .map(floor => floor.node())
+	  .map(floor => [floor]);
+	  
+	const main_camera_state$ = custom.states
+		.pluck('cameras')
+		.map(s => s.select({ name: 'main' }))
+		.filter(s => s.size() > 0)
+		.map(s => s.node());
+		
+  const raycaster$ = ndc$ // combineLatestObj({ ndc$, camera: main_camera_state$ })
+  	.withLatestFrom(
+  		main_camera_state$,
+  		(n,c) => ({ ndc: n, camera: c })
+  	)
+  	.map(({ ndc, camera }) => (r) => { 
+  		r.setFromCamera(ndc, camera);
+  		return r;
+  	})
+  	.scan(apply, new THREE.Raycaster());
+  	
+  const intersects$ = raycaster$ //combineLatestObj({ raycaster$, floor$ })
+  	.withLatestFrom(
+  		floor$,
+  		(r,f) => ({ raycaster: r, floor: f })
+  	)
+  	.map(({ raycaster, floor }) => raycaster.intersectObjects(floor))
+  	.filter(arr => arr.length > 0)
+  	.map(arr => arr[0])
+  	.pluck('point', 'x')
+  	.do(log)
+  	.subscribe()
 
   const orbit$ = custom.dom
     .select('#orbit_camera')
@@ -82,13 +131,6 @@ function main({custom}) {
     .do(log)
     .shareReplay();
     
-  custom.dom
-    .select('#main-canvas')
-    .d3dragHandler()
-    .events('drag')
-    .do(log)
-    .subscribe();
-	
 	const MAX_LATITUDE = 89.99;
 	const MIN_LATITUDE = 5;
 	
@@ -153,10 +195,6 @@ function main({custom}) {
 				z: rel.z + look.z
 			})
 		);
-		
-	const size$ = stream
-		.of({ width: 400, height: 700 })
-		.shareReplay();
 		
 	const main_camera$ = combineLatestObj({
 			position$,
@@ -261,9 +299,6 @@ function main({custom}) {
 						name: 'main',
 						canvas: '#main-canvas',
 						size: size
-						// size: {
-						// 	width: 500, height: 500
-						// }
 					}
 				],
 				renderSets: [
@@ -399,7 +434,8 @@ function makeCustomDriver() {
 					};
 				}
 			},
-			scenes: scenes$
+			scenes: scenes$,
+			states: state$
 		};
 	};
 }
@@ -642,4 +678,38 @@ function observableFromD3Event(type) {
 				})
 			);
 	};
+}
+
+function getNdcFromMouse(mouse, ndc) {
+	return {
+		x: ndc.x(mouse[0]),
+		y: ndc.y(mouse[1])
+	};
+}
+
+// function getNdcFromMouse({ mouse, ndc }) {
+// 	return {
+// 		x: ndc.x(mouse[0]),
+// 		y: ndc.y(mouse[1])
+// 	};
+// }
+
+// function getNdcFromMouse(event, ndc) {
+//   event.ndc = {
+//     x: ndc.x(event.mouse[0]),
+//     y: ndc.y(event.mouse[1])
+//   };
+//   return event;
+// };
+
+function updateNdcDomain({ width, height }) {
+  return function(d) {
+    d.x.domain([0, width]);
+    d.y.domain([0, height]);
+    return d;
+  };
+}
+
+function apply(o, fn) {
+	return fn(o);
 }
