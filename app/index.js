@@ -10,27 +10,7 @@ debug.enable('*');
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
-function getFirstCamera() {
-	const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
-	var CAMERA_RADIUS = 100;
-	var INITIAL_THETA = 80;
-	var INITIAL_PHI = 45;
-	var INITIAL_ZOOM = 40;
-	var c = new THREE.OrthographicCamera();
-	c.zoom = INITIAL_ZOOM;
-	c._lookAt = new THREE.Vector3();
-	c.position._polar = {
-		radius: CAMERA_RADIUS,
-		theta: degToRad(INITIAL_THETA),
-		phi: degToRad(INITIAL_PHI)
-	};
-	c.position._relative = polarToVector(c.position._polar);
-	c.position.addVectors(c.position._relative, c._lookAt);
-	c.lookAt(c._lookAt);
-	c.up.copy(new THREE.Vector3(0, 1, 0));
-	c.updateProjectionMatrix();
-	return c;
-}
+
 
 function polarToVector(o) {
 	var phi, radius, theta, x, y, z;
@@ -67,43 +47,74 @@ function getFloor(room_size) {
 	return floor;
 }
 
-function setCameraSize2(s) {
-	return function(c) {
-		// var ref, ref1;
-		var ref = [-1, 1].map(function(d) {
-			return d * s.width / 2;
-		});
-		c.left = ref[0];
-		c.right = ref[1];
-		var ref1 = [-1, 1].map(function(d) {
-			return d * s.height / 2;
-		});
-		c.bottom = ref1[0];
-		c.top = ref1[1];
-		c.updateProjectionMatrix();
-		return c;
-	};
-}
-
 function main({custom}) {
 	const slider$ = custom
 		.select('input')
 		.events('input');
+		
+	const main_camera_lookat_x$ = slider$
+		.map(d => d.node.value);
+		
+	// main_camera_lookat_x$
+	// 	.do(console.log.bind(console))
+	// 	.subscribe()
 	
-	const camera_latitude$ = slider$
-		.filter(d => {
-			return d.node.value <= 90 && d.node.value >= 10;
+	// const main_camera_latitude$ = slider$
+	// 	.filter(d => {
+	// 		return d.node.value <= 90 && d.node.value >= 10;
+	// 	});
+		
+	// const main_camera_position_polar_degrees$ = stream
+	// 	.of({
+	// 		radius: 100,
+	// 		theta_degrees: 80,
+	// 		phi_degrees: 45
+	// 	});
+		
+	// const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
+		
+	// const main_camera_position_polar_radians$ = main_camera_position_polar_degrees$
+	// 	.map(({radius,theta_degrees,phi_degrees}) => {
+	// 		return {
+	// 			radius,
+	// 			theta: degToRad(theta_degrees),
+	// 			phi: degToRad(phi_degrees),
+	// 		}
+	// 	})
+		
+	const main_camera$ = stream
+		// .of(1)
+		.combineLatest(
+			main_camera_lookat_x$.startWith(0),
+			(lookAt_x) => ({ lookAt_x })
+		)
+		.map(({ lookAt_x }) => {
+			return {
+				id: 'main',
+				size: {
+				  width: 500, height: 500
+				},
+				position: {
+					x: 70, y: 70, z: 12
+				},
+				zoom: 40,
+				lookAt: {
+					x: lookAt_x, y: -1.5, z: 0
+				}
+			};
 		});
+		
 	
 	const foo$ = stream.of(1,2);
 	
 	const view$ = stream
 		.combineLatest(
-			camera_latitude$.startWith(45),
+			// main_camera_latitude$.startWith(45),
+			main_camera$,
 			foo$,
-			(camera_lat, foo) => ({ camera_lat, foo })
+			(main_camera, foo) => ({ main_camera, foo })
 		)
-		.map(({ camera_lat, foo }) => {
+		.map(({ main_camera, foo }) => {
 			return {
 				scenes: [
 					{
@@ -146,15 +157,7 @@ function main({custom}) {
 						]
 					}
 				],
-				cameras: [
-					{
-						id: 'main',
-						size: {
-						  width: 500, height: 500
-						},
-						latitude: camera_lat
-					}
-				],
+				cameras: [ main_camera ],
 				renderers: [
 					{
 						id: 'main',
@@ -183,11 +186,17 @@ Cycle.run(main, {
 	custom: makeCustomDriver('#app')
 });
 
+const raycaster = new THREE.Raycaster();
+
 function makeCustomDriver() {
 	
 	THREE.Object3D.prototype.appendChild = function (c) { 
 		this.add(c); 
 		return c; 
+	};
+	THREE.Object3D.prototype.querySelector = function(query) {
+		let key = Object.keys(query)[0];
+		return this.getObjectByProperty(key, query[key]);
 	};
 	THREE.Object3D.prototype.querySelectorAll = function (query) { 
 		if (typeof query === 'undefined') return this.children;
@@ -196,10 +205,6 @@ function makeCustomDriver() {
 
 	var container = d3.select('body')
 		.append('div')
-		.attr('id', 'new')
-		.style({
-			position: 'relative'
-		});
 	
 	var main_canvas = container
 		.append('canvas')
@@ -208,14 +213,20 @@ function makeCustomDriver() {
 			border: '1px solid black'
 		});
 		
-	var move_camera_button = container
+	var controls = container.append('div');
+		
+	var move_camera_button = controls
 		.append('button')
 		.text('move_camera')
 		.style('height', '100px');
 		
-	var camera_latitude_slider = container
-		.append('input')
-		.attr('type', 'range');
+	var camera_latitude_slider = controls
+		.append('label')
+		.each(function(d) {
+			d3.select(this).append('input').attr('type', 'range').attr({ min: -5, max: 5, step: 0.01})
+			d3.select(this).append('span').text('camera lookat x');
+		});
+		
 	
 	var room_size = {
 		width: 20,
@@ -224,6 +235,7 @@ function makeCustomDriver() {
 	};
 	
 	var new_scene = new THREE.Scene();
+	new_scene.name = 'main';
 	
 	var floor = getFloor(room_size);
 	
@@ -241,9 +253,6 @@ function makeCustomDriver() {
 	new_scene.add(spotLight);
 	new_scene.add(hemisphere);
 	
-	// var camera = getFirstCamera();
-	// setCameraSize2({ width: 500, height: 500 })(camera);
-	
 	const state = {
 		dom: container,
 		renderers: d3.select(new Selectable()),
@@ -252,7 +261,6 @@ function makeCustomDriver() {
 	};
 	
 	const first_scene = new_scene;
-	// const first_camera = camera;
 	
 	const dom$ = new Rx.ReplaySubject();
 	
@@ -307,18 +315,43 @@ function updateCameras(view, state) {
 	cameras.enter()
 		.append(function(d) {
 			debug('camera')('new camera');
-			let first_camera = getFirstCamera();
-			// setCameraSize2({ width: 500, height: 500 })(first_camera);
-			return first_camera;
+		  return new THREE.OrthographicCamera();
 		});
 		
 	cameras
 		.each(function(d) {
+			// Update camera size if needed
 			if (! _.isMatch(this._size, d.size)) {
+				debug('camera')('update size');
 				var s = d.size;
 				[ this.left, this.right ] = [-1,+1].map(d => d * s.width * 0.5);
 				[ this.bottom, this.top ] = [-1,+1].map(d => d * s.height * 0.5);
 				this.updateProjectionMatrix();
+				this._size = d.size;
+			}
+			if (! _.isMatch(this.position, d.position)) {
+			  debug('camera')('update position');
+			  this.position.copy(d.position);
+			}
+			// let cam = this;
+			// let floor = state.scenes
+			//   .select({ id: 'main' })
+			//   .select({ name: 'floor' })
+			//   .each(function(d) {
+			//     let ray = raycaster;
+			//     debugger
+			//   })
+			// Update camera zoom
+			if (this.zoom !== d.zoom) {
+				debug('camera')('update zoom');
+				this.zoom = d.zoom;
+				this.updateProjectionMatrix();
+			}
+			// Update camera lookAt
+			if (! _.isMatch(this._lookAt, d.lookAt)) {
+				debug('camera')('update lookAt');
+				this.lookAt(d.lookAt);
+				this._lookAt = d.lookAt;
 			}
 		});
 	
@@ -526,4 +559,28 @@ function observableFromD3Event(type) {
 				})
 			);
 	};
+}
+
+
+function getFirstCamera() {
+	const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
+	// var CAMERA_RADIUS = 100;
+	// var INITIAL_THETA = 80;
+	// var INITIAL_PHI = 45;
+	// var INITIAL_ZOOM = 40;
+	var c = new THREE.OrthographicCamera();
+	// c.zoom = INITIAL_ZOOM;
+	// c._lookAt = new THREE.Vector3();
+	// c.position._polar = {
+	// 	radius: CAMERA_RADIUS,
+	// 	theta: degToRad(INITIAL_THETA),
+	// 	phi: degToRad(INITIAL_PHI)
+	// };
+	// c.position._relative = polarToVector(c.position._polar);
+// 	c.position.addVectors(c.position._relative, new THREE.Vector3());
+	// c.lookAt(c._lookAt);
+	// c.lookAt({ x: 0, y: 0, z: 0 })
+	// c.up.copy(new THREE.Vector3(0, 1, 0));
+	// c.updateProjectionMatrix();
+	return c;
 }
