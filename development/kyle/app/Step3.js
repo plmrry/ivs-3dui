@@ -117,7 +117,7 @@ function onDocumentMouseClick( event ) {
         if ( _intersect.object != _("sphere") ) {
             // set the activeCone to the selected object (presumably the cone..)
             // console.log("_intersect", _intersect);
-            _('activeCone', _intersect.object)
+            _('activeCone', _intersect.object.parent)
             _("isDragging", true);
 
         } else
@@ -218,7 +218,7 @@ function onDocumentKeyDown( event ) {
             event.preventDefault();
             if ( _("activeCone") ) {
                 console.log("delete me");
-                _("objects").remove( _("activeCone").parent );
+                _("objects").remove( _("activeCone") );
                 _("activeCone", null);
             }
         break;
