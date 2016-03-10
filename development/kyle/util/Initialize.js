@@ -20,8 +20,8 @@ function initRenderer() {
     _("renderer").setPixelRatio( window.devicePixelRatio );
     _("renderer").setSize( window.innerWidth, window.innerHeight );
 
-    container = document.getElementById('IVS');
-    container.appendChild( _("renderer").domElement );
+    _('container', document.getElementById('IVS') );
+    _('container').appendChild( _("renderer").domElement );
 
 }
 
@@ -58,11 +58,13 @@ function initBools() {
 function initListeners() {
 
     _('plus').addEventListener("click", onClickAdd, false);
-    _('minus').addEventListener("click", onClickRemove, false);
+    // _('minus').addEventListener("click", onClickRemove, false);
 
-    document.addEventListener( 'mousemove', onDocumentMouseMove, false );
-    document.addEventListener( 'mousedown', onDocumentMouseDown, false );
-    document.addEventListener( 'mouseup', onDocumentMouseUp, false );
+    _('container').addEventListener( 'click', onDocumentMouseClick, false );
+    _('container').addEventListener( 'mousemove', onDocumentMouseMove, false );
+    document.addEventListener( 'keydown', onDocumentKeyDown, false );
+
+    // document.addEventListener( 'mouseup', onDocumentMouseUp, false );
 
     window.addEventListener( 'resize', onWindowResize, false );
 }

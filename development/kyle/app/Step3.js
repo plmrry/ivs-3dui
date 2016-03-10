@@ -51,92 +51,109 @@ function onCreate() {
 
 
 function onClickAdd() {
-    _("isAdding", true);
-    _( "isRemoving", false); _("isDragging", false);
-    _("interactiveCone").visible = true;
-    _("plus").className = "on";
+    if ( ! _("isAdding") ) {
+
+        _("isAdding", true);
+        _( "isRemoving", false); _("isDragging", false);
+        _("interactiveCone").visible = true;
+        _("plus").className = "on";
+
+        // First we need to add the cone to an empty parent object
+        var placedCone = new THREE.Object3D().add( _('interactiveCone').clone() );
+        _("objects").add( placedCone );
+
+        // Set the new cone as our Active object
+        _('activeCone', placedCone);
+
+        // turn off the Interactive cone
+        _('interactiveCone').visible = false;
+
+
+        // Set Dragging to true so it starts moving right away
+        _("isDragging", true);
+
+        // Leave this on
+        _("isAdding", true);
+
+        // Debugging
+        console.log('isAdding', _("isDragging"), _("isAdding"), _("isRemoving"));
+
+        // draw it
+        draw();
+    }
+
 }
 
-function onClickRemove() {
 
-    _("isAdding", false);
-    _("isRemoving", true); _("isDragging", false);
-    _("interactiveCone").visible = false;
-    _("minus").className = "on";
-}
+
 
 function onWindowResize() {
 
     _("camera").aspect = window.innerWidth / window.innerHeight;
     _("camera").updateProjectionMatrix();
-
     _("renderer").setSize( window.innerWidth, window.innerHeight );
 
 }
 
 
-function intersects( event, list ) {
+function onDocumentMouseClick( event ) {
 
-    event.preventDefault();
+    var _intersect = intersects(event, _("objects").children);
+    if ( _("isAdding") ) {
+        // Turn off the addition color
+        _("plus").className = "";
 
-    _("mouse").set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
+        // Remove reference to the _activeCone
+        _('activeCone', null);
 
-    _("raycaster").setFromCamera( _("mouse"), _("camera") );
+        // // Set Dragging to true so it starts moving right away
+        _("isDragging", false);
 
-    return _("raycaster").intersectObjects( list )[0];
+        // // Turn off adding stuff
+        _("isAdding", false);
+    }
+    else if ( _intersect !== undefined ) {
+        console.log("_intersect", _intersect === _("sphere"), _("sphere"));
+        if ( _intersect.object != _("sphere") ) {
+            // set the activeCone to the selected object (presumably the cone..)
+            // console.log("_intersect", _intersect);
+            _('activeCone', _intersect.object)
+            _("isDragging", true);
 
+        } else
+            _("isDragging", false);
+    }
+    else {
+        if ( !_("isDragging") )
+            _("isDragging", true);
+        else
+            _("isDragging", false);
+
+        _('activeCone', null);
+    }
+    console.log("click, _intersect", _intersect);
+    draw();
 }
+
 
 function onDocumentMouseDown( event ) {
     console.log('mouseDown', _("isDragging"), _("isAdding"), _("isRemoving"));
     var _intersect = intersects(event, _("objects").children);
 
-    if ( _intersect != undefined ) {
+    if ( _intersect === undefined ) {
+        _("isDragging", true);
+    }
+
+    if ( _intersect != undefined &&  _intersect.object != _("sphere") ) {
         console.log("intersects.length > 0", _intersect.point);
 
         // delete cone
-        if ( _("isRemoving") ) {
-            console.log("\tisRemoving");
+        if ( _intersect.object === _("sphere") ) {
+            _("isDragging", true);
 
-            if ( _intersect.object != _("sphere") ) {
-
-                _("objects").remove( _intersect.object );
-
-
-                _("isAdding", false); _("isRemoving", false); _("isDragging", false);
-                console.log('isRemoving', _("isDragging"), _("isAdding"), _("isRemoving"));
-                _("minus").className = "";
-
-            }
-
-        // create cone
-        } else if ( _("isAdding") ) {
-            var placedCone = _('interactiveCone').clone(); //new THREE.Mesh( interactiveConeGeo, interactiveConeMaterial );
-            // First we need to add the cone to the parent
-            _("objects").add( placedCone );
-
-            // then, we tell the cone (now a child of the parent object) to
-            // look at the postion of the _intersected object's position,
-            // which has been converted from world coordinates to local
-            placedCone.lookAt( _intersect.object.worldToLocal( _intersect.point ) );
-
-            _('interactiveCone').visible = false;
-
-
-            _("isAdding", false); _("isRemoving", false); _("isDragging", false);
-            console.log('isAdding', _("isDragging"), _("isAdding"), _("isRemoving"));
-            _("plus").className = "";
-
-
-        } else {
+            _("isAdding", false); _("isRemoving", false);
             console.log('else..', _("isDragging"), _("isAdding"), _("isRemoving"));
-            if ( _intersect.object === _("sphere") ) {
-                _("isDragging", true);
 
-                _("isAdding", false); _("isRemoving", false);
-                console.log('else..', _("isDragging"), _("isAdding"), _("isRemoving"));
-
-            }
         }
 
         draw();
@@ -152,26 +169,11 @@ function onDocumentMouseDown( event ) {
 function onDocumentMouseMove( event ) {
     event.preventDefault();
 
+    console.log("Moving", _("isDragging"), _('activeCone') );
     _("mouse").set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
 
-    if (_("isAdding")) {
-
-        _("raycaster").setFromCamera( _("mouse"), _("camera") );
-
-        var intersects = _("raycaster").intersectObjects( _("objects").children );
-
-        if ( intersects.length > 0 ) {
-
-            var intersect = intersects[ 0 ];
-
-            _("interactiveCone").lookAt(intersect.point);
-            console.log(intersect.point);
-        }
-
-        draw();
-
-    } else if(_("isDragging")) {
-        console.log("isDragging", _("isDragging")); //, mouse.x, mouse.y);
+    if(_("isDragging")) {
+        console.log("isDragging", _("isDragging"), _('activeCone')); //, mouse.x, mouse.y);
         var deltaMove = {
             x: event.offsetX-_("prevMousePos").x,
             y: event.offsetY-_("prevMousePos").y
@@ -185,9 +187,11 @@ function onDocumentMouseMove( event ) {
                 'XYZ'
             ));
 
-        _("objects").quaternion.multiplyQuaternions(deltaRotationQuaternion, _("objects").quaternion);
+        if (_('activeCone') != null )
+            _('activeCone').quaternion.multiplyQuaternions(deltaRotationQuaternion, _('activeCone').quaternion);
+        else
+            _('objects').quaternion.multiplyQuaternions(deltaRotationQuaternion, _('objects').quaternion);
         draw();
-
     }
 
     _("prevMousePos", {
@@ -206,6 +210,24 @@ function onDocumentMouseUp( event ) {
 
 }
 
+
+function onDocumentKeyDown( event ) {
+    console.log(event.keyCode);
+    switch( event.keyCode ) {
+        case 8:
+            event.preventDefault();
+            if ( _("activeCone") ) {
+                console.log("delete me");
+                _("objects").remove( _("activeCone").parent );
+                _("activeCone", null);
+            }
+        break;
+
+    }
+
+}
+
+
 function onFrame() {
     requestAnimationFrame( onFrame );
     draw();
@@ -215,6 +237,19 @@ function onFrame() {
 function draw() {
 
     _("renderer").render( _("scene"), _("camera") );
+
+}
+
+
+function intersects( event, list ) {
+
+    event.preventDefault();
+
+    _("mouse").set( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1 );
+
+    _("raycaster").setFromCamera( _("mouse"), _("camera") );
+
+    return _("raycaster").intersectObjects( list, true )[0];
 
 }
 
