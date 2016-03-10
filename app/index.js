@@ -5,47 +5,16 @@ import d3 from 'd3';
 import Rx from 'rx';
 import THREE from 'three/three.js';
 import _ from 'underscore';
-// import bson from 'bson';
 
 debug.enable('*');
-
 const stream = Rx.Observable;
-
-const Selectable = function Selectable() {};
-
-Selectable.prototype.querySelectorAll = function() {
-	return (this.children || (this.children = []));
-};
-
-Selectable.prototype.appendChild = function(child) {
-	this.children.push(child);
-	return child;
-};
-
-THREE.Object3D.prototype.appendChild = function (c) { this.add(c); return c; };
-THREE.Object3D.prototype.querySelectorAll = function () { return this.children; }; // debugger; return []; };
-
 Rx.config.longStackSupport = true;
 
-var CAMERA_RADIUS = 100;
-
-var INITIAL_THETA = 80;
-
-var INITIAL_PHI = 45;
-
-var INITIAL_ZOOM = 40;
-
-var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
-
-var ROOM_SIZE = {
-	width: 20,
-	length: 18,
-	height: 3
-};
-
-var CONE_BOTTOM = 0.01;
-
 function getFirstCamera() {
+	var CAMERA_RADIUS = 100;
+	var INITIAL_THETA = 80;
+	var INITIAL_PHI = 45;
+	var INITIAL_ZOOM = 40;
 	var c = new THREE.OrthographicCamera();
 	c.zoom = INITIAL_ZOOM;
 	c._lookAt = new THREE.Vector3();
@@ -118,7 +87,6 @@ function setCameraSize2(s) {
 }
 
 function main({DOM}) {
-	
 	const view = {
 		scenes: [
 			{
@@ -194,6 +162,26 @@ Cycle.run(main, {
 });
 
 function makeCustomDriver() {
+	
+	THREE.Object3D.prototype.appendChild = function (c) { 
+		this.add(c); 
+		return c; 
+	};
+	THREE.Object3D.prototype.querySelectorAll = function () { 
+		return this.children; 
+	};
+
+	const Selectable = function Selectable() {};
+
+	Selectable.prototype.querySelectorAll = function() {
+		return (this.children || (this.children = []));
+	};
+	
+	Selectable.prototype.appendChild = function(child) {
+		this.children.push(child);
+		return child;
+	};
+
 	var container = d3.select('body')
 		.append('div')
 		.attr('id', 'new')
@@ -271,6 +259,7 @@ function makeCustomDriver() {
 			.append(function(d) {
 				debug('sound object')('new object');
 				var geometry = new THREE.SphereGeometry(0.1, 30, 30);
+				var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
 				var material = new THREE.MeshPhongMaterial({
 					color: PARENT_SPHERE_COLOR,
 					transparent: true,
@@ -419,99 +408,8 @@ function makeCustomDriver() {
 	};
 }
 
-// function differentKeys(one, two) {
-// 	let length = [one, two]
-// 		.map(arr => _.values(arr))
-// 		.reduce(function(a,b) { let u = _; debugger })
-// 		// .reduce((a,b) => _.difference(a,b))
-// 		// .length
-// 	console.log(_.values(one), _.values(two))
-// 	console.log(length)
-// 	return true
-// }
-
 function idIs(id) {
 	return function(d) {
 		return d.id === id;
 	};
 }
-
-// function nameIs(name) {
-// 	return function(d) {
-// 		return d.name === name;
-// 	};
-// }
-
-// start();
-
-// renderers['main'].render(scenes['main'], camera['main']);
-// stream.combineLatest(
-// 	renderer$.pluck('main'),
-// 	scene$.pluck('main'),
-// 	camera$.pluck('main')
-// )
-// renderers.filter(r => {
-//)
-
-			// renderers.selectAll().each(function(d) { console.log(d, this) });
-			
-			// renderers.selectAll()
-			// 	.filter(function(d) { return d.name === 'main' })
-			// 	.each(function(d) { console.log(d, this) });
-			
-			// let selection = renderers.selectAll()
-			// 	.filter(function(d) { return d.name === 'main' })
-				// .each(function(d) { console.log(d, this) });
-				
-			// let selection = renderers.select('main');
-			// let selection = renderers.select(function(d) { debugger })
-		
-				
-			// renderers.select('main').each(function(d) {
-			// 	console.log(d, this);
-			// });
-			
-			// console.log(renderers.select('main'), 'baaah')
-			
-			// renderers.filter(function(d) { return d.name === 'main' }).each(function(d) {
-			// 	console.log(d, this);
-			// })
-			
-			// renderers.filter(function(d) { debugger }).each(function(d) {
-			// 	console.log(d, this);
-			// })
-			
-// function addObjectAtPoint2(p, volume) {
-// 	console.info("Add object at", p);
-// 	var geometry = new THREE.SphereGeometry(0.1, 30, 30);
-// 	var material = new THREE.MeshPhongMaterial({
-// 		color: PARENT_SPHERE_COLOR,
-// 		transparent: true,
-// 		opacity: 0.3,
-// 		side: THREE.DoubleSide
-// 	});
-// 	var sphere = new THREE.Mesh(geometry, material);
-// 	sphere.castShadow = true;
-// 	sphere.receiveShadow = true;
-// 	sphere.name = 'parentSphere';
-// 	sphere._volume = volume || 1;
-// 	sphere.renderOrder = 10;
-// 	var lineGeom = new THREE.Geometry();
-// 	var _lineBottom = -p.y + (-ROOM_SIZE.height / 2);
-// 	lineGeom.vertices.push(new THREE.Vector3(0, _lineBottom, 0));
-// 	lineGeom.vertices.push(new THREE.Vector3(0, 100, 0));
-// 	lineGeom.computeLineDistances();
-// 	var dashSize = 0.3;
-// 	var mat = new THREE.LineDashedMaterial({
-// 		color: 0,
-// 		linewidth: 1,
-// 		dashSize: dashSize,
-// 		gapSize: dashSize,
-// 		transparent: true,
-// 		opacity: 0.2
-// 	});
-// 	var line = new THREE.Line(lineGeom, mat);
-// 	sphere.add(line);
-// 	sphere.position.copy(p);
-// 	return sphere;
-// }

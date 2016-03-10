@@ -30,8 +30,7 @@
 				// flatten contour into 1d array e.g [x0,y0, x1,y1, x2,y2, ...]
 				var path = [];
 				contour.forEach(function(point) {
-					path.push(point.x);
-					path.push(point.y);
+					path.push(point.x, point.y);
 				});
 				(function() {
 					var triangles = earcut(path);
@@ -55,14 +54,23 @@
 		</script>
 	</head>
 	<body>
+		<button id="add-btn">add object</button>
 
 		<script>
 			var scene, camera, renderer,
 				width = window.innerWidth,
 				height = window.innerHeight;
 
+			var ray = new THREE.Raycaster();
 			var mouse = new THREE.Vector3();    // with 2d mouse coords
 			var isMouseDown = false;
+			var addMode = false;
+
+			var soundObjects = [];
+			var activeObject;                   // object to edit/inspect
+			var selection;                      // object being clicked
+
+			var ghostSelector;                  // for hovering purposes...
 
 			// initialize scene, camera, and renderer
 			function init() {
@@ -70,11 +78,19 @@
 				document.body.appendChild( container );
 
 				camera = new THREE.OrthographicCamera( width/-2, width/2, height/-2,height/2, 1, 1000 );
-				camera.position.z = 1;	// <-- depth of room
+				camera.position.z = 100;	// <-- depth of room
+
+				ray.linePrecision = 10;
 
 				scene = new THREE.Scene();
 				scene.add(camera);
 				scene.add( new THREE.AmbientLight( 0xf0f0f0 ) );
+
+                var geometry = new THREE.BoxGeometry( 7, 7, 7 );
+                var material = new THREE.MeshBasicMaterial( { color:0x00ffff } );
+                ghostSelector = new THREE.Mesh( geometry, material );
+                ghostSelector.visible = false;
+                scene.add(ghostSelector);
 
 				renderer = new THREE.WebGLRenderer({ antialias: true });
 				renderer.setClearColor( 0xf0f0f0 );
@@ -85,47 +101,190 @@
 				container.addEventListener( 'mouseup', onMouseUp, false );
 				container.addEventListener( 'mouseleave', onMouseUp, false );
 				container.addEventListener( 'mousemove', onMouseMove, false );
+
+				document.querySelector('#add-btn').onclick = toggleAddMode;
+
+			}
+			function render() {
+				requestAnimationFrame( render );
+				renderer.render( scene, camera );
+
+				soundObjects.forEach(function(soundObject) {
+					soundObject.pointObjects.forEach(function(pcube) {
+						pcube.visible = soundObject.active;
+					});
+					soundObject.curve.mesh.visible = soundObject.active;
+				});
 			}
 			init();
+			render();
 
+
+			///////////////////////
+
+			function toggleAddMode() {
+				addMode = !addMode;
+				if (addMode) {
+					renderer.setClearColor(0xe0e0e0);
+					document.querySelector('#add-btn').innerHTML = 'cancel add';
+				}
+				else {
+					renderer.setClearColor(0xf0f0f0);
+					document.querySelector('#add-btn').innerHTML = 'add object';
+				}
+			}
+
+
+			// FIX | currently does different stuff for orthographic (top) 
+			//       view and for raycast, which is not a very good binary 
+			//       choice :((
 			function setMousePosition2D(e) {
-				mouse.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
-				mouse.y = e.clientY - renderer.domElement.offsetTop +camera.top;
-				mouse.z = 0;
+				if (addMode === true) {
+					mouse.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
+					mouse.y = e.clientY - renderer.domElement.offsetTop +camera.top;
+				}
+				else {
+					var rect = renderer.domElement.getBoundingClientRect();
+					mouse.x = 2 * (e.clientX - rect.left) / rect.width - 1;
+					mouse.y = 1 - 2 * (e.clientY - rect.top) / rect.height;
+				}
 			}
 
 			function onMouseDown(e) {
-				isMouseDown = true;
 				setMousePosition2D(e);
-   				drawing.beginAt(mouse.clone());
+				isMouseDown = true;
+				if (addMode === true) {   	  // pick location to add sound
+	   				drawing.beginAt(mouse.clone());
+				}
+				else {                        // make a selection
+
+					ray.setFromCamera(mouse, camera);
+					var intersects = ray.intersectObjects( scene.children, true );
+
+					if (activeObject && ray.intersectObjects(activeObject.children).length > 0)
+					{
+						// ray passes through currently selected object
+                        if (ghostSelector.visible === true) { // add curve pt
+                            selection = activeObject.curve.mesh;
+
+                            // TODO add point to spline
+
+                        }
+                        else
+    						selection = ray.intersectObjects(activeObject.children)[0].object;
+					}
+					else
+					{
+						// select a different or no object
+
+						// clear previous object
+						if (activeObject) {
+							activeObject.active = false;
+							activeObject = null;
+						}
+
+						// get new object (closest to camera)
+						if (intersects.length > 0) {
+
+							selection = intersects[0].object;
+							var matchingObjects = soundObjects.filter(obj => obj.contains(selection));
+							if (matchingObjects.length > 0) {
+								activeObject = matchingObjects[0];
+								activeObject.active = true;
+							}
+						}
+					}
+
+					changeSelectionColor(selection, true);
+				}
+
 			}
 			function onMouseUp(e) {
 				if (isMouseDown === true) {
-					var points = drawing.getPoints();
-					drawing.clear();
 
-					if (points.length >= 3)
-					{
-						console.log(new PathObject(points));
+					if (addMode === true) {	  // place sound object or zone
+						toggleAddMode();
+						var points = drawing.getPoints();
+						drawing.clear();
+
+						if (points.length >= 3)
+						{
+							// clear previous selection ?
+							if (activeObject)
+								activeObject.active = false;
+                            // TODO maybe not if i want to delete ? ? ? ? ?
+
+							activeObject = new PathObject(points);
+							soundObjects.push(activeObject);
+						}						
+					}
+					else {
+						changeSelectionColor(selection, false);
+						selection = null;
 					}
 				}
 				isMouseDown = false;
 			}
 			function onMouseMove(e) {
+				this.hoverObject;
+				setMousePosition2D(e);
 				if (isMouseDown) {
-					setMousePosition2D(e);
-//					if (drawing.points.peek().distanceToSquared(mouse) > 10)
-						drawing.addPoint(mouse.clone());
+					if (addMode === true) {      // draw sound zone
+						drawing.addPoint(mouse.clone());					
+					}
+                    else if (selection) {        // move selection
+
+
+
+                        // TODO move sound object (calculate offset) 
+
+                        // TODO move point
+                        //   set cube position to mouse position
+                        //   update spline outline
+                        //   placeholder garbage
+                        if (ghostSelector.visible === true)
+                        {
+                            ghostSelector.position.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
+                            ghostSelector.position.y = e.clientY - renderer.domElement.offsetTop +camera.top;
+                        }
+
+                    }
+				}
+				else {	                         // hover state
+					if (activeObject && activeObject.active) {
+						ray.setFromCamera(mouse, camera);
+
+						var intersection = ray.intersectObjects(activeObject.pointObjects.concat(activeObject.curve.mesh));
+
+						var newHoverObject = (intersection.length > 0) ? intersection[0].object : null;
+
+						if (this.hoverObject !== newHoverObject) {
+							
+							// clear previous hover
+							changeHoverColor(this.hoverObject, false);
+							this.hoverObject = newHoverObject;
+							
+							changeHoverColor(newHoverObject, true);
+						}
+
+                        if (newHoverObject && newHoverObject.type === 'Line') {
+                            // ghost object
+                            ghostSelector.visible = true;
+                            ghostSelector.position.x = intersection[Math.floor(intersection.length/2)].point.x;
+                            ghostSelector.position.y = intersection[Math.floor(intersection.length/2)].point.y;
+                            ghostSelector.position.z = intersection[Math.floor(intersection.length/2)].point.z;
+                        }
+                        else {
+                            ghostSelector.visible = false;
+                        }
+
+					}
 				}
 			}
-
-			function render() {
-				requestAnimationFrame( render );
-				renderer.render( scene, camera );
-			}
-			render();
-
 			function PathObject(points) {
+				if (points.peek().distanceToSquared(points[0]) < 100)
+					points.pop(); // ? because it's closed?
+
 				this.points = points;
 				this.curve = (function(points) {
 					var curve = new THREE.CatmullRomCurve3(points);
@@ -133,7 +292,7 @@
 					curve.closed = true;
 
 					var geometry = new THREE.Geometry();
-					geometry.vertices = curve.getPoints(100);
+					geometry.vertices = curve.getPoints(200);
 
 					var material = new THREE.LineBasicMaterial({
 						color: 0xff0000,
@@ -145,12 +304,12 @@
 					curve.mesh = new THREE.Line( geometry, material );
 					scene.add( curve.mesh );
 
-					return curve.mesh;
+					return curve;
 				})(points);
 				this.pointObjects = (function(points) {
 					var pointObjects = [];
 					points.forEach(function(point) {
-						var geometry = new THREE.BoxGeometry( 5, 5, 5 );
+						var geometry = new THREE.BoxGeometry( 7, 7, 7 );
 						var material = new THREE.MeshBasicMaterial( { color:0xff0000 } );
 						var pcube = new THREE.Mesh( geometry, material );
 						pcube.position.x = point.x;
@@ -161,9 +320,10 @@
 
 					return pointObjects;
 				})(points);
-				this.shape = convertToShape(points);
+				this.shape = convertToShape(points); // don't want this to happen for a trajectory tho
 
 				function convertToShape(points) {
+
 					var curve = new THREE.CatmullRomCurve3(points);
 					curve.type = 'centripetal';
 					curve.closed = true;
@@ -179,23 +339,26 @@
 				        side: THREE.DoubleSide,
 				        depthWrite: false
 				    });
-
 				    var obj = new THREE.Mesh(geometry,material);
 				    scene.add(obj);
 
 				    return obj;
 				}
 
+				this.active = true;       // object in inspector window
 
+				this.contains = function(obj) { 
+					return ( obj === this.shape || 
+						     obj === this.curve.mesh || 
+						     this.pointObjects.some(point => point === obj) );
+				};
+
+				this.children = [].concat(this.shape, this.pointObjects, this.curve.mesh);
 			}
 
 			var drawing = {               // live drawing by mouse
 				points: [],               //    points on path
 				lines: [],                //    lines on the scene
-
-				endpoint: function() {
-					return this.points[this.points.length-1];
-				},
 
 				beginAt: function(point) {
 					this.points = [point];
@@ -215,9 +378,6 @@
 				},
 				getPoints: function() {
 					var points = simplify(this.points,10,true); // :-\
-//					console.log(points.peek().distanceToSquared(points[0]));
-					if (points.peek().distanceToSquared(points[0]) < 100)
-						points.pop();
 					return points;
 				},
 				clear: function() {
@@ -229,6 +389,31 @@
 			};
 
 			Array.prototype.peek = function() { return this[this.length - 1]; }
+
+			function changeSelectionColor(obj, isSelected) {
+				if (!(obj && obj.material && obj.material.color))
+					return;
+
+				if (isSelected) {
+                    obj.material.color.set(0x0000ff);
+                    ghostSelector.material.color.set(0x0000ff);
+                }
+				else {
+                    obj.material.color.set(0xff0000);
+                    ghostSelector.material.color.set(0x00ffff);
+                }
+			}
+
+			function changeHoverColor(obj, isHovering) {
+				if (!(obj && obj.material && obj.material.color))
+					return;
+
+				if (isHovering)
+					obj.material.color.set(0x00ffff);
+				else 
+					obj.material.color.set(0xff0000);
+
+			}
 
 		</script>
 
