@@ -85,76 +85,96 @@ function setCameraSize2(s) {
 	};
 }
 
-function main({DOM}) {
-	const view = {
-		scenes: [
-			{
-				id: 'main',
-				floors: [
-				  {
-				    type: 'floor',
-				    name: 'floor',
-				  }
-				],
-				sound_objects: [
+function main({custom}) {
+	const slider$ = custom
+		.select('input')
+		.events('input');
+	
+	const camera_latitude$ = slider$
+		.filter(d => {
+			return d.node.value <= 90 && d.node.value >= 10;
+		});
+	
+	const foo$ = stream.of(1,2);
+	
+	const view$ = stream
+		.combineLatest(
+			camera_latitude$.startWith(45),
+			foo$,
+			(camera_lat, foo) => ({ camera_lat, foo })
+		)
+		.map(({ camera_lat, foo }) => {
+			return {
+				scenes: [
 					{
-						type: 'sound_object',
-						name: 'sound_object',
-						id: 1,
-						position: {
-							x: 2,
-							y: -0.5,
-							z: 1
-						},
-						volume: 0.8,
-						cones: [
+						id: 'main',
+						floors: [
+						  {
+						    type: 'floor',
+						    name: 'floor',
+						  }
+						],
+						sound_objects: [
 							{
-								volume: 2,
-								spread: 0.5,
-								latitude: 45,
-								theta: Math.PI * 0.5,
-								phi: 0,
-								selected: true
-							},
-							// {
-							// 	volume: 1.2,
-							// 	spread: 0.7,
-							// 	latitude: 75,
-							// 	theta: Math.PI * 0.1,
-							// 	phi: Math.PI * 0.3
-							// }
+								type: 'sound_object',
+								name: 'sound_object',
+								id: 1,
+								position: {
+									x: 2,
+									y: -0.5,
+									z: 1
+								},
+								volume: 0.8,
+								cones: [
+									{
+										volume: 2,
+										spread: 0.5,
+										latitude: 45,
+										theta: Math.PI * 0.5,
+										phi: 0,
+										selected: true
+									},
+									{
+										volume: 1.2,
+										spread: 0.7,
+										latitude: 110,
+										theta: Math.PI * 0.1,
+										phi: 3
+									}
+								]
+							}
 						]
 					}
+				],
+				cameras: [
+					{
+						id: 'main',
+						size: {
+						  width: 500, height: 500
+						},
+						latitude: camera_lat
+					}
+				],
+				renderers: [
+					{
+						id: 'main',
+						size: {
+							width: 500, height: 500
+						}
+					}
+				],
+				renderSets: [
+					{
+						render_id: 'main',
+						scene_id: 'main',
+						camera_id: 'main'
+					}
 				]
-			}
-		],
-		cameras: [
-			{
-				id: 'main',
-				size: {
-				  width: 500, height: 500
-				}
-			}
-		],
-		renderers: [
-			{
-				id: 'main',
-				size: {
-					width: 500, height: 500
-				}
-			}
-		],
-		renderSets: [
-			{
-				render_id: 'main',
-				scene_id: 'main',
-				camera_id: 'main'
-			}
-		]
-	};
+			};
+		});
 	
 	return {
-		custom: stream.of(view, view, view, view, view)
+		custom: view$
 	};
 }
 
@@ -174,28 +194,6 @@ function makeCustomDriver() {
 		return this.children.filter(d => _.isMatch(d, query));
 	};
 
-	const Selectable = function Selectable() {
-		this.children = [];
-	};
-	Selectable.prototype.querySelector = function(query) {
-		if (typeof query === 'string') {
-			console.warn('query is string');
-			query = { id: query };
-		}
-		return d3.select(this)
-			.selectAll()
-			.filter(d => _.isMatch(d, query))
-			.node();
-	};
-	Selectable.prototype.querySelectorAll = function(query) {
-		if (typeof query === 'undefined') return this.children;
-		return this.children.filter(d => _.isMatch(d, query));
-	};
-	Selectable.prototype.appendChild = function(child) {
-		this.children.push(child);
-		return child;
-	};
-
 	var container = d3.select('body')
 		.append('div')
 		.attr('id', 'new')
@@ -213,7 +211,11 @@ function makeCustomDriver() {
 	var move_camera_button = container
 		.append('button')
 		.text('move_camera')
-		.style('height', '100px')
+		.style('height', '100px');
+		
+	var camera_latitude_slider = container
+		.append('input')
+		.attr('type', 'range');
 	
 	var room_size = {
 		width: 20,
@@ -239,8 +241,8 @@ function makeCustomDriver() {
 	new_scene.add(spotLight);
 	new_scene.add(hemisphere);
 	
-	var camera = getFirstCamera();
-	setCameraSize2({ width: 500, height: 500 })(camera);
+	// var camera = getFirstCamera();
+	// setCameraSize2({ width: 500, height: 500 })(camera);
 	
 	const state = {
 		dom: container,
@@ -250,49 +252,76 @@ function makeCustomDriver() {
 	};
 	
 	const first_scene = new_scene;
-	const first_camera = camera;
+	// const first_camera = camera;
+	
+	const dom$ = new Rx.ReplaySubject();
 	
 	return function customDriver(view$) {
 		view$.subscribe(view => {
-		debug('view')('view update');
+			debug('view')('view update');
+				
+			let scenes = state.scenes.selectAll().data(view.scenes);
+				
+			scenes
+				.enter()
+				.append(function(d) {
+					debug('scene')('new scene');
+					return first_scene;
+				});
+				
+			let sound_objects = updateSoundObjects(scenes);
 			
-		let scenes = state.scenes.selectAll().data(view.scenes);
+			updateCones(sound_objects);
 			
-		scenes
-			.enter()
-			.append(function(d) {
-				debug('scene')('new scene');
-				return first_scene;
-			});
+			updateCameras(view, state);
+	
+			updateRenderers(view, state);
+				
+			view.renderSets
+				.forEach(({render_id, scene_id, camera_id}) => {
+					let renderer = state.renderers.select({ id: render_id }).node();
+					let scene = state.scenes.select({ id: scene_id }).node();
+					let camera = state.cameras.select({ id: camera_id }).node();
+					renderer.render(scene, camera);
+				});
 			
-		let sound_objects = updateSoundObjects(scenes);
-		
-		updateCones(sound_objects);
-				 
-		let cameras = state.cameras.selectAll().data(view.cameras);
-		
-		cameras.enter()
-			.append(function(d) {
-				debug('camera')('new camera');
-				return first_camera;
-			});
-
-		updateRenderers(view, state);
-		
-		// state.renderers.select('main');
-			
-		view.renderSets
-			.forEach(({render_id, scene_id, camera_id}) => {
-				let renderer = state.renderers.select({ id: render_id }).node();
-				let scene = state.scenes.select({ id: scene_id }).node();
-				let camera = state.cameras.select({ id: camera_id }).node();
-				renderer.render(scene, camera);
-			});
-			
+			dom$.onNext(state.dom);
 		});
 		
-		return {};
+		return {
+			select: function(selector) {
+				let selection$ = dom$.map(dom => dom.select(selector));
+				return {
+					events: function(type) {
+						return selection$.flatMap(observableFromD3Event(type));
+					}
+				};
+			}
+		};
 	};
+}
+
+function updateCameras(view, state) {
+	let cameras = state.cameras.selectAll().data(view.cameras);
+			
+	cameras.enter()
+		.append(function(d) {
+			debug('camera')('new camera');
+			let first_camera = getFirstCamera();
+			// setCameraSize2({ width: 500, height: 500 })(first_camera);
+			return first_camera;
+		});
+		
+	cameras
+		.each(function(d) {
+			if (! _.isMatch(this._size, d.size)) {
+				var s = d.size;
+				[ this.left, this.right ] = [-1,+1].map(d => d * s.width * 0.5);
+				[ this.bottom, this.top ] = [-1,+1].map(d => d * s.height * 0.5);
+				this.updateProjectionMatrix();
+			}
+		});
+	
 }
 
 function updateSoundObjects(scenes) {
@@ -348,7 +377,7 @@ function updateSoundObjects(scenes) {
 
 function updateCones(sound_objects) {
 	let cones = sound_objects
-		.selectAll(function(d) { return this.children })
+		.selectAll()
 		.data(function(d) { return d.cones });
 	cones
 		.enter()
@@ -461,3 +490,40 @@ function idIs(id) {
 // 	degToRadScale = degToRadScale || d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
 // 	return degToRadScale.apply(this, arguments);
 // }
+
+function Selectable() {
+	this.children = [];
+	this.querySelector = function(query) {
+		if (typeof query === 'string') {
+			console.warn('query is string');
+			query = { id: query };
+		}
+		return d3.select(this)
+			.selectAll()
+			.filter(d => _.isMatch(d, query))
+			.node();
+	};
+	this.querySelectorAll = function(query) {
+		if (typeof query === 'undefined') return this.children;
+		return this.children.filter(d => _.isMatch(d, query));
+	};
+	this.appendChild = function(child) {
+		this.children.push(child);
+		return child;
+	};
+}
+
+function observableFromD3Event(type) {
+	return function(selection) {
+		return stream
+			.create(observer => 
+				selection.on(type, function(d) {
+					observer.onNext({
+						datum: d,
+						node: this,
+						event: d3.event
+					});
+				})
+			);
+	};
+}
