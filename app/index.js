@@ -10,8 +10,6 @@ debug.enable('*');
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
-
-
 function polarToVector(o) {
 	var phi, radius, theta, x, y, z;
 	radius = o.radius, theta = o.theta, phi = o.phi;
@@ -48,59 +46,94 @@ function getFloor(room_size) {
 }
 
 function main({custom}) {
-	const slider$ = custom
-		.select('input')
-		.events('input');
-		
-	const main_camera_lookat_x$ = slider$
-		.map(d => d.node.value);
-		
-	// main_camera_lookat_x$
-	// 	.do(console.log.bind(console))
-	// 	.subscribe()
+	const log = console.log.bind(console);
 	
-	// const main_camera_latitude$ = slider$
-	// 	.filter(d => {
-	// 		return d.node.value <= 90 && d.node.value >= 10;
-	// 	});
+	const orbit$ = custom.camera_orbit_drag$
+		.pluck('event')
+		.filter(ev => ev.type === 'drag')
+		.shareReplay();
+	
+	const MAX_LATITUDE = 89.99;
+	const MIN_LATITUDE = 5;
+	
+	const latitude_to_theta = d3.scale.linear()
+		.domain([90, 0, -90])
+		.range([0, Math.PI/2, Math.PI]);
 		
-	// const main_camera_position_polar_degrees$ = stream
-	// 	.of({
-	// 		radius: 100,
-	// 		theta_degrees: 80,
-	// 		phi_degrees: 45
-	// 	});
+	const longitude_to_phi = d3.scale.linear()
+		.domain([0, 360])
+		.range([0, 2 * Math.PI]);
+	
+	const theta$ = orbit$
+		.pluck('dy')
+		.startWith(45)
+		.scan((a,b) => {
+			let lat = a-b; // Negative because we need to flip the y!
+			if (lat >= MAX_LATITUDE) return MAX_LATITUDE;
+			if (lat <= MIN_LATITUDE) return MIN_LATITUDE;
+			return lat;
+		})
+		.map(latitude_to_theta);
 		
-	// const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
+	const phi$ = orbit$
+		.pluck('dx')
+		.startWith(45)
+		.scan((a,b) => a+b)
+		.map(longitude_to_phi)
+		.map(phi => phi % (2 * Math.PI))
+		.map(phi => (phi < 0) ? (2 * Math.PI) + phi : phi)
+		// .do(log)
 		
-	// const main_camera_position_polar_radians$ = main_camera_position_polar_degrees$
-	// 	.map(({radius,theta_degrees,phi_degrees}) => {
-	// 		return {
-	// 			radius,
-	// 			theta: degToRad(theta_degrees),
-	// 			phi: degToRad(phi_degrees),
-	// 		}
-	// 	})
+	const polar_position$ = stream
+		.combineLatest(
+			stream.of(100),
+			theta$,
+			phi$,
+			(radius, theta, phi) => ({ radius, theta, phi })
+		);
+
+	function polarToVector({ radius, theta, phi }) {
+		return {
+			x: radius * Math.sin(phi) * Math.sin(theta),
+			z: radius * Math.cos(phi) * Math.sin(theta),
+			y: radius * Math.cos(theta)
+		};
+	}
+		
+	const relative_position$ = polar_position$
+		.map(polarToVector);
+		
+	const lookAt$ = stream
+		.of({
+			x: 0, y: 0, z: 0
+		});
+		
+	const position$ = stream
+		.combineLatest(
+			relative_position$,
+			lookAt$,
+			(rel, look) => ({
+				x: rel.x + look.x,
+				y: rel.y + look.y,
+				z: rel.z + look.z
+			})
+		);
 		
 	const main_camera$ = stream
-		// .of(1)
 		.combineLatest(
-			main_camera_lookat_x$.startWith(0),
-			(lookAt_x) => ({ lookAt_x })
+			position$,
+			lookAt$,
+			(p,l) => ({ position: p, lookAt: l })
 		)
-		.map(({ lookAt_x }) => {
+		.map(({ position, lookAt }) => {
 			return {
 				id: 'main',
 				size: {
 				  width: 500, height: 500
 				},
-				position: {
-					x: 70, y: 70, z: 12
-				},
+				position: position,
 				zoom: 40,
-				lookAt: {
-					x: lookAt_x, y: -1.5, z: 0
-				}
+				lookAt: lookAt
 			};
 		});
 		
@@ -109,7 +142,6 @@ function main({custom}) {
 	
 	const view$ = stream
 		.combineLatest(
-			// main_camera_latitude$.startWith(45),
 			main_camera$,
 			foo$,
 			(main_camera, foo) => ({ main_camera, foo })
@@ -204,7 +236,7 @@ function makeCustomDriver() {
 	};
 
 	var container = d3.select('body')
-		.append('div')
+		.append('div');
 	
 	var main_canvas = container
 		.append('canvas')
@@ -217,17 +249,12 @@ function makeCustomDriver() {
 		
 	var move_camera_button = controls
 		.append('button')
-		.text('move_camera')
+		.attr('id', 'orbit_camera')
+		.text('orbit_camera')
 		.style('height', '100px');
 		
-	var camera_latitude_slider = controls
-		.append('label')
-		.each(function(d) {
-			d3.select(this).append('input').attr('type', 'range').attr({ min: -5, max: 5, step: 0.01})
-			d3.select(this).append('span').text('camera lookat x');
-		});
-		
-	
+	var camera_orbit_drag$ = fromD3drag(move_camera_button).shareReplay();
+
 	var room_size = {
 		width: 20,
 		length: 18,
@@ -304,7 +331,8 @@ function makeCustomDriver() {
 						return selection$.flatMap(observableFromD3Event(type));
 					}
 				};
-			}
+			},
+			camera_orbit_drag$
 		};
 	};
 }
@@ -332,6 +360,9 @@ function updateCameras(view, state) {
 			if (! _.isMatch(this.position, d.position)) {
 			  debug('camera')('update position');
 			  this.position.copy(d.position);
+			  this.lookAt(d.lookAt);
+			  this.up.copy(new THREE.Vector3(0, 1, 0));
+			  this.updateProjectionMatrix();
 			}
 			// let cam = this;
 			// let floor = state.scenes
@@ -348,11 +379,11 @@ function updateCameras(view, state) {
 				this.updateProjectionMatrix();
 			}
 			// Update camera lookAt
-			if (! _.isMatch(this._lookAt, d.lookAt)) {
-				debug('camera')('update lookAt');
-				this.lookAt(d.lookAt);
-				this._lookAt = d.lookAt;
-			}
+		// 	if (! _.isMatch(this._lookAt, d.lookAt)) {
+		// 		debug('camera')('update lookAt');
+		// 		this.lookAt(d.lookAt);
+		// 		this._lookAt = d.lookAt;
+		// 	}
 		});
 	
 }
@@ -546,6 +577,18 @@ function Selectable() {
 	};
 }
 
+function fromD3drag(selection) {
+	let handler = d3.behavior.drag();
+  selection.call(handler);
+  return fromD3dragHandler(handler);
+}
+
+function fromD3dragHandler(drag) {
+	let streams = ['drag', 'dragstart', 'dragend']
+		.map(ev => observableFromD3Event(ev)(drag));
+	return stream.merge(streams);
+}
+
 function observableFromD3Event(type) {
 	return function(selection) {
 		return stream
@@ -560,7 +603,6 @@ function observableFromD3Event(type) {
 			);
 	};
 }
-
 
 function getFirstCamera() {
 	const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
@@ -584,3 +626,35 @@ function getFirstCamera() {
 	// c.updateProjectionMatrix();
 	return c;
 }
+
+		// main_camera_position_x$.subscribe(d => console.log(d))
+		
+	// const main_camera_lookat_x$ = slider$
+	// 	.map(d => d.node.value);
+		
+	// main_camera_lookat_x$
+	// 	.do(console.log.bind(console))
+	// 	.subscribe()
+	
+	// const main_camera_latitude$ = slider$
+	// 	.filter(d => {
+	// 		return d.node.value <= 90 && d.node.value >= 10;
+	// 	});
+		
+	// const main_camera_position_polar_degrees$ = stream
+	// 	.of({
+	// 		radius: 100,
+	// 		theta_degrees: 80,
+	// 		phi_degrees: 45
+	// 	});
+		
+	// const degToRad = d3.scale.linear().domain([0, 360]).range([0, 2 * Math.PI]);
+		
+	// const main_camera_position_polar_radians$ = main_camera_position_polar_degrees$
+	// 	.map(({radius,theta_degrees,phi_degrees}) => {
+	// 		return {
+	// 			radius,
+	// 			theta: degToRad(theta_degrees),
+	// 			phi: degToRad(phi_degrees),
+	// 		}
+	// 	})
