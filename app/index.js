@@ -38,11 +38,14 @@ function getFloor(room_size) {
 
 function main({custom}) {
 	const log = console.log.bind(console);
-	
-	const orbit$ = custom.camera_orbit_drag$
-		.pluck('event')
-		.filter(ev => ev.type === 'drag')
-		.shareReplay();
+
+  const orbit$ = custom
+    .select('#orbit_camera')
+    .d3dragHandler()
+    .events('drag')
+    .pluck('event')
+    .do(log)
+    .shareReplay();
 	
 	const MAX_LATITUDE = 89.99;
 	const MIN_LATITUDE = 5;
@@ -183,6 +186,7 @@ function main({custom}) {
 				renderers: [
 					{
 						id: 'main',
+						canvas: '#main-canvas',
 						size: {
 							width: 500, height: 500
 						}
@@ -242,8 +246,6 @@ function makeCustomDriver() {
 		.attr('id', 'orbit_camera')
 		.text('orbit_camera')
 		.style('height', '100px');
-		
-	var camera_orbit_drag$ = fromD3drag(move_camera_button).shareReplay();
 
 	var room_size = {
 		width: 20,
@@ -313,12 +315,27 @@ function makeCustomDriver() {
 			dom$.onNext(state.dom);
 		});
 		
+		var camera_orbit_drag$ = fromD3drag(move_camera_button).shareReplay();
+		
 		return {
 			select: function(selector) {
 				let selection$ = dom$.map(dom => dom.select(selector));
 				return {
 					events: function(type) {
 						return selection$.flatMap(observableFromD3Event(type));
+					},
+					d3dragHandler: function() {
+						let handler = d3.behavior.drag();
+						let dragHandler$ = selection$
+							.map(s => {
+								handler.call(s); 
+								return handler;
+							});
+						return {
+							events: function(type) {
+								return dragHandler$.flatMap(observableFromD3Event(type));
+							}
+						};
 					}
 				};
 			},
@@ -331,7 +348,7 @@ function updateCameras(view, state) {
 	let cameras = state.cameras.selectAll().data(view.cameras);
 			
 	cameras.enter()
-		.append(function(d) {
+		.append(function() {
 			debug('camera')('new camera');
 		  return new THREE.OrthographicCamera();
 		});
@@ -347,12 +364,13 @@ function updateCameras(view, state) {
 				this.updateProjectionMatrix();
 				this._size = d.size;
 			}
+			// Always update lookAt and up with position!
 			if (! _.isMatch(this.position, d.position)) {
 			  debug('camera')('update position');
 			  this.position.copy(d.position);
 			  this.lookAt(d.lookAt);
 			  this.up.copy(new THREE.Vector3(0, 1, 0));
-			  this.updateProjectionMatrix();
+			  // this.updateProjectionMatrix();
 			}
 			// let cam = this;
 			// let floor = state.scenes
@@ -506,14 +524,14 @@ function getNewCone() {
 	return coneParent;	
 }
 
-function updateRenderers(view, state, dom) {
+function updateRenderers(view, state) {
 	let renderers = state.renderers.selectAll().data(view.renderers);
 	renderers
 		.enter()
 		.append(function(d) {
 			debug('renderer')('new renderer');
 			let rend = new THREE.WebGLRenderer({
-				canvas: state.dom.select('#main-canvas').node(),
+				canvas: state.dom.select(d.canvas).node(),
 				antialias: true
 			});
 			rend.shadowMap.enabled = true;
