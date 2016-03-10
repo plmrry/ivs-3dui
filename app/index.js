@@ -38,14 +38,27 @@ function getFloor(room_size) {
 
 function main({custom}) {
 	const log = console.log.bind(console);
+	
+	custom.scene
+	  .map(s => s.select({ name: 'main' }).node())
+	  .do(scene => { debugger })
+	  .do(log)
+	  .subscribe()
 
-  const orbit$ = custom
+  const orbit$ = custom.dom
     .select('#orbit_camera')
     .d3dragHandler()
     .events('drag')
     .pluck('event')
     .do(log)
     .shareReplay();
+    
+  custom.dom
+    .select('#main-canvas')
+    .d3dragHandler()
+    .events('drag')
+    .do(log)
+    .subscribe();
 	
 	const MAX_LATITUDE = 89.99;
 	const MIN_LATITUDE = 5;
@@ -121,6 +134,7 @@ function main({custom}) {
 		.map(({ position, lookAt }) => {
 			return {
 				id: 'main',
+				name: 'main',
 				size: {
 				  width: 500, height: 500
 				},
@@ -144,6 +158,7 @@ function main({custom}) {
 				scenes: [
 					{
 						id: 'main',
+						name: 'main',
 						floors: [
 						  {
 						    type: 'floor',
@@ -186,6 +201,7 @@ function main({custom}) {
 				renderers: [
 					{
 						id: 'main',
+						name: 'main',
 						canvas: '#main-canvas',
 						size: {
 							width: 500, height: 500
@@ -232,7 +248,7 @@ function makeCustomDriver() {
 	var container = d3.select('body')
 		.append('div');
 	
-	var main_canvas = container
+	container
 		.append('canvas')
 		.attr('id', 'main-canvas')
 		.style({
@@ -241,7 +257,7 @@ function makeCustomDriver() {
 		
 	var controls = container.append('div');
 		
-	var move_camera_button = controls
+	controls
 		.append('button')
 		.attr('id', 'orbit_camera')
 		.text('orbit_camera')
@@ -252,9 +268,6 @@ function makeCustomDriver() {
 		length: 18,
 		height: 3
 	};
-	
-	var new_scene = new THREE.Scene();
-	new_scene.name = 'main';
 	
 	var floor = getFloor(room_size);
 	
@@ -268,10 +281,6 @@ function makeCustomDriver() {
 
 	var hemisphere = new THREE.HemisphereLight(0, 0xffffff, 0.8);
 	
-	new_scene.add(floor);
-	new_scene.add(spotLight);
-	new_scene.add(hemisphere);
-	
 	const state = {
 		dom: container,
 		renderers: d3.select(new Selectable()),
@@ -279,11 +288,9 @@ function makeCustomDriver() {
 		cameras: d3.select(new Selectable())
 	};
 	
-	const first_scene = new_scene;
-	
-	const dom$ = new Rx.ReplaySubject();
-	
 	return function customDriver(view$) {
+		const dom$ = new Rx.ReplaySubject();
+		const scene$ = new Rx.ReplaySubject();
 		view$.subscribe(view => {
 			debug('view')('view update');
 				
@@ -293,7 +300,12 @@ function makeCustomDriver() {
 				.enter()
 				.append(function(d) {
 					debug('scene')('new scene');
-					return first_scene;
+					var new_scene = new THREE.Scene();
+					new_scene.name = d.name;
+					new_scene.add(floor);
+					new_scene.add(spotLight);
+					new_scene.add(hemisphere);
+					return new_scene;
 				});
 				
 			let sound_objects = updateSoundObjects(scenes);
@@ -306,40 +318,41 @@ function makeCustomDriver() {
 				
 			view.renderSets
 				.forEach(({render_id, scene_id, camera_id}) => {
-					let renderer = state.renderers.select({ id: render_id }).node();
-					let scene = state.scenes.select({ id: scene_id }).node();
-					let camera = state.cameras.select({ id: camera_id }).node();
+					let renderer = state.renderers.select({ name: render_id }).node();
+					let scene = state.scenes.select({ name: scene_id }).node();
+					let camera = state.cameras.select({ name: camera_id }).node();
 					renderer.render(scene, camera);
 				});
 			
 			dom$.onNext(state.dom);
+			scene$.onNext(state.scenes);
 		});
 		
-		var camera_orbit_drag$ = fromD3drag(move_camera_button).shareReplay();
-		
 		return {
-			select: function(selector) {
-				let selection$ = dom$.map(dom => dom.select(selector));
-				return {
-					events: function(type) {
-						return selection$.flatMap(observableFromD3Event(type));
-					},
-					d3dragHandler: function() {
-						let handler = d3.behavior.drag();
-						let dragHandler$ = selection$
-							.map(s => {
-								handler.call(s); 
-								return handler;
-							});
-						return {
-							events: function(type) {
-								return dragHandler$.flatMap(observableFromD3Event(type));
-							}
-						};
-					}
-				};
+			dom: {
+				select: function(selector) {
+					let selection$ = dom$.map(dom => dom.select(selector));
+					return {
+						events: function(type) {
+							return selection$.flatMap(observableFromD3Event(type));
+						},
+						d3dragHandler: function() {
+							let handler = d3.behavior.drag();
+							let dragHandler$ = selection$
+								.map(s => {
+									handler.call(s); 
+									return handler;
+								});
+							return {
+								events: function(type) {
+									return dragHandler$.flatMap(observableFromD3Event(type));
+								}
+							};
+						}
+					};
+				}
 			},
-			camera_orbit_drag$
+			scene: scene$
 		};
 	};
 }
@@ -348,9 +361,11 @@ function updateCameras(view, state) {
 	let cameras = state.cameras.selectAll().data(view.cameras);
 			
 	cameras.enter()
-		.append(function() {
+		.append(function(d) {
 			debug('camera')('new camera');
-		  return new THREE.OrthographicCamera();
+			let cam = new THREE.OrthographicCamera();
+			cam.name = d.name;
+		  return cam;
 		});
 		
 	cameras
@@ -536,6 +551,7 @@ function updateRenderers(view, state) {
 			});
 			rend.shadowMap.enabled = true;
 			rend.shadowMap.type = THREE.PCFSoftShadowMap;
+			rend.name = d.name;
 			return rend;
 		});
 	renderers
@@ -552,15 +568,22 @@ function updateRenderers(view, state) {
 function Selectable() {
 	this.children = [];
 	this.querySelector = function(query) {
-		if (typeof query === 'string') {
-			console.warn('query is string');
-			query = { id: query };
-		}
-		return d3.select(this)
-			.selectAll()
-			.filter(d => _.isMatch(d, query))
-			.node();
+		return this.children.filter(d => _.isMatch(d, query))[0];
 	};
+	// this.querySelector = function(query) {
+	// 	console.warn('selector', query)
+	// 	if (typeof query === 'string') {
+	// 		console.warn('query is string');
+	// 		query = { id: query };
+	// 	}
+	// 	console.warn(this.children)
+	// 	// console.warn(this.children.filter(d => _.isMatch(d, query))[0])
+	// 	return this.children.filter(d => _.isMatch(d, query))[0];
+	// 	return d3.select(this)
+	// 		.selectAll()
+	// 		.filter(d => _.isMatch(d, query))
+	// 		.node();
+	// };
 	this.querySelectorAll = function(query) {
 		if (typeof query === 'undefined') return this.children;
 		return this.children.filter(d => _.isMatch(d, query));
