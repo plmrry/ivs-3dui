@@ -51,6 +51,12 @@
 
 	};
 
+	/** INTERSECTIONS **/
+	var raycaster = new THREE.Raycaster();
+	var mouse = new THREE.Vector2();
+	var sphereInter;
+	var currentIntersected;
+
 	init();
 	animate();
 
@@ -109,6 +115,14 @@
 		stats.domElement.style.top = '0px';
 		container.appendChild(stats.domElement);
 
+		// Intersections
+		var geometry = new THREE.SphereGeometry( 5 );
+		var material = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
+
+		sphereInter = new THREE.Mesh( geometry, material );
+		sphereInter.visible = false;
+		scene.add( sphereInter );
+
 		// Controls
 		controls = new THREE.OrbitControls( camera, renderer.domElement );
 		controls.damping = 0.2;
@@ -126,12 +140,12 @@
 			// console.log('change', e.target);
 			cancelHideTransorm();
 		});
-
+		
 		transformControl.addEventListener('mouseDown', function(e) {
 			// controls.enabled = false;render
 			cancelHideTransorm(); // *
 		});
-
+		
 		transformControl.addEventListener('mouseUp', function(e) {
 			// controls.enabled = true;
 			// console.log('mouseUp', e, controls);
@@ -144,8 +158,11 @@
 
 		});
 
+		document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+
 		var dragcontrols = new THREE.DragControls(camera, splineHelperObjects, renderer.domElement); // 
 
+		
 		dragcontrols.on('hoveron', function(e) {
 			transformControl.attach(e.object);
 			cancelHideTransorm(); // *
@@ -154,7 +171,7 @@
 		dragcontrols.on('hoveroff', function(e) {
 			if (e) delayHideTransform();
 		})
-
+		
 
 		controls.addEventListener('start', function() {
 			cancelHideTransorm();
@@ -183,7 +200,6 @@
 		function cancelHideTransorm() {
 			if (hiding) clearTimeout(hiding);
 		}
-
 
 
 		/*******
@@ -244,9 +260,9 @@
 		return object;
 	}
 
-	function addPoint() {
+	function addPoint(pos) {
 		splinePointsLength ++;
-		positions.push(addSplineObject()
+		positions.push(addSplineObject(new THREE.Vector3(pos[0], pos[1], pos[2]))
 					.position);
 
 		updateSplineOutline();
@@ -282,6 +298,19 @@
 		}
 
 		
+	}
+
+	
+
+	function onDocumentMouseMove( event ) {
+
+		event.preventDefault();
+
+		// calculate mouse position in normalized device coordinates
+		// (-1 to +1) for both components
+
+		mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+		mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;	
 	}
 
 
@@ -320,6 +349,44 @@
 	}
 
 	function render() {
+
+		// update the picking ray with the camera and mouse position	
+		raycaster.setFromCamera( mouse, camera );	
+
+		// find intersections
+
+		raycaster.setFromCamera( mouse, camera );
+
+		var intersects = raycaster.intersectObjects( scene.children, true);
+
+		if ( intersects.length > 0 ) {
+
+			if ( currentIntersected !== undefined ) {
+
+				currentIntersected.material.linewidth = 1;
+
+			}
+
+			currentIntersected = intersects[ 0 ].object;
+			console.log(currentIntersected);
+			currentIntersected.material.linewidth = 5;
+
+			sphereInter.visible = true;
+			sphereInter.position.copy( intersects[ 0 ].point );
+
+		} else {
+
+			if ( currentIntersected !== undefined ) {
+
+				currentIntersected.material.linewidth = 1;
+
+			}
+
+			currentIntersected = undefined;
+
+			sphereInter.visible = false;
+
+		}
 
 		renderer.render(scene, camera);
 	}
