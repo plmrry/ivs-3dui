@@ -59,7 +59,7 @@ function main({custom}) {
 	const log = console.log.bind(console);
 	
 	const size$ = stream
-		.of({ width: 400, height: 700 })
+		.of({ width: 600, height: 700 })
 		.shareReplay();
 	
 	const main_canvas_drag$ = custom.dom
@@ -100,7 +100,7 @@ function main({custom}) {
 		.filter(s => s.size() > 0)
 		.map(s => s.node());
 		
-  const raycaster$ = ndc$ // combineLatestObj({ ndc$, camera: main_camera_state$ })
+  const raycaster$ = ndc$
   	.withLatestFrom(
   		main_camera_state$,
   		(n,c) => ({ ndc: n, camera: c })
@@ -111,7 +111,7 @@ function main({custom}) {
   	})
   	.scan(apply, new THREE.Raycaster());
   	
-  const intersects$ = raycaster$ //combineLatestObj({ raycaster$, floor$ })
+  const intersects$ = raycaster$
   	.withLatestFrom(
   		floor$,
   		(r,f) => ({ raycaster: r, floor: f })
@@ -121,7 +121,7 @@ function main({custom}) {
   	.map(arr => arr[0])
   	.pluck('point', 'x')
   	.do(log)
-  	.subscribe()
+  	.subscribe();
 
   const orbit$ = custom.dom
     .select('#orbit_camera')
@@ -321,8 +321,6 @@ Cycle.run(main, {
 	custom: makeCustomDriver('#app')
 });
 
-const raycaster = new THREE.Raycaster();
-
 function makeCustomDriver() {
 
 	var container = d3.select('body')
@@ -468,7 +466,7 @@ function updateCameras(view, state) {
 			  this.position.copy(d.position);
 			  this.lookAt(d.lookAt);
 			  this.up.copy(new THREE.Vector3(0, 1, 0));
-			  // this.updateProjectionMatrix();
+			  /** Apparently we do not need to call `updateProjectionMatrix()` */
 			}
 			/**
 			 * NOTE: You could, in theory, raycast from the middle of the camera's
@@ -589,7 +587,7 @@ function getNewCone() {
 		radiusBottom: CONE_BOTTOM,
 		openEnded: true,
 		radialSegments: CONE_RADIAL_SEGMENTS
-	}
+	};
 	let geometry = new THREE.CylinderGeometry(
 		params.radiusTop,
 		params.radiusBottom,
@@ -653,18 +651,6 @@ function Selectable() {
 	};
 }
 
-function fromD3drag(selection) {
-	let handler = d3.behavior.drag();
-  selection.call(handler);
-  return fromD3dragHandler(handler);
-}
-
-function fromD3dragHandler(drag) {
-	let streams = ['drag', 'dragstart', 'dragend']
-		.map(ev => observableFromD3Event(ev)(drag));
-	return stream.merge(streams);
-}
-
 function observableFromD3Event(type) {
 	return function(selection) {
 		return stream
@@ -686,21 +672,6 @@ function getNdcFromMouse(mouse, ndc) {
 		y: ndc.y(mouse[1])
 	};
 }
-
-// function getNdcFromMouse({ mouse, ndc }) {
-// 	return {
-// 		x: ndc.x(mouse[0]),
-// 		y: ndc.y(mouse[1])
-// 	};
-// }
-
-// function getNdcFromMouse(event, ndc) {
-//   event.ndc = {
-//     x: ndc.x(event.mouse[0]),
-//     y: ndc.y(event.mouse[1])
-//   };
-//   return event;
-// };
 
 function updateNdcDomain({ width, height }) {
   return function(d) {
