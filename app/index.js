@@ -213,12 +213,19 @@ function main({custom}) {
 		})
 		// .shareReplay();
 		
+	// const editor_size$ = 
+		
 	const editor_camera$ = main_camera$
 		.map(c => {
-			c.position.y = 10;
+			c.position.y = 1;
 			c.position.x = 10;
-			c.position.z = 10;
+			c.position.z = 0;
+			c.lookAt = undefined;
 			c.name = 'editor';
+			c.size = {
+							width: 300,
+							height: 300
+						}
 			return c;
 		});
 	
@@ -235,12 +242,6 @@ function main({custom}) {
 				scenes: [
 					{
 						name: 'editor',
-						floors: [
-						  {
-						    type: 'floor',
-						    name: 'floor',
-						  }
-						],
 						sound_objects: [
 							{
 								name: 'sound_object',
@@ -392,8 +393,6 @@ function makeCustomDriver() {
 		height: 3
 	};
 	
-	var floor = getFloor(room_size);
-	
 	function getSpotlight() {
 		var spotLight = new THREE.SpotLight(0xffffff, 0.95);
 		spotLight.position.setY(100);
@@ -404,8 +403,6 @@ function makeCustomDriver() {
 		spotLight.exponent = 1;
 		return spotLight;
 	}
-	
-	var hemisphere = new THREE.HemisphereLight(0, 0xffffff, 0.8);
 	
 	const state = {
 		dom: container,
@@ -512,7 +509,7 @@ function updateCameras(view, state) {
 			if (! _.isMatch(this.position, d.position)) {
 			  debug('camera')('update position');
 			  this.position.copy(d.position);
-			  this.lookAt(d.lookAt);
+			  this.lookAt(d.lookAt || new THREE.Vector3());
 			  this.up.copy(new THREE.Vector3(0, 1, 0));
 			  /** Apparently we do not need to call `updateProjectionMatrix()` */
 			}
@@ -666,14 +663,15 @@ function updateRenderers(view, state) {
 		.enter()
 		.append(function(d) {
 			debug('renderer')('new renderer');
-			let rend = new THREE.WebGLRenderer({
+			let renderer = new THREE.WebGLRenderer({
 				canvas: state.dom.select(d.canvas).node(),
 				antialias: true
 			});
-			rend.shadowMap.enabled = true;
-			rend.shadowMap.type = THREE.PCFSoftShadowMap;
-			rend.name = d.name;
-			return rend;
+			renderer.shadowMap.enabled = true;
+			renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+			renderer.name = d.name;
+			renderer.setClearColor(0xf0f0f0);
+			return renderer;
 		});
 	renderers
 		.each(function(d) {
