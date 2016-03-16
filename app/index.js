@@ -202,29 +202,65 @@ function main({custom}) {
 			size$
 		})
 		.map(({ position, lookAt, size }) => {
+			// position.y = 10;
 			return {
-				id: 'main',
 				name: 'main',
 				size: size,
 				position: position,
 				zoom: 40,
 				lookAt: lookAt
 			};
-		});
+		})
+		// .shareReplay();
 		
+	const editor_camera$ = main_camera$
+		.map(c => {
+			c.position.y = 10;
+			c.position.x = 10;
+			c.position.z = 10;
+			c.name = 'editor';
+			return c;
+		});
 	
 	const foo$ = stream.of(1,2);
 	
 	const view$ = combineLatestObj({
 			main_camera$,
+			editor_camera$,
 			size$,
 			foo$
 		})
-		.map(({ main_camera, size, foo }) => {
+		.map(({ main_camera, editor_camera, size, foo }) => {
 			return {
 				scenes: [
 					{
-						id: 'main',
+						name: 'editor',
+						floors: [
+						  {
+						    type: 'floor',
+						    name: 'floor',
+						  }
+						],
+						sound_objects: [
+							{
+								name: 'sound_object',
+								volume: 0.8,
+								cones: [
+									{
+										volume: 2,
+										spread: 0.5,
+										selected: true,
+										rotation: {
+											x: 0.5,
+											y: 0.1,
+											z: 0.1
+										}
+									}
+								]
+							},
+						]
+					},
+					{
 						name: 'main',
 						floors: [
 						  {
@@ -234,9 +270,7 @@ function main({custom}) {
 						],
 						sound_objects: [
 							{
-								type: 'sound_object',
 								name: 'sound_object',
-								id: 1,
 								position: {
 									x: 2,
 									y: -0.5,
@@ -247,24 +281,17 @@ function main({custom}) {
 									{
 										volume: 2,
 										spread: 0.5,
-										latitude: 45,
-										theta: Math.PI * 0.5,
-										phi: 0,
-										selected: true
-									},
-									{
-										volume: 1.2,
-										spread: 0.7,
-										latitude: 110,
-										theta: Math.PI * 0.1,
-										phi: 3
+										selected: true,
+										rotation: {
+											x: 0.5,
+											y: 0.1,
+											z: 0.1
+										}
 									}
 								]
 							},
 							{
-								type: 'sound_object',
 								name: 'sound_object',
-								id: 1,
 								position: {
 									x: 3,
 									y: -0.5,
@@ -275,30 +302,32 @@ function main({custom}) {
 									{
 										volume: 2,
 										spread: 0.5,
-										latitude: 45,
-										theta: Math.PI * 0.5,
-										phi: 0,
-										selected: true
-									},
-									{
-										volume: 1.2,
-										spread: 0.7,
-										latitude: 110,
-										theta: Math.PI * 0.1,
-										phi: 3
+										rotation: {
+											x: -0.5,
+											y: -0.2,
+											z: -0.1
+										}
 									}
 								]
 							}
 						]
 					}
 				],
-				cameras: [ main_camera ],
+				cameras: [ main_camera, editor_camera ],
 				renderers: [
 					{
 						id: 'main',
 						name: 'main',
 						canvas: '#main-canvas',
 						size: size
+					},
+					{
+						name: 'editor',
+						canvas: '#editor-canvas',
+						size: {
+							width: 300,
+							height: 300
+						}
 					}
 				],
 				renderSets: [
@@ -306,6 +335,11 @@ function main({custom}) {
 						render_id: 'main',
 						scene_id: 'main',
 						camera_id: 'main'
+					},
+					{
+						render_id: 'editor',
+						scene_id: 'editor',
+						camera_id: 'editor'
 					}
 				]
 			};
@@ -333,6 +367,17 @@ function makeCustomDriver() {
 			border: '1px solid black'
 		});
 		
+	container
+		.append('canvas')
+		.attr('id', 'editor-canvas')
+		.style({
+			border: '1px solid red'
+		})
+		.attr({
+			height: '300px',
+			width: '300px'
+		});
+		
 	var controls = container.append('div');
 		
 	controls
@@ -349,14 +394,17 @@ function makeCustomDriver() {
 	
 	var floor = getFloor(room_size);
 	
-	var spotLight = new THREE.SpotLight(0xffffff, 0.95);
-	spotLight.position.setY(100);
-	spotLight.castShadow = true;
-	spotLight.shadow.mapSize.width = 4000;
-	spotLight.shadow.mapSize.height = 4000; 
-	spotLight.intensity = 1;
-	spotLight.exponent = 1;
-
+	function getSpotlight() {
+		var spotLight = new THREE.SpotLight(0xffffff, 0.95);
+		spotLight.position.setY(100);
+		spotLight.castShadow = true;
+		spotLight.shadow.mapSize.width = 4000;
+		spotLight.shadow.mapSize.height = 4000; 
+		spotLight.intensity = 1;
+		spotLight.exponent = 1;
+		return spotLight;
+	}
+	
 	var hemisphere = new THREE.HemisphereLight(0, 0xffffff, 0.8);
 	
 	const state = {
@@ -381,9 +429,9 @@ function makeCustomDriver() {
 					debug('scene')('new scene');
 					var new_scene = new THREE.Scene();
 					new_scene.name = d.name;
-					new_scene.add(floor);
-					new_scene.add(spotLight);
-					new_scene.add(hemisphere);
+					new_scene.add(getFloor(room_size));
+					new_scene.add(getSpotlight());
+					new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
 					return new_scene;
 				});
 				
@@ -486,7 +534,7 @@ function updateSoundObjects(scenes) {
 
 	let sound_objects = scenes
 		.selectAll({ name: 'sound_object' })
-		.data(function(d) { return d.sound_objects });
+		.data(function(d) { return d.sound_objects || [] });
 			
 	sound_objects
 		.enter()
@@ -550,8 +598,10 @@ const latitude_to_theta = d3.scale.linear()
 
 function updateOneCone(d) {
 	// Update rotation
-	this.rotation.x = latitude_to_theta(d.latitude);
-	this.rotation.y = d.phi;
+	// this.rotation.x = latitude_to_theta(d.latitude);
+	// this.rotation.x = d.rotation.x;
+	// this.rotation.y = d.phi;
+	this.rotation.setFromVector3(d.rotation);
 	// If params change, update geometry
 	let cone = this.children[0];
 	let params = cone.geometry.parameters;
