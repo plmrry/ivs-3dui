@@ -39,5 +39,9 @@ var Main = function() {
         this.animate();
     };
 
+    this.appendToContainer = function(container) {
+        container.appendChild( this.renderer.domElement );
+    };
+
 
 }

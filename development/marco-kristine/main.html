@@ -3,6 +3,9 @@
 <head>
 	<title>Marco &amp; Kristine</title>
 	<meta charset="utf-8">
+	<style>
+		body {margin:0;}
+	</style>
 
 	<script src="js/three.min.js"></script>
 	<script src="js/earcut.js"></script>
@@ -19,6 +22,7 @@
 
 	var instance = new Main();  
 	instance.init(); 
+	instance.appendToContainer(document.body);
 	console.log(instance); 
 
 </script>

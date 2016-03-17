@@ -42,7 +42,7 @@ var Soundzone = function(points) {
 	// cursor indicates which location/obj the mouse is pointed at
 	this.cursor = new THREE.Mesh(
 		new THREE.BoxGeometry(9,9,9),
-		new THREE.MeshBasicMaterial({ color:0x00ccff; })
+		new THREE.MeshBasicMaterial({ color:0x00ccff })
 	);
 	this.cursor.visible = false;
 
@@ -94,7 +94,7 @@ Soundzone.prototype = {
 	},
 	removeFromScene: function(scene) {
 		scene.remove(this.objects, this.cursor);
-	}
+	},
 
 	// raycast to this soundzone
 	isUnderMouse: function(raycaster, mouse, camera) {
@@ -176,7 +176,7 @@ drawing = {                   // live drawing by mouse
 		if (this.scene && object)
 			object.addToScene(this.scene);
 		return object;
-	}
+	},
 	clear: function() {
 		var scene = this.scene;
 		this.lines.forEach(function(line) {
