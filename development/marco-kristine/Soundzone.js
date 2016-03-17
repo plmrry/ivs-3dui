@@ -37,7 +37,7 @@ var Soundzone = function(points) {
 	});
 	this.spline.mesh = new THREE.Line( geometry, material );
 
-	var shape = new THREE.Shape();
+	var shape = new THREE.Shape(); /////// the algorithm used by three.js is not very robust, consider replacing with earcut
 	shape.fromPoints(geometry.vertices);
 	geometry = new THREE.ShapeGeometry(shape);
 	material = new THREE.MeshPhongMaterial({
@@ -66,41 +66,91 @@ Soundzone.prototype = {
 	},
 
 	addToScene: function(scene) {
-	    scene.add(this.pointObjects, this.spline.mesh, this.shape);
+	    scene.add(this.objects);
+	},
+	removeFromScene: function(scene) {
+		scene.remove(this.objects);
+	}
+
+	// raycast to this soundzone
+	isUnderMouse: function(raycaster, mouse, camera) {
+		if (this.isActive) {
+			return raycaster.intersectObjects( this.objects ).length > 0;
+		}
+		else {
+			return raycaster.intersectObject( this.shape ).length > 0;
+		}
+	},
+	objectUnderMouse: function(raycaster, mouse, camera) {
+		// todo
 	},
 
 	setActive: function() {
 		this.isActive = true;
+		this.pointObjects.forEach(function(obj) {
+			obj.visible = true;
+		});
+		this.spline.mesh.visible = true;
 	},
 
 	setInactive: function() {
 		this.isActive = false;
+		this.pointObjects.forEach(function(obj) {
+			obj.visible = false;
+		});
+		this.spline.mesh.visible = false;
 	}
 }
 
 
-drawing = {               // live drawing by mouse
+drawing = {                   // live drawing by mouse
+	scene: null,              //    the scene
 	points: [],               //    points on path
 	lines: [],                //    lines on the scene
+	lastPoint: new THREE.Vector3(),
+
+	setScene: function(scene) {
+		this.scene = scene;
+	},
 	beginAt: function(point) {
-		this.points = [point];
+		this.lastPoint = point;
+		this.points.push(point);
 	},
 	addPoint: function(point) {
+		if (this.scene === null) {
+			console.log('scene not set');
+			return;
+		}
+
 		var material = new THREE.LineBasicMaterial({
 			color: 0xff0000
 		});
 		var geometry = new THREE.Geometry();
-		geometry.vertices.push(this.points.peek(), point);
+		geometry.vertices.push(this.lastPoint, point);
 		var line = new THREE.Line(geometry,material);
-		scene.add(line);
+
+		this.lastPoint = point;
 		this.points.push(point);
 		this.lines.push(line);
+		this.scene.add(line);
 	},
-	getPoints: function() {
-		var points = simplify(this.points,10,true); // :-\
-		return points;
-	},
+	createObject: function() {
+		var points = simplify(this.points, 10, true); // :-\ tolerance = 10 is somewhat arbitrary
+		var object;
+		if (points.length >= 3) {
+			clear();
+			object = new Soundzone(points);
+		}
+		// else {}                       // not enough points = a sound OBJECT
+
+		this.clear();
+
+		if (this.scene && object)
+			object.addToScene(this.scene);
+		return object;
+	}
 	clear: function() {
+		var scene = this.scene;
 		this.lines.forEach(function(line) {
 			scene.remove(line);
 		});
