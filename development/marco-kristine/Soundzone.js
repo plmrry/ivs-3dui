@@ -41,15 +41,13 @@ var Soundzone = function(points) {
 	shape.fromPoints(geometry.vertices);
 	geometry = new THREE.ShapeGeometry(shape);
 	material = new THREE.MeshPhongMaterial({
-        color: 0xff0000,
-        transparent: true,
-        opacity: 0.2,
-        side: THREE.DoubleSide,
-        depthWrite: false
-    });
-    this.shape = new THREE.Mesh(geometry,material);
-
-    scene.add(this.pointObjects, this.spline.mesh, this.shape);
+		color: 0xff0000,
+		transparent: true,
+		opacity: 0.2,
+		side: THREE.DoubleSide,
+		depthWrite: false
+	});
+	this.shape = new THREE.Mesh(geometry,material);
 }
 
 
@@ -65,6 +63,10 @@ Soundzone.prototype = {
 		return ( obj === this.shape || 
 			     obj === this.spline.mesh || 
 			     this.pointObjects.some(point => point === obj) );
+	},
+
+	addToScene: function(scene) {
+	    scene.add(this.pointObjects, this.spline.mesh, this.shape);
 	},
 
 	setActive: function() {
