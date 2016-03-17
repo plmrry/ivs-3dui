@@ -4,23 +4,47 @@ var Soundzone = function(points) {
 	this.isActive = true;
 
 	this.splinePoints = points;
-	this.pointObjects,
-	this.spline,
+	this.pointObjects;
+	this.cursor;
+	this.spline;
 	this.shape;
 
 	var geometry, material;
 
 	// splinePoints control the curve of the path
-	var pointObjects = [];
-	points.forEach(function(point) {
-		geometry = new THREE.BoxGeometry( 7, 7, 7 );
-		material = new THREE.MeshBasicMaterial( { color:0xff0000 } );
-		var pcube = new THREE.Mesh( geometry, material );
-		pcube.position.x = point.x;
-		pcube.position.y = point.y;
-		pointObjects.push(pcube);
-	});
-	this.pointObjects = pointObjects;
+	this.pointObjects = (function() {
+		// setup
+		var cube = new THREE.BoxGeometry( 5, 5, 5 );		
+		var cubeMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
+		var cubeMesh = new THREE.Mesh( cube, cubeMat );
+		
+		var collider = new THREE.SphereGeometry(10);
+		var colliderMat = new THREE.MeshBasicMaterial( {transparent:true, opacity:0});
+		var colliderMesh = new THREE.Mesh( collider, colliderMat );
+
+		var group = new THREE.Object3D();
+		group.add(cubeMesh, colliderMesh);
+
+		// place a meshgroup at each point in array
+		var pointObjects = [];
+		points.forEach(function(point) {
+			group.position.x = point.x,
+			group.position.y = point.y;
+
+			pointObjects.push(group.clone());
+		})
+
+
+		return pointObjects;
+	
+	})();
+
+	// cursor indicates which location/obj the mouse is pointed at
+	this.cursor = new THREE.Mesh(
+		new THREE.BoxGeometry(9,9,9),
+		new THREE.MeshBasicMaterial({ color:0x00ccff; })
+	);
+	this.cursor.visible = false;
 
 	// a soundzone is a closed, filled path
 	// trajectory may need to be modified for this
@@ -66,10 +90,10 @@ Soundzone.prototype = {
 	},
 
 	addToScene: function(scene) {
-	    scene.add(this.objects);
+	    scene.add(this.objects, this.cursor);
 	},
 	removeFromScene: function(scene) {
-		scene.remove(this.objects);
+		scene.remove(this.objects, this.cursor);
 	}
 
 	// raycast to this soundzone
@@ -84,6 +108,8 @@ Soundzone.prototype = {
 	objectUnderMouse: function(raycaster, mouse, camera) {
 		// todo
 	},
+
+	move: function(x, y, offsetX = 0, offsetY = 0) {}, // todo
 
 	setActive: function() {
 		this.isActive = true;
@@ -114,7 +140,7 @@ drawing = {                   // live drawing by mouse
 	},
 	beginAt: function(point) {
 		this.lastPoint = point;
-		this.points.push(point);
+		this.points = [point];
 	},
 	addPoint: function(point) {
 		if (this.scene === null) {
@@ -135,7 +161,9 @@ drawing = {                   // live drawing by mouse
 		this.scene.add(line);
 	},
 	createObject: function() {
-		var points = simplify(this.points, 10, true); // :-\ tolerance = 10 is somewhat arbitrary
+		// simplify points using algorithm from simplify.js
+		// tolerance = 10 is a somewhat arbitrary number :-\
+		var points = simplify(this.points, 10, true);
 		var object;
 		if (points.length >= 3) {
 			clear();
@@ -155,5 +183,6 @@ drawing = {                   // live drawing by mouse
 			scene.remove(line);
 		});
 		this.lines = [];
+		this.points = [];
 	}
 }
