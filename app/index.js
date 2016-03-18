@@ -29,67 +29,32 @@ d3.selection.prototype.nodes = function() {
 	return nodes;
 };
 
-function getFloor(room_size) {
-	var FLOOR_SIZE = 100;
-	var floorGeom = new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE);
-	var c = 0.46;
-	var floorMat = new THREE.MeshPhongMaterial({
-		color: new THREE.Color(c, c, c),
-		side: THREE.DoubleSide,
-		depthWrite: false
-	});
-	var e = 0.5;
-	floorMat.emissive = new THREE.Color(e, e, e);
-	var floor = new THREE.Mesh(floorGeom, floorMat);
-	floor.name = 'floor';
-	floor.rotateX(Math.PI / 2);
-	floor.position.setY(-room_size.height / 2);
-	var grid = new THREE.GridHelper(FLOOR_SIZE / 2, 2);
-	grid.rotateX(Math.PI / 2);
-	grid.material.transparent = true;
-	grid.material.opacity = 0.2;
-	grid.material.linewidth = 2;
-	grid.material.depthWrite = false;
-	floor.add(grid);
-	floor.receiveShadow = true;
-	return floor;
-}
-
 function main({custom}) {
 	const log = console.log.bind(console);
 	
 	const size$ = stream
 		.of({ width: 600, height: 700 })
 		.shareReplay();
-	
-	const main_canvas_drag$ = custom.dom
-    .select('#main-canvas')
-    .d3dragHandler()
-    .events('drag');
-    
-  const mouse$ = main_canvas_drag$
-  	.map(({ node, event }) => { 
-  		let mouse = d3.mouse(node);
-  		return mouse;
-  	});
-    
+		
   const ndcScale$ = size$
-  	.map(updateNdcDomain)
-  	.scan(apply, {
-  		x: d3.scale.linear().range([-1, 1]),
-      y: d3.scale.linear().range([1, -1])
-  	});
-  	
-  const ndc$ = mouse$
-  	.withLatestFrom(
-  		ndcScale$,
-  		getNdcFromMouse
-  	);
+  	.map(({ width, height }) => ({
+  		x: d3.scale.linear().domain([0, width]).range([-1, +1]),
+  		y: d3.scale.linear().domain([0, height]).range([+1, -1])
+  	}));
 	
-	const floor$ = custom.scenes
+	const main_canvas$ = custom.dom
+    .select('#main-canvas');
+    
+  const main_canvas_drag_handler$ = main_canvas$
+  	.d3dragHandler();
+
+	const main_scene$ = custom.scenes
 	  .map(scenes => scenes.select({ name: 'main' }))
 	  .filter(s => s.size() > 0)
-	  .map(scene => scene.select({ name: 'floor' }))
+	  .do(s => debug('scene')('state'))
+	  
+	const floor$ = main_scene$
+		.map(scene => scene.select({ name: 'floor' }))
 	  .filter(s => s.size() > 0)
 	  .map(floor => floor.node())
 	  .map(floor => [floor]);
@@ -100,35 +65,104 @@ function main({custom}) {
 		.filter(s => s.size() > 0)
 		.map(s => s.node());
 		
-  const raycaster$ = ndc$
+	const to_birds_eye$ = custom.dom
+		.select('#camera_to_birds_eye')
+		.events('click')
+		.flatMap(ev => {
+			let destination = MAX_LATITUDE;
+      return d3TweenStream(500)
+        .scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
+        .map(({ t, dt }) => {
+          return p => {
+            let speed = (1-t) === 0 ? 0 : (destination - p)/(1 - t);
+            let step = p + dt * speed;
+            let next = t === 1 ? destination : step;
+            return next;
+          };
+        });
+    });
+
+  const main_canvas_event$ = stream
+  	.merge(
+  		main_canvas_drag_handler$.events('drag'),
+  		main_canvas_drag_handler$.events('dragstart'),
+  		main_canvas_drag_handler$.events('dragend'),
+  		main_canvas$.events('mousemove')
+  	)
+  	.map((obj) => { 
+  		obj.mouse = d3.mouse(obj.node);
+  		return obj;
+  	})
+  	.withLatestFrom(
+  		ndcScale$,
+  		(event, ndcScale) => { 
+  			event.ndc = {
+  				x: ndcScale.x(event.mouse[0]), 
+  				y: ndcScale.y(event.mouse[1]) 
+  			};
+  			return event;
+  		}
+  	)
   	.withLatestFrom(
   		main_camera_state$,
-  		(n,c) => ({ ndc: n, camera: c })
+  		(e,c) => ({ event: e, camera: c })
   	)
-  	.map(({ ndc, camera }) => (r) => { 
-  		r.setFromCamera(ndc, camera);
-  		return r;
+  	.map(({ event, camera }) => { 
+  		let raycaster = new THREE.Raycaster();
+  		raycaster.setFromCamera(event.ndc, camera);
+  		event.raycaster = raycaster;
+  		return event;
   	})
-  	.scan(apply, new THREE.Raycaster());
-  	
-  const intersects$ = raycaster$
   	.withLatestFrom(
-  		floor$,
-  		(r,f) => ({ raycaster: r, floor: f })
+  		main_scene$.map(s => s.node()),
+  		(event, scene) => ({ event, scene })
   	)
-  	.map(({ raycaster, floor }) => raycaster.intersectObjects(floor))
-  	.filter(arr => arr.length > 0)
-  	.map(arr => arr[0])
-  	.pluck('point', 'x')
-  	.do(log)
-  	.subscribe();
+  	.map(({ event, scene }) => {
+  		/** THIS IS REALLY DUMB to find these like this every time */
+  		let floor = scene.getObjectByProperty('name', 'floor');
+  		let objects = scene.children.filter(d => _.isMatch(d, { name: 'sound_object' }));
+  		event.intersects = {
+  			floor: event.raycaster.intersectObject(floor),
+  			sound_objects: event.raycaster.intersectObjects(objects, true)
+  		};
+  		return event;
+  	})
+  	.shareReplay()
 
+ 	const clicked$ = main_canvas_event$
+ 		.pairwise()
+ 		.filter(arr => arr[0].event.type === 'dragstart')
+ 		.filter(arr => arr[1].event.type === 'dragend')
+ 		.pluck('1')
+ 		
+ 	const clicked_key$ = clicked$
+ 		.pluck('intersects', 'sound_objects', '0', 'object', '__data__', 'key')
+ 		.distinctUntilChanged()
+ 		.shareReplay()
+ 		
+ 	const unselect_object$ = clicked_key$
+ 		.pairwise()
+ 		.pluck('0')
+ 		.filter(key => typeof key !== 'undefined')
+ 		.map(key => objects => {
+ 			objects[key].selected = false;
+ 			objects[key].material.color = 'ffffff';
+ 			return objects;
+ 		});
+
+ 	const select_object$ = clicked_key$
+ 		.filter(key => typeof key !== 'undefined')
+ 		.map(key => objects => {
+ 			objects[key].selected = true;
+ 			objects[key].material.color = '66c2ff';
+ 			return objects;
+ 		});
+ 		
   const orbit$ = custom.dom
     .select('#orbit_camera')
     .d3dragHandler()
     .events('drag')
     .pluck('event')
-    .do(log)
     .shareReplay();
     
 	const MAX_LATITUDE = 89.99;
@@ -142,11 +176,17 @@ function main({custom}) {
 		.domain([0, 360])
 		.range([0, 2 * Math.PI]);
 	
-	const theta$ = orbit$
+	const delta_theta$ = orbit$
 		.pluck('dy')
+		.map(dy => theta => theta - dy);
+		
+	const theta$ = stream
+		.merge(
+			delta_theta$, to_birds_eye$
+		)
 		.startWith(45)
-		.scan((a,b) => {
-			let lat = a-b; // Negative because we need to flip the y!
+		.scan((theta, fn) => fn(theta))
+		.map(lat => {
 			if (lat >= MAX_LATITUDE) return MAX_LATITUDE;
 			if (lat <= MIN_LATITUDE) return MIN_LATITUDE;
 			return lat;
@@ -168,14 +208,6 @@ function main({custom}) {
 			phi$,
 			(radius, theta, phi) => ({ radius, theta, phi })
 		);
-
-	function polarToVector({ radius, theta, phi }) {
-		return {
-			x: radius * Math.sin(phi) * Math.sin(theta),
-			z: radius * Math.cos(phi) * Math.sin(theta),
-			y: radius * Math.cos(theta)
-		};
-	}
 		
 	const relative_position$ = polar_position$
 		.map(polarToVector);
@@ -210,24 +242,61 @@ function main({custom}) {
 				zoom: 40,
 				lookAt: lookAt
 			};
-		})
-		// .shareReplay();
-		
-	// const editor_size$ = 
-		
-	const editor_camera$ = main_camera$
-		.map(c => {
-			c.position.y = 1;
-			c.position.x = 10;
-			c.position.z = 0;
-			c.lookAt = undefined;
-			c.name = 'editor';
-			c.size = {
-							width: 300,
-							height: 300
-						}
-			return c;
 		});
+	
+	const editor_camera$ = stream
+		.just({
+			name: 'editor',
+			size: {
+				width: 300,
+				height: 300
+			},
+			position: {
+				x: 10, y: 1, z: 0
+			},
+			zoom: 50
+		});
+		
+	const add_object$ = custom.dom
+		.select('#add_object')
+		.events('click')
+		.map((ev, i) => ({
+			count: i,
+			key: i,
+			class: 'sound_object',
+			name: 'sound_object',
+			position: {
+				x: Math.random() * 2 - 1,
+				y: Math.random() * 2 - 1,
+				z: Math.random() * 2 - 1,
+			},
+			volume: Math.random() + 0.4,
+			material: {
+				color: 'ffffff'
+			}
+		}))
+		.map(obj => objects => {
+			objects[obj.key] = obj; 
+			return objects 
+		});
+		
+	const sound_object_update$ = stream
+		.merge(
+			add_object$,
+			select_object$,
+			unselect_object$
+		);
+		
+	const sound_objects$ = sound_object_update$	
+		.startWith({})
+		.scan(apply)
+		.map(_.values)
+		.do(log)
+		// .map(o => _.values(o))
+		// .map(objects => {
+		// 	return _.values(objects);
+		// })
+		// .do(log)
 	
 	const foo$ = stream.of(1,2);
 	
@@ -235,16 +304,25 @@ function main({custom}) {
 			main_camera$,
 			editor_camera$,
 			size$,
-			foo$
+			foo$,
+			sound_objects$
 		})
-		.map(({ main_camera, editor_camera, size, foo }) => {
+		.map(({ main_camera, editor_camera, size, foo, sound_objects }) => {
+			// console.log(sound_objects);
 			return {
 				scenes: [
 					{
 						name: 'editor',
+						floors: [
+						  {
+						    name: 'floor',
+						    _type: 'floor'
+						  }
+						],
 						sound_objects: [
 							{
 								name: 'sound_object',
+								type: 'sound_object',
 								volume: 0.8,
 								cones: [
 									{
@@ -255,9 +333,17 @@ function main({custom}) {
 											x: 0.5,
 											y: 0.1,
 											z: 0.1
+										},
+										lookAt: {
+											x: 0,
+											y: 0,
+											z: 0
 										}
 									}
-								]
+								],
+								material: {
+									color: 'ffff00'
+								}
 							},
 						]
 					},
@@ -265,53 +351,10 @@ function main({custom}) {
 						name: 'main',
 						floors: [
 						  {
-						    type: 'floor',
 						    name: 'floor',
 						  }
 						],
-						sound_objects: [
-							{
-								name: 'sound_object',
-								position: {
-									x: 2,
-									y: -0.5,
-									z: 1
-								},
-								volume: 0.8,
-								cones: [
-									{
-										volume: 2,
-										spread: 0.5,
-										selected: true,
-										rotation: {
-											x: 0.5,
-											y: 0.1,
-											z: 0.1
-										}
-									}
-								]
-							},
-							{
-								name: 'sound_object',
-								position: {
-									x: 3,
-									y: -0.5,
-									z: -1
-								},
-								volume: 0.8,
-								cones: [
-									{
-										volume: 2,
-										spread: 0.5,
-										rotation: {
-											x: -0.5,
-											y: -0.2,
-											z: -0.1
-										}
-									}
-								]
-							}
-						]
+						sound_objects: sound_objects,
 					}
 				],
 				cameras: [ main_camera, editor_camera ],
@@ -386,23 +429,27 @@ function makeCustomDriver() {
 		.attr('id', 'orbit_camera')
 		.text('orbit_camera')
 		.style('height', '100px');
+		
+	controls
+		.append('button')
+		.attr('id', 'camera_to_birds_eye')
+		.text('camera to birds eye');
+		
+	controls
+		.append('button')
+		.attr('id', 'add_cone')
+		.text('add cone');
+		
+	controls
+		.append('button')
+		.attr('id', 'add_object')
+		.text('add object');
 
 	var room_size = {
 		width: 20,
 		length: 18,
 		height: 3
 	};
-	
-	function getSpotlight() {
-		var spotLight = new THREE.SpotLight(0xffffff, 0.95);
-		spotLight.position.setY(100);
-		spotLight.castShadow = true;
-		spotLight.shadow.mapSize.width = 4000;
-		spotLight.shadow.mapSize.height = 4000; 
-		spotLight.intensity = 1;
-		spotLight.exponent = 1;
-		return spotLight;
-	}
 	
 	const state = {
 		dom: container,
@@ -426,10 +473,19 @@ function makeCustomDriver() {
 					debug('scene')('new scene');
 					var new_scene = new THREE.Scene();
 					new_scene.name = d.name;
-					new_scene.add(getFloor(room_size));
 					new_scene.add(getSpotlight());
 					new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
+					scenes$.onNext(state.scenes);
 					return new_scene;
+				});
+				
+			let floors = scenes
+				.selectAll({ name: 'floor' })
+				.data(d => d.floors || []);
+				
+			floors.enter()
+				.append(d => {
+					return getFloor(room_size);
 				});
 				
 			let sound_objects = updateSoundObjects(scenes);
@@ -449,7 +505,7 @@ function makeCustomDriver() {
 				});
 			
 			dom$.onNext(state.dom);
-			scenes$.onNext(state.scenes);
+			// scenes$.onNext(state.scenes);
 			state$.onNext(state);
 		});
 		
@@ -550,6 +606,7 @@ function updateSoundObjects(scenes) {
 			sphere.receiveShadow = true;
 			// sphere.name = 'parentSphere';
 			sphere.name = d.name;
+			sphere._type = d.type;
 			sphere._volume = 1;
 			sphere.renderOrder = 10;
 			return sphere;
@@ -557,10 +614,12 @@ function updateSoundObjects(scenes) {
 			
 	sound_objects
 		.each(function(d) {
+			/** Update position */
 			if (! _.isMatch(this.position, d.position)) {
 				debug('sound object')('set position', d.position);
 				this.position.copy(d.position);
 			}
+			/** Update geometry */
 			let params = this.geometry.parameters;
 			if (! _.isMatch(params, { radius: d.volume })) {
 				debug('sound object')('set radius', d.volume);
@@ -573,6 +632,8 @@ function updateSoundObjects(scenes) {
 				this.geometry.dispose();
 				this.geometry = newGeom;
 			}
+			/** Update color */
+			this.material.color = new THREE.Color(`#${d.material.color}`);
 		});
 		
 	return sound_objects;
@@ -581,7 +642,7 @@ function updateSoundObjects(scenes) {
 function updateCones(sound_objects) {
 	let cones = sound_objects
 		.selectAll()
-		.data(function(d) { return d.cones });
+		.data(function(d) { return d.cones || [] });
 	cones
 		.enter()
 		.append(getNewCone);
@@ -594,12 +655,9 @@ const latitude_to_theta = d3.scale.linear()
 	.range([0, Math.PI/2, Math.PI]);
 
 function updateOneCone(d) {
-	// Update rotation
-	// this.rotation.x = latitude_to_theta(d.latitude);
-	// this.rotation.x = d.rotation.x;
-	// this.rotation.y = d.phi;
-	this.rotation.setFromVector3(d.rotation);
-	// If params change, update geometry
+	/** Update rotation */
+	this.lookAt(d.lookAt || new THREE.Vector3());
+	/** If params change, update geometry */
 	let cone = this.children[0];
 	let params = cone.geometry.parameters;
 	let newParams = { height: d.volume, radiusTop: d.spread };
@@ -609,9 +667,10 @@ function updateOneCone(d) {
 		let newGeom = cylinder_geometry_from_params(params);
 		cone.geometry.dispose();
 		cone.geometry = newGeom;
-		cone.position.y = cone.geometry.parameters.height / 2;
+		cone.rotation.x = Math.PI/2;
+		cone.position.z = cone.geometry.parameters.height / 2;
 	}
-	// Update color
+	/** Update color */
 	let SELECTED_COLOR = new THREE.Color("#66c2ff");
 	if (d.selected === true) cone.material.color = SELECTED_COLOR;
 }
@@ -732,3 +791,125 @@ function updateNdcDomain({ width, height }) {
 function apply(o, fn) {
 	return fn(o);
 }
+
+function polarToVector({ radius, theta, phi }) {
+	return {
+		x: radius * Math.sin(phi) * Math.sin(theta),
+		z: radius * Math.cos(phi) * Math.sin(theta),
+		y: radius * Math.cos(theta)
+	};
+}
+
+function getFloor(room_size) {
+	var FLOOR_SIZE = 100;
+	var floorGeom = new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE);
+	var c = 0.46;
+	var floorMat = new THREE.MeshPhongMaterial({
+		color: new THREE.Color(c, c, c),
+		side: THREE.DoubleSide,
+		depthWrite: false
+	});
+	var e = 0.5;
+	floorMat.emissive = new THREE.Color(e, e, e);
+	var floor = new THREE.Mesh(floorGeom, floorMat);
+	floor.name = 'floor';
+	floor.rotateX(Math.PI / 2);
+	floor.position.setY(-room_size.height / 2);
+	var grid = new THREE.GridHelper(FLOOR_SIZE / 2, 2);
+	grid.rotateX(Math.PI / 2);
+	grid.material.transparent = true;
+	grid.material.opacity = 0.2;
+	grid.material.linewidth = 2;
+	grid.material.depthWrite = false;
+	floor.add(grid);
+	floor.receiveShadow = true;
+	return floor;
+}
+
+	
+function getSpotlight() {
+	var spotLight = new THREE.SpotLight(0xffffff, 0.95);
+	spotLight.position.setY(100);
+	spotLight.castShadow = true;
+	spotLight.shadow.mapSize.width = 4000;
+	spotLight.shadow.mapSize.height = 4000; 
+	spotLight.intensity = 1;
+	spotLight.exponent = 1;
+	return spotLight;
+}
+
+function d3TweenStream(duration, name) {
+  return stream.create(function(observer) {
+    return d3.select({})
+      .transition()
+      .duration(duration)
+      .ease('linear')
+      .tween(name, function() {
+        return function(t) {
+          return observer.onNext(t);
+        };
+      })
+      .each("end", function() {
+        return observer.onCompleted();
+      });
+  });
+}
+
+			// 			sound_objects: [
+			// 				{
+			// 					name: 'sound_object',
+			// 					type: 'sound_object',
+			// 					position: {
+			// 						x: 2,
+			// 						y: -0.5,
+			// 						z: 1
+			// 					},
+			// // 					position: {
+			// // 	x: Math.random() * 2 - 1,
+			// // 	y: Math.random() * 2 - 1,
+			// // 	z: Math.random() * 2 - 1,
+			// // },
+			// 					volume: 0.8,
+			// 					// cones: [
+			// 					// 	{
+			// 					// 		volume: 2,
+			// 					// 		spread: 0.5,
+			// 					// 		selected: true,
+			// 					// 		rotation: {
+			// 					// 			x: 0.5,
+			// 					// 			y: 0.1,
+			// 					// 			z: 0.1
+			// 					// 		},
+			// 					// 		lookAt: {
+			// 					// 			x: -1,
+			// 					// 			y: 0,
+			// 					// 			z: 1
+			// 					// 		}
+			// 					// 	}
+			// 					// ]
+			// 				},
+			// 				{
+			// 					name: 'sound_object',
+			// 					type: 'sound_object',
+			// 					position: {
+			// 						x: 3,
+			// 						y: -0.5,
+			// 						z: -1
+			// 					},
+			// 					volume: 0.8,
+			// 					cones: [
+			// 						{
+			// 							volume: 2,
+			// 							spread: 0.5,
+			// 							rotation: {
+			// 								x: -0.5,
+			// 								y: -0.2,
+			// 								z: -0.1
+			// 							},
+			// 							lookAt: {
+			// 								x: 0,
+			// 								y: 0,
+			// 								z: 0
+			// 							}
+			// 						}
+			// 					]
