@@ -136,8 +136,15 @@ function main({custom}) {
  		.pluck('1');
  		
  	const clicked_key$ = clicked$
- 		.pluck('intersects', 'sound_objects', '0', 'object', '__data__', 'key')
- 		/** What if they click on cone */
+ 		// .pluck('intersects', 'sound_objects', '0', 'object', '__data__', 'key')
+ 		.pluck('intersects', 'sound_objects', '0', 'object')
+ 		.map(o => {
+ 			if (typeof o !== 'undefined') {
+ 				if (o._type === 'cone') return o.parent.parent.__data__.key;
+ 				return o.__data__.key;
+ 			}
+ 			return o;
+ 		})
  		.distinctUntilChanged()
  		.shareReplay();
  		
@@ -264,6 +271,7 @@ function main({custom}) {
 			count: i,
 			key: i,
 			class: 'sound_object',
+			type: 'sound_object',
 			name: 'sound_object',
 			position: {
 				x: Math.random() * 2 - 1,
@@ -607,7 +615,7 @@ function updateSoundObjects(scenes) {
 			sphere.castShadow = true;
 			sphere.receiveShadow = true;
 			sphere.name = d.name;
-			sphere._type = d.type;
+			sphere._type = 'sound_object';
 			sphere._volume = 1;
 			sphere.renderOrder = 10;
 			return sphere;
@@ -716,6 +724,7 @@ function getNewCone() {
 	});
 	let cone = new THREE.Mesh(geometry, material);
 	cone.name = 'cone';
+	cone._type = 'cone';
 	cone.castShadow = true;
 	cone.receiveShadow = true;
 	let coneParent = new THREE.Object3D();
