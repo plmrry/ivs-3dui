@@ -1,9 +1,16 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 	<title>Marco &amp; Kristine</title>
+	<meta charset="utf-8">
+	<style>
+		body {margin:0;}
+	</style>
 
 	<script src="js/three.min.js"></script>
+	<script src="js/earcut.js"></script>
+	<script src="js/triangulate.js"></script>
+	<script src="js/simplify.js"></script>
 	<script src="Soundzone.js"></script>
 	<script src="Main.js"></script>
 </head>
@@ -15,6 +22,7 @@
 
 	var instance = new Main();  
 	instance.init(); 
+	instance.appendToContainer(document.body);
 	console.log(instance); 
 
 </script>
