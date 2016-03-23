@@ -118,7 +118,7 @@ function main({custom}) {
   		(event, scene) => ({ event, scene })
   	)
   	.map(({ event, scene }) => {
-  		/** THIS IS REALLY DUMB to find these like this every time */
+  		/** FIXME: It's inefficient to get ojects on every event */
   		let floor = scene.getObjectByProperty('name', 'floor');
   		let objects = scene.children.filter(d => _.isMatch(d, { name: 'sound_object' }));
   		event.intersects = {
@@ -136,36 +136,47 @@ function main({custom}) {
  		.pluck('1');
  		
  	const clicked_key$ = clicked$
- 		// .pluck('intersects', 'sound_objects', '0', 'object', '__data__', 'key')
  		.pluck('intersects', 'sound_objects', '0', 'object')
  		.map(o => {
  			if (typeof o !== 'undefined') {
+ 				/** TODO: Better way of selecting parent when child cone is clicked? */
  				if (o._type === 'cone') return o.parent.parent.__data__.key;
  				return o.__data__.key;
  			}
- 			return o;
+ 			return undefined;
  		})
+ 		.do(log)
  		.distinctUntilChanged()
  		.shareReplay();
+ 		
+ 	const select_object$ = clicked_key$
+ 		.filter(key => typeof key !== 'undefined')
+ 		.map(key => objects => {
+ 			return objects.map(obj => {
+ 				if (obj.key === key) {
+ 					obj.selected = true;
+ 					obj.material.color = '66c2ff';
+ 					return obj;
+ 				}
+ 				return obj;
+ 			});
+ 		});
  		
  	const unselect_object$ = clicked_key$
  		.pairwise()
  		.pluck('0')
  		.filter(key => typeof key !== 'undefined')
  		.map(key => objects => {
- 			objects[key].selected = false;
- 			objects[key].material.color = 'ffffff';
- 			return objects;
+ 			return objects.map(obj => {
+ 				if (obj.key === key) {
+ 					obj.selected = false;
+ 					obj.material.color = 'ffffff';
+ 					return obj;
+ 				}
+ 				return obj;
+ 			});
  		});
 
- 	const select_object$ = clicked_key$
- 		.filter(key => typeof key !== 'undefined')
- 		.map(key => objects => {
- 			objects[key].selected = true;
- 			objects[key].material.color = '66c2ff';
- 			return objects;
- 		});
- 		
   const orbit$ = custom.dom
     .select('#orbit_camera')
     .d3dragHandler()
@@ -300,21 +311,35 @@ function main({custom}) {
 			],
 		}))
 		.map(obj => objects => {
-			objects[obj.key] = obj; 
-			return objects 
+			// objects[obj.key] = obj;
+			objects.push(obj);
+			return objects;
 		});
 		
-	const sound_object_update$ = stream
+	const add_cone_click$ = custom.dom
+		.select('#add_cone')
+		.events('click')
+		.shareReplay();
+		
+	const add_cone_to_selected$ = add_cone_click$
+		// .map(ev => objects => {
+		// 	_.values(objects)
+		// 		.filter(d => d.selected)
+		// 		.map(selected => )
+		// })
+		
+	const sound_objects_update$ = stream
 		.merge(
 			add_object$,
 			select_object$,
 			unselect_object$
 		);
 		
-	const sound_objects$ = sound_object_update$	
-		.startWith({})
+	const sound_objects$ = sound_objects_update$	
+		// .startWith({})
+		.startWith([])
 		.scan(apply)
-		.map(_.values)
+		// .map(_.values)
 		.shareReplay();
 
 	const selected$ = sound_objects$
@@ -752,7 +777,7 @@ function updateRenderers(view, state, dom) {
 		});
 	renderers
 		.each(function(d) {
-			console.log(this);
+			// console.log(this);
 			let current = this.getSize();
 			let diff = _.difference(_.values(current), _.values(d.size));
 			if (diff.length > 0) {
