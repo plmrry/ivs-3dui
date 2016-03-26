@@ -6,8 +6,14 @@ import Rx from 'rx';
 import THREE from 'three/three.js';
 import _ from 'underscore';
 import combineLatestObj from 'rx-combine-latest-obj';
+import d3_selection from 'd3-selection';
 
 debug.enable('*');
+
+import * as camera from './camera.js';
+import * as scene from './scene.js';
+
+debug('testing')('hello')
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
@@ -31,102 +37,6 @@ d3.selection.prototype.nodes = function() {
 	this.each(function() { nodes.push(this); });
 	return nodes;
 };
-
-// const domState$ = new Rx.ReplaySubject(1);
-	
-// const add_div$ = domState$
-// 	.map(dom => dom.select('#add_div'))
-// 	.flatMap(observableFromD3Event('click'))
-// 	.map(ev => container => {
-// 		container
-// 			.append('div')
-// 			.style({
-// 				height: '100px',
-// 				width: '100px',
-// 				border: '2px solid red'
-// 			});
-// 		return container;
-// 	});
-
-// const domUpdate$ = stream.merge(
-// 		add_div$
-// 	);
-	
-// domDriver(domUpdate$).subscribe(domState$.asObserver());
-	
-// function domDriver(domUpdate$) {
-// 	const container = d3.select('body')
-// 		.append('main')
-// 		.style({
-// 			width: '700px',
-// 			height: '700px',
-// 			border: '1px solid black',
-// 			position: 'relative'
-// 		});
-		
-// 	container.append('button')
-// 		.attr('id', 'orbit_camera')
-// 		.text('orbit camera')
-// 		.style({
-// 			height: '100px',
-// 			position: 'absolute',
-// 			bottom: '30px',
-// 			right: '30px'
-// 		});
-		
-// 	container.append('canvas')
-// 		.attr('id', 'main-canvas')
-// 		.style({
-// 			border: '1px solid green'
-// 		});
-	
-// 	const sceneControls = container
-// 		.append('div')
-// 		.classed('container', true)
-// 		.attr({
-// 			id: 'sceneControls'
-// 		})
-// 		.style({
-// 			position: 'absolute',
-// 			right: '0px',
-// 			top: '0px',
-// 			width: '25vw',
-// 			border: '1px solid blue'
-// 		});
-		
-// 	const add_object_row = sceneControls
-// 		.append('div')
-// 		.classed('row', true);
-		
-// 	add_object_row.append('button')
-// 		.attr({
-// 			id: 'add_object'
-// 		})
-// 		.text('add object');
-		
-// 	add_object_row
-// 		.append('button')
-// 		.attr({
-// 			id: 'add_div'
-// 		})
-// 		.text('add div');
-		
-// 	return domUpdate$
-// 		.startWith(container)
-// 		.scan(apply);
-// }
-
-// function apply(o, fn) {
-// 	return fn(o);
-// }
-
-// function log(string) {
-// 	console.log(string);
-// }
-
-/**
- * NEW /OLD
- */
 
 function main({custom}) {
 	const log = console.log.bind(console);
@@ -157,29 +67,9 @@ function main({custom}) {
 	  .filter(s => s.size() > 0)
 	  .map(floor => floor.node())
 	  .map(floor => [floor]);
-	  
-	const main_camera_state$ = custom.states
-		.pluck('cameras')
-		.map(s => s.select({ name: 'main' }))
-		.filter(s => s.size() > 0)
-		.map(s => s.node());
-		
-	const to_birds_eye$ = custom.dom
-		.select('#camera_to_birds_eye')
-		.events('click')
-		.flatMap(ev => {
-			let destination = MAX_LATITUDE;
-      return d3TweenStream(500)
-        .scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
-        .map(({ t, dt }) => {
-          return p => {
-            let speed = (1-t) === 0 ? 0 : (destination - p)/(1 - t);
-            let step = p + dt * speed;
-            let next = t === 1 ? destination : step;
-            return next;
-          };
-        });
-    });
+	
+	const main_camera_state$ = custom.camera$
+		.map(c => c.querySelector({ name: 'main' }));
 
   const main_canvas_event$ = stream
   	.merge(
@@ -275,104 +165,8 @@ function main({custom}) {
 				return obj;
 			});
 		});
-
-  const orbit$ = custom.dom
-    .select('#orbit_camera')
-    .d3dragHandler()
-    .events('drag')
-    .pluck('event')
-    .shareReplay();
-    
-	const MAX_LATITUDE = 89.99;
-	const MIN_LATITUDE = 5;
-	
-	const latitude_to_theta = d3.scale.linear()
-		.domain([90, 0, -90])
-		.range([0, Math.PI/2, Math.PI]);
 		
-	const longitude_to_phi = d3.scale.linear()
-		.domain([0, 360])
-		.range([0, 2 * Math.PI]);
-	
-	const delta_theta$ = orbit$
-		.pluck('dy')
-		.map(dy => theta => theta - dy);
-		
-	const theta$ = stream
-		.merge(
-			delta_theta$, to_birds_eye$
-		)
-		.startWith(45)
-		.scan((theta, fn) => fn(theta))
-		.map(lat => {
-			if (lat >= MAX_LATITUDE) return MAX_LATITUDE;
-			if (lat <= MIN_LATITUDE) return MIN_LATITUDE;
-			return lat;
-		})
-		.map(latitude_to_theta);
-		
-	const phi$ = orbit$
-		.pluck('dx')
-		.startWith(45)
-		.scan((a,b) => a+b)
-		.map(longitude_to_phi)
-		.map(phi => phi % (2 * Math.PI))
-		.map(phi => (phi < 0) ? (2 * Math.PI) + phi : phi);
-		
-	const polar_position$ = stream
-		.combineLatest(
-			stream.of(100),
-			theta$,
-			phi$,
-			(radius, theta, phi) => ({ radius, theta, phi })
-		);
-		
-	const relative_position$ = polar_position$
-		.map(polarToVector);
-		
-	const lookAt$ = stream
-		.of({
-			x: 0, y: 0, z: 0
-		});
-		
-	const position$ = stream
-		.combineLatest(
-			relative_position$,
-			lookAt$,
-			(rel, look) => ({
-				x: rel.x + look.x,
-				y: rel.y + look.y,
-				z: rel.z + look.z
-			})
-		);
-		
-	const main_camera$ = combineLatestObj({
-			position$,
-			lookAt$,
-			size$
-		})
-		.map(({ position, lookAt, size }) => {
-			return {
-				name: 'main',
-				size: size,
-				position: position,
-				zoom: 40,
-				lookAt: lookAt
-			};
-		});
-	
-	const editor_camera$ = stream
-		.just({
-			name: 'editor',
-			size: {
-				width: 300,
-				height: 300
-			},
-			position: {
-				x: 10, y: 1, z: 0
-			},
-			zoom: 50
-		});
+	const cameras$ = camera.component({ dom$: custom.dom, size$ });
 		
 	const add_object$ = custom.dom
 		.select('#add_object')
@@ -470,14 +264,14 @@ function main({custom}) {
 	const foo$ = stream.of(1,2);
 	
 	const view$ = combineLatestObj({
-			main_camera$,
-			editor_camera$,
+			cameras$,
 			size$,
 			foo$,
 			sound_objects$,
 			editor$
 		})
-		.map(({ main_camera, editor_camera, size, foo, sound_objects, editor }) => {
+		.map(({ cameras, size, foo, sound_objects, editor }) => {
+		// .map(({ main_camera, editor_camera, size, foo, sound_objects, editor }) => {
 			return {
 				dom: {
 					type: 'main',
@@ -508,7 +302,7 @@ function main({custom}) {
 						sound_objects: sound_objects,
 					}
 				],
-				cameras: [ main_camera, editor_camera ],
+				cameras: cameras,
 				renderers: [
 					{
 						id: 'main',
@@ -544,12 +338,6 @@ function main({custom}) {
 		custom: view$
 	};
 }
-
-const rendererState$ = new Rx.ReplaySubject(1);
-
-const domState$ = new Rx.ReplaySubject(1);
-
-// domDriver(domUpdate$).subscribe(domState$.asObserver());
 
 Cycle.run(main, {
 	DOM: CycleDOM.makeDOMDriver('#app'),
@@ -618,10 +406,15 @@ function makeCustomDriver() {
 	const _state = d3.select(new Selectable());
 	
 	return function customDriver(view$) {
+		const camera$ = view$
+			.pluck('cameras')
+			.map(model => camera.state_reducer(model))
+			.scan(apply, new Selectable());
+
 		const dom$ = new Rx.ReplaySubject();
 		const scenes$ = new Rx.ReplaySubject();
 		const state$ = new Rx.ReplaySubject();
-		view$.subscribe(view => {
+		view$.map(view => {
 			debug('view')('view update');
 				
 			let scenes = _state.selectAll({ _type: 'scene' }).data(view.scenes);
@@ -652,22 +445,31 @@ function makeCustomDriver() {
 			let sound_objects = updateSoundObjects(scenes);
 			
 			updateCones(sound_objects);
-			
-			updateCameras(view, state);
 	
 			updateRenderers(view, _state, container);
-				
+			
+			dom$.onNext(state.dom);
+
+			state$.onNext(state);
+			return view;
+		})
+		.subscribe()
+		
+		view$
+		.withLatestFrom(
+			camera$,
+			(v,c) => ({ view: v, cameras: c })
+		)
+		.subscribe(({ view, cameras }) => {
+			// console.log(d)
 			view.renderSets
 				.forEach(({render_id, scene_id, camera_id}) => {
 					let renderer = _state.select({ _type: 'renderer', name: render_id }).node();
 					let scene = _state.select({ _type: 'scene', name: scene_id }).node();
-					let camera = state.cameras.select({ name: camera_id }).node();
+					
+					let camera = cameras.querySelector({ name: camera_id });
 					renderer.render(scene, camera);
 				});
-			
-			dom$.onNext(state.dom);
-			// scenes$.onNext(state.scenes);
-			state$.onNext(state);
 		});
 		
 		return {
@@ -695,53 +497,10 @@ function makeCustomDriver() {
 				}
 			},
 			scenes: scenes$,
-			states: state$
+			states: state$,
+			camera$
 		};
 	};
-}
-
-function updateCameras(view, state) {
-	let cameras = state.cameras.selectAll().data(view.cameras);
-			
-	cameras.enter()
-		.append(function(d) {
-			debug('camera')('new camera');
-			let cam = new THREE.OrthographicCamera();
-			cam.name = d.name;
-		  return cam;
-		});
-		
-	cameras
-		.each(function(d) {
-			/** Update camera size if needed */
-			if (! _.isMatch(this._size, d.size)) {
-				debug('camera')('update size');
-				var s = d.size;
-				[ this.left, this.right ] = [-1,+1].map(d => d * s.width * 0.5);
-				[ this.bottom, this.top ] = [-1,+1].map(d => d * s.height * 0.5);
-				this.updateProjectionMatrix();
-				this._size = d.size;
-			}
-			/** Always update lookAt and up with position! */
-			if (! _.isMatch(this.position, d.position)) {
-			  debug('camera')('update position');
-			  this.position.copy(d.position);
-			  this.lookAt(d.lookAt || new THREE.Vector3());
-			  this.up.copy(new THREE.Vector3(0, 1, 0));
-			  /** Apparently we do not need to call `updateProjectionMatrix()` */
-			}
-			/**
-			 * NOTE: You could, in theory, raycast from the middle of the camera's
-			 * view to the floor in order to get the "current lookat". But that's
-			 * a little crazy, don't you think?
-			 */
-			/** Update camera zoom */
-			if (this.zoom !== d.zoom) {
-				debug('camera')('update zoom');
-				this.zoom = d.zoom;
-				this.updateProjectionMatrix();
-			}
-		});
 }
 
 function updateSoundObjects(scenes) {
