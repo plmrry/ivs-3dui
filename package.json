@@ -22,6 +22,7 @@
     "browserify-middleware": "^7.0.0",
     "bson": "^0.4.22",
     "d3": "^3.5.16",
+    "d3-selection": "^0.7.0",
     "express": "^4.13.4",
     "express-babelify-middleware": "^0.2.1",
     "rx": "^4.0.8",

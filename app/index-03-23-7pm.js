@@ -15,118 +15,19 @@ THREE.Object3D.prototype.appendChild = function (c) {
 	this.add(c); 
 	return c; 
 };
-
 THREE.Object3D.prototype.querySelector = function(query) {
 	let key = Object.keys(query)[0];
 	return this.getObjectByProperty(key, query[key]);
 };
-
 THREE.Object3D.prototype.querySelectorAll = function (query) { 
 	if (typeof query === 'undefined') return this.children;
 	return this.children.filter(d => _.isMatch(d, query));
 };
-
 d3.selection.prototype.nodes = function() {
 	let nodes = [];
 	this.each(function() { nodes.push(this); });
 	return nodes;
 };
-
-// const domState$ = new Rx.ReplaySubject(1);
-	
-// const add_div$ = domState$
-// 	.map(dom => dom.select('#add_div'))
-// 	.flatMap(observableFromD3Event('click'))
-// 	.map(ev => container => {
-// 		container
-// 			.append('div')
-// 			.style({
-// 				height: '100px',
-// 				width: '100px',
-// 				border: '2px solid red'
-// 			});
-// 		return container;
-// 	});
-
-// const domUpdate$ = stream.merge(
-// 		add_div$
-// 	);
-	
-// domDriver(domUpdate$).subscribe(domState$.asObserver());
-	
-// function domDriver(domUpdate$) {
-// 	const container = d3.select('body')
-// 		.append('main')
-// 		.style({
-// 			width: '700px',
-// 			height: '700px',
-// 			border: '1px solid black',
-// 			position: 'relative'
-// 		});
-		
-// 	container.append('button')
-// 		.attr('id', 'orbit_camera')
-// 		.text('orbit camera')
-// 		.style({
-// 			height: '100px',
-// 			position: 'absolute',
-// 			bottom: '30px',
-// 			right: '30px'
-// 		});
-		
-// 	container.append('canvas')
-// 		.attr('id', 'main-canvas')
-// 		.style({
-// 			border: '1px solid green'
-// 		});
-	
-// 	const sceneControls = container
-// 		.append('div')
-// 		.classed('container', true)
-// 		.attr({
-// 			id: 'sceneControls'
-// 		})
-// 		.style({
-// 			position: 'absolute',
-// 			right: '0px',
-// 			top: '0px',
-// 			width: '25vw',
-// 			border: '1px solid blue'
-// 		});
-		
-// 	const add_object_row = sceneControls
-// 		.append('div')
-// 		.classed('row', true);
-		
-// 	add_object_row.append('button')
-// 		.attr({
-// 			id: 'add_object'
-// 		})
-// 		.text('add object');
-		
-// 	add_object_row
-// 		.append('button')
-// 		.attr({
-// 			id: 'add_div'
-// 		})
-// 		.text('add div');
-		
-// 	return domUpdate$
-// 		.startWith(container)
-// 		.scan(apply);
-// }
-
-// function apply(o, fn) {
-// 	return fn(o);
-// }
-
-// function log(string) {
-// 	console.log(string);
-// }
-
-/**
- * NEW /OLD
- */
 
 function main({custom}) {
 	const log = console.log.bind(console);
@@ -228,53 +129,53 @@ function main({custom}) {
   	})
   	.shareReplay();
 
-	const clicked$ = main_canvas_event$
-		.pairwise()
-		.filter(arr => arr[0].event.type === 'dragstart')
-		.filter(arr => arr[1].event.type === 'dragend')
-		.pluck('1');
+ 	const clicked$ = main_canvas_event$
+ 		.pairwise()
+ 		.filter(arr => arr[0].event.type === 'dragstart')
+ 		.filter(arr => arr[1].event.type === 'dragend')
+ 		.pluck('1');
  		
-	const clicked_key$ = clicked$
-		.pluck('intersects', 'sound_objects', '0', 'object')
-		.map(o => {
-			if (typeof o !== 'undefined') {
-				/** TODO: Better way of selecting parent when child cone is clicked? */
-				if (o._type === 'cone') return o.parent.parent.__data__.key;
-				return o.__data__.key;
-			}
-			return undefined;
-		})
-		.do(log)
-		.distinctUntilChanged()
-		.shareReplay();
+ 	const clicked_key$ = clicked$
+ 		.pluck('intersects', 'sound_objects', '0', 'object')
+ 		.map(o => {
+ 			if (typeof o !== 'undefined') {
+ 				/** TODO: Better way of selecting parent when child cone is clicked? */
+ 				if (o._type === 'cone') return o.parent.parent.__data__.key;
+ 				return o.__data__.key;
+ 			}
+ 			return undefined;
+ 		})
+ 		.do(log)
+ 		.distinctUntilChanged()
+ 		.shareReplay();
  		
-	const select_object$ = clicked_key$
-		.filter(key => typeof key !== 'undefined')
-		.map(key => objects => {
-			return objects.map(obj => {
-				if (obj.key === key) {
-					obj.selected = true;
-					obj.material.color = '66c2ff';
-					return obj;
-				}
-				return obj;
-			});
-		});
+ 	const select_object$ = clicked_key$
+ 		.filter(key => typeof key !== 'undefined')
+ 		.map(key => objects => {
+ 			return objects.map(obj => {
+ 				if (obj.key === key) {
+ 					obj.selected = true;
+ 					obj.material.color = '66c2ff';
+ 					return obj;
+ 				}
+ 				return obj;
+ 			});
+ 		});
  		
-	const unselect_object$ = clicked_key$
-		.pairwise()
-		.pluck('0')
-		.filter(key => typeof key !== 'undefined')
-		.map(key => objects => {
-			return objects.map(obj => {
-				if (obj.key === key) {
-					obj.selected = false;
-					obj.material.color = 'ffffff';
-					return obj;
-				}
-				return obj;
-			});
-		});
+ 	const unselect_object$ = clicked_key$
+ 		.pairwise()
+ 		.pluck('0')
+ 		.filter(key => typeof key !== 'undefined')
+ 		.map(key => objects => {
+ 			return objects.map(obj => {
+ 				if (obj.key === key) {
+ 					obj.selected = false;
+ 					obj.material.color = 'ffffff';
+ 					return obj;
+ 				}
+ 				return obj;
+ 			});
+ 		});
 
   const orbit$ = custom.dom
     .select('#orbit_camera')
@@ -544,12 +445,6 @@ function main({custom}) {
 		custom: view$
 	};
 }
-
-const rendererState$ = new Rx.ReplaySubject(1);
-
-const domState$ = new Rx.ReplaySubject(1);
-
-// domDriver(domUpdate$).subscribe(domState$.asObserver());
 
 Cycle.run(main, {
 	DOM: CycleDOM.makeDOMDriver('#app'),
@@ -913,8 +808,8 @@ function updateRenderers(view, state, dom) {
 		});
 }
 
-function Selectable(array) {
-	this.children = array || [];
+function Selectable() {
+	this.children = [];
 	this.querySelector = function(query) {
 		return this.children.filter(d => _.isMatch(d, query))[0];
 	};
@@ -926,24 +821,7 @@ function Selectable(array) {
 		this.children.push(child);
 		return child;
 	};
-	this.insertBefore = this.appendChild;
 }
-
-// function Selectable() {
-// 	this.children = [];
-// 	this.querySelector = function(query) {
-// 		return this.children.filter(d => _.isMatch(d, query))[0];
-// 	};
-// 	this.querySelectorAll = function(query) {
-// 		if (typeof query === 'undefined') return this.children;
-// 		return this.children.filter(d => _.isMatch(d, query));
-// 	};
-// 	this.appendChild = function(child) {
-// 		this.children.push(child);
-// 		return child;
-// 	};
-// 	this.insertBefore = this.appendChild;
-// }
 
 function observableFromD3Event(type) {
 	return function(selection) {

@@ -1,0 +1,222 @@
+<!doctype html>
+<html>
+<head>
+  <title>No Cycle</title>
+<style>
+
+</style>
+</head>
+<body>
+  
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.16/d3.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/4.1.0/rx.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r75/three.min.js"></script>
+
+<script>
+  /* global Rx, d3, THREE, _ */
+  'use strict';
+  const stream = Rx.Observable;
+  
+  const dom$ = new Rx.ReplaySubject(1);
+  
+  /**
+   * Stream of DOM events => stream of action objects.
+   * 
+   * Or: dom$ => actions$
+   */
+   
+  function scoped_div_component(scope) {
+    return function div_component(dom_source$) {
+      
+      console.log('new div component');
+      
+      const delete_action$ = dom_source$
+        .map(dom => dom.select('.delete-button'))
+        .flatMap(fromD3event('click'))
+        .pluck('datum', 'id')
+        .map(id => {
+          return {
+            action: 'delete',
+            id: id
+          };
+        });
+      
+      const dom_model$ = stream
+        .of({ 
+          id: scope,
+          class: `scope-${scope}`,
+          buttons: [ 
+            { 
+              text: 'delete',
+              class: 'delete-button'
+            }
+          ]
+        });
+        
+      return { 
+        id: scope,
+        dom$: dom_model$,
+        action$: stream.merge(delete_action$)
+      };
+    };
+  }
+  
+  
+  function model(action$) {
+    
+    const add_div$ = action$
+      .map(dom => dom.select('#add_div'))
+      .flatMap(fromD3event('click'))
+      .map((ev, i) => i)
+      .map(scope => {
+        const scoped_dom$ = action$.map(dom => dom.select(`.scope-${scope}`));
+        return scoped_div_component(scope)(scoped_dom$);
+      })
+      .map(new_div => divs => divs.concat(new_div));
+
+    const div_action$ = new Rx.Subject();
+    
+    const remove_div$ = div_action$
+      .filter(o => o.action === 'delete')
+      .pluck('id')
+      .map(id => divs => divs.filter(div => div.id !== id));
+      
+    const divs$ = stream.merge(
+        add_div$,
+        remove_div$
+      )
+      .do(log)
+      .startWith([])
+      .scan(apply)
+      .do(log)
+      .shareReplay();
+      
+    const divs_dom$ = divs$
+      .map(arr => arr.map(d => d.dom$))
+      .flatMap(array => {
+        if (array.length === 0) return stream.just([]);
+        return stream.combineLatest(array);
+      });
+      
+    divs$
+      .map(arr => arr.map(div => div.action$))
+      .flatMap(arr => stream.merge(arr))
+      .subscribe(div_action$);
+      
+    // const div_dom$ = divs$
+    
+    const buttons$ = stream.of([{ id: 'add_div' }]);
+    
+    const dom_model$ = stream
+      .combineLatest(
+        buttons$,
+        // divs$.flatMap(d => d.dom$),
+        divs_dom$,
+        (b, d) => {
+          return {
+            buttons: b,
+            divs: d
+          };
+        }
+      );
+      
+    return dom_model$;
+  }
+    
+  /**
+   * Stream of action objects => stream of (state => state) reducer functions.
+   * 
+   * Or: Where side effects are *defined*.
+   * 
+   * Or: action$ => (state => state)
+   */
+   
+  function view(dom_model$) {
+    const dom_reducer$ = dom_model$
+      .map(model => container => {
+        let buttons = container.selectAll('button').data(model.buttons);
+        
+        buttons.enter()
+          .append('button')
+          .text(d => d.id)
+          .attr('id', (d) => d.id);
+          
+        let divs = container
+          .selectAll('div')
+          .data(model.divs, d => d.id);
+        
+        divs.enter()
+          .append('div')
+          .attr('class', d => d.class)
+          .style({
+            height: '100px',
+            width: '100px',
+            border: '1px solid red'
+          })
+          .each(function(d) {
+            d3.select(this).append('span').text(d.id);
+          });
+          
+        divs.exit().remove();
+          
+        let div_buttons = divs.selectAll('button').data(d => d.buttons);
+        
+        div_buttons
+          .enter()
+          .append('button')
+          .text(d => d.text)
+          .attr('class', d => d.class);
+          
+        return container;
+      });
+    return dom_reducer$;
+  }
+  
+  /**
+   * Stream of reducer functions, accumulated into stream of state.
+   * 
+   * Or: The "driver", where side effects *occur*.
+   * 
+   * Or: (state => state) => state$
+   */
+   
+  function dom_driver(dom_reducer$) {
+    return dom_reducer$
+      .startWith(d3.select('body').append('div'))
+      .scan((o, fn) => fn(o));
+  }
+  
+  /** The "Cycle", where the state observable becomes the source. */
+  
+  function main(dom$) {
+    const dom_action$ = dom$;
+    const dom_model$ = model(dom_action$);
+    const dom_reducer$ = view(dom_model$);
+    return dom_reducer$;
+  }
+
+  const dom_reducer$ = main(dom$);
+  const dom_state$ = dom_driver(dom_reducer$);
+  
+  dom_state$.subscribe(dom$.asObserver());
+  
+  /** Helper functions */
+    
+  function fromD3event(type) {
+    return function(selection) {
+      return Rx.Observable.create(observer => 
+        selection.on('click', function(d) { 
+          observer.onNext({ datum: d, node: this });
+        })
+      );
+    };
+  }
+    
+  function log(d) { console.log(d); }
+  function apply(o, fn) { return fn(o); }
+  
+</script>
+
+</body>
+</html>

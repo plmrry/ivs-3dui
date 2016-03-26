@@ -913,8 +913,8 @@ function updateRenderers(view, state, dom) {
 		});
 }
 
-function Selectable(array) {
-	this.children = array || [];
+function Selectable() {
+	this.children = [];
 	this.querySelector = function(query) {
 		return this.children.filter(d => _.isMatch(d, query))[0];
 	};
@@ -928,22 +928,6 @@ function Selectable(array) {
 	};
 	this.insertBefore = this.appendChild;
 }
-
-// function Selectable() {
-// 	this.children = [];
-// 	this.querySelector = function(query) {
-// 		return this.children.filter(d => _.isMatch(d, query))[0];
-// 	};
-// 	this.querySelectorAll = function(query) {
-// 		if (typeof query === 'undefined') return this.children;
-// 		return this.children.filter(d => _.isMatch(d, query));
-// 	};
-// 	this.appendChild = function(child) {
-// 		this.children.push(child);
-// 		return child;
-// 	};
-// 	this.insertBefore = this.appendChild;
-// }
 
 function observableFromD3Event(type) {
 	return function(selection) {
