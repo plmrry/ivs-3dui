@@ -437,43 +437,7 @@ function makeCustomDriver() {
 			
 		const scenes$ = view$
 			.pluck('scenes')
-			.map(model => selectable => {
-				const scenes_join = d3_selection
-					.select(selectable)
-					.selectAll()
-					.data(model);
-					
-				const scenes = scenes_join
-					.enter()
-					.append(function(d) {
-						debug('scene')('new scene');
-						var new_scene = new THREE.Scene();
-						new_scene._type = 'scene';
-						new_scene._id = d.name;
-						new_scene.name = d.name;
-						new_scene.add(getSpotlight());
-						new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
-						return new_scene;
-					})
-					.merge(scenes_join)
-					
-				const floors_join = scenes
-					.selectAll({ name: 'floor' })
-					.data(d => d.floors || []);
-				
-				const floors = floors_join
-					.enter()
-					.append(d => {
-						return getFloor(room_size);
-					})
-					.merge(floors_join);
-					
-				const sound_objects = updateSoundObjects2(scenes);
-				
-				// updateCones(sound_objects);
-				
-				return selectable;
-			})
+			.map(model => scene.state_reducer(model))
 			.scan(apply, new Selectable())
 			.do(log)
 			// .subscribe()
@@ -608,13 +572,13 @@ function updateSoundObjects2(scenes) {
 }
 
 function updateCones(sound_objects) {
-	let cones = sound_objects
+	let cones_join = sound_objects
 		.selectAll()
 		.data(function(d) { return d.cones || [] });
-	cones
+	cones_join
 		.enter()
-		.append(getNewCone);
-	cones
+		.append(getNewCone)
+		.merge(cones_join)
 		.each(updateOneCone);
 }
 
