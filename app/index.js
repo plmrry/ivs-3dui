@@ -40,7 +40,7 @@ d3.selection.prototype.nodes = function() {
 	return nodes;
 };
 
-function main({ custom, cameras$ }) {
+function main({ custom, cameras$, scenes$ }) {
 	const log = console.log.bind(console);
 	
 	const size$ = stream
@@ -61,7 +61,7 @@ function main({ custom, cameras$ }) {
   	.observable()
   	.map(o => o.node())
   	.first()
-  	.do(log)
+  	// .do(log)
   	
   const editor_canvas_node$ = custom.dom
   	.select('#editor-canvas')
@@ -73,13 +73,9 @@ function main({ custom, cameras$ }) {
   const main_canvas_drag_handler$ = main_canvas$
   	.d3dragHandler();
 
-	const main_scene$ = custom.scenes
+	const main_scene$ = scenes$
 	  .map(scenes => scenes.querySelector({ name: 'main' }))
-	  .do(s => debug('scene')('state'))
-	  
-	const floor$ = main_scene$
-		.map(scene => scene.querySelector({ name: 'floor' }))
-	  .map(floor => [floor]);
+	  .do(s => debug('scene')('state'));
 	
 	const main_camera_state$ = cameras$
 		.map(c => c.querySelector({ name: 'main' }));
@@ -147,7 +143,7 @@ function main({ custom, cameras$ }) {
 			}
 			return undefined;
 		})
-		.do(log)
+		// .do(log)
 		.distinctUntilChanged()
 		.shareReplay();
  		
@@ -303,7 +299,7 @@ function main({ custom, cameras$ }) {
 				}
 			]
 		})
-		.do(log)
+		// .do(log)
 		.shareReplay();
 		
 	const renderers$ = renderer_model$
@@ -342,7 +338,7 @@ function main({ custom, cameras$ }) {
 			return selectable;
 		})
 		.scan(apply, new Selectable())
-		.do(d => debug('foooooo')(d.children))
+		// .do(d => debug('foooooo')(d.children))
 		
 	const renderSets$ = stream
 		.of([
@@ -361,8 +357,8 @@ function main({ custom, cameras$ }) {
 	const renderFunction$ = combineLatestObj
 		({
 			renderers$,
-			scenes$: custom.scenes$,
-			cameras$: cameras$,
+			scenes$,
+			cameras$,
 			renderSets$
 		})
 		.map(({ renderers, scenes, cameras, renderSets }) => () => {
@@ -375,23 +371,11 @@ function main({ custom, cameras$ }) {
 		});
 	
 	const view$ = combineLatestObj({
-			// cameras$,
-			camera_model$,
-			size$,
-			foo$,
 			sound_objects$,
 			editor$,
 		})
-		.map(({ camera_model, size, foo, sound_objects, editor }) => {
+		.map(({ sound_objects, editor }) => {
 			return {
-				dom: {
-					type: 'main',
-					style: {
-						width: '700px',
-						height: '700px',
-						border: '1px solid black'
-					}
-				},
 				scenes: [
 					{
 						name: 'editor',
@@ -419,6 +403,7 @@ function main({ custom, cameras$ }) {
 	return {
 		custom: view$,
 		cameras$: camera_reducer$,
+		scenes$: view$.pluck('scenes').map(model => scene.state_reducer(model)),
 		render: renderFunction$
 	};
 }
@@ -426,7 +411,7 @@ function main({ custom, cameras$ }) {
 Cycle.run(main, {
 	custom: makeCustomDriver('#app'),
 	cameras$: makeStateDriver('cameras'),
-	scenes: makeStateDriver('scenes'),
+	scenes$: makeStateDriver('scenes'),
 	render: (source$) => source$.subscribe(fn => fn())
 });
 
@@ -498,26 +483,14 @@ function makeCustomDriver() {
 		.text('add object');
 
 	return function customDriver(view$) {
-		const cameras$ = view$
-			.pluck('cameras')
-			.map(model => camera.state_reducer(model))
-			.scan(apply, new Selectable());
-			
-		const scenes$ = view$
-			.pluck('scenes')
-			.map(model => scene.state_reducer(model))
-			.scan(apply, new Selectable())
-			.do(log);
 			
 		const dom$ = new Rx.ReplaySubject();
-		// const state$ = new Rx.ReplaySubject();
 		
 		view$.map(view => {
 			debug('view')('view update');
 			
 			dom$.onNext(container);
 
-			// state$.onNext(state);
 			return view;
 		})
 		.subscribe()
@@ -548,10 +521,7 @@ function makeCustomDriver() {
 						}
 					};
 				}
-			},
-			scenes: scenes$,
-			scenes$,
-			cameras$
+			}
 		};
 	};
 }
