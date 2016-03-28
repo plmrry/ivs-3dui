@@ -439,10 +439,8 @@ function makeCustomDriver() {
 			.pluck('scenes')
 			.map(model => scene.state_reducer(model))
 			.scan(apply, new Selectable())
-			.do(log)
-			// .subscribe()
+			.do(log);
 			
-
 		const dom$ = new Rx.ReplaySubject();
 		const _scenes$ = new Rx.ReplaySubject();
 		const state$ = new Rx.ReplaySubject();
@@ -503,150 +501,11 @@ function makeCustomDriver() {
 					};
 				}
 			},
-			// scenes: _scenes$,
 			scenes: scenes$,
 			states: state$,
 			cameras$
 		};
 	};
-}
-
-function updateSoundObjects2(scenes) {
-
-	let sound_objects_join = scenes
-		.selectAll({ name: 'sound_object' })
-		.data(function(d) { return d.sound_objects || [] });
-		
-	sound_objects_join
-		.exit()
-		.each(function(d) {
-			this.parent.remove(this);
-		});
-			
-	const sound_objects = sound_objects_join
-		.enter()
-		.append(function(d) {
-			debug('sound object')('new object');
-			var geometry = new THREE.SphereGeometry(0.1, 30, 30);
-			var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
-			var material = new THREE.MeshPhongMaterial({
-				color: PARENT_SPHERE_COLOR,
-				transparent: true,
-				opacity: 0.3,
-				side: THREE.DoubleSide
-			});
-			var sphere = new THREE.Mesh(geometry, material);
-			sphere.castShadow = true;
-			sphere.receiveShadow = true;
-			sphere.name = d.name;
-			sphere._type = 'sound_object';
-			sphere._volume = 1;
-			sphere.renderOrder = 10;
-			return sphere;
-		})
-		.merge(sound_objects_join)
-		.each(function(d) {
-			/** Update position */
-			if (! _.isMatch(this.position, d.position)) {
-				debug('sound object')('set position', d.position);
-				this.position.copy(d.position);
-			}
-			/** Update geometry */
-			let params = this.geometry.parameters;
-			if (! _.isMatch(params, { radius: d.volume })) {
-				debug('sound object')('set radius', d.volume);
-				Object.assign(params, { radius: d.volume });
-				let newGeom = new THREE.SphereGeometry(
-					params.radius,
-					params.widthSegments,
-					params.heightSegments
-				);
-				this.geometry.dispose();
-				this.geometry = newGeom;
-			}
-			/** Update color */
-			this.material.color = new THREE.Color(`#${d.material.color}`);
-		});
-		
-	return sound_objects;
-}
-
-function updateCones(sound_objects) {
-	let cones_join = sound_objects
-		.selectAll()
-		.data(function(d) { return d.cones || [] });
-	cones_join
-		.enter()
-		.append(getNewCone)
-		.merge(cones_join)
-		.each(updateOneCone);
-}
-
-const latitude_to_theta = d3.scale.linear()
-	.domain([90, 0, -90])
-	.range([0, Math.PI/2, Math.PI]);
-
-function updateOneCone(d) {
-	/** Update rotation */
-	this.lookAt(d.lookAt || new THREE.Vector3());
-	/** If params change, update geometry */
-	let cone = this.children[0];
-	let params = cone.geometry.parameters;
-	let newParams = { height: d.volume, radiusTop: d.spread };
-	if (! _.isMatch(params, newParams)) {
-		debug('cone')('new geometry');
-		Object.assign(params, newParams);
-		let newGeom = cylinder_geometry_from_params(params);
-		cone.geometry.dispose();
-		cone.geometry = newGeom;
-		cone.rotation.x = Math.PI/2;
-		cone.position.z = cone.geometry.parameters.height / 2;
-	}
-	/** Update color */
-	let SELECTED_COLOR = new THREE.Color("#66c2ff");
-	if (d.selected === true) cone.material.color = SELECTED_COLOR;
-}
-
-function cylinder_geometry_from_params(params) {
-	return new THREE.CylinderGeometry(
-		params.radiusTop,
-		params.radiusBottom,
-		params.height,
-		params.radialSegments,
-		params.heightSegments,
-		params.openEnded
-	);
-}
-
-function getNewCone() {
-	let CONE_BOTTOM = 0.01;
-	let CONE_RADIAL_SEGMENTS = 50;
-	let params = {
-		radiusBottom: CONE_BOTTOM,
-		openEnded: true,
-		radialSegments: CONE_RADIAL_SEGMENTS
-	};
-	let geometry = new THREE.CylinderGeometry(
-		params.radiusTop,
-		params.radiusBottom,
-		params.height,
-		params.radialSegments,
-		params.heightSegments,
-		params.openEnded
-	);
-	let material = new THREE.MeshPhongMaterial({
-		transparent: true,
-		opacity: 0.5,
-		side: THREE.DoubleSide
-	});
-	let cone = new THREE.Mesh(geometry, material);
-	cone.name = 'cone';
-	cone._type = 'cone';
-	cone.castShadow = true;
-	cone.receiveShadow = true;
-	let coneParent = new THREE.Object3D();
-	coneParent.add(cone);
-	return coneParent;	
 }
 
 function updateRenderers(view, state, dom) {
@@ -695,22 +554,6 @@ function Selectable(array) {
 	this.insertBefore = this.appendChild;
 }
 
-// function Selectable() {
-// 	this.children = [];
-// 	this.querySelector = function(query) {
-// 		return this.children.filter(d => _.isMatch(d, query))[0];
-// 	};
-// 	this.querySelectorAll = function(query) {
-// 		if (typeof query === 'undefined') return this.children;
-// 		return this.children.filter(d => _.isMatch(d, query));
-// 	};
-// 	this.appendChild = function(child) {
-// 		this.children.push(child);
-// 		return child;
-// 	};
-// 	this.insertBefore = this.appendChild;
-// }
-
 function observableFromD3Event(type) {
 	return function(selection) {
 		return stream
@@ -726,68 +569,8 @@ function observableFromD3Event(type) {
 	};
 }
 
-function getNdcFromMouse(mouse, ndc) {
-	return {
-		x: ndc.x(mouse[0]),
-		y: ndc.y(mouse[1])
-	};
-}
-
-function updateNdcDomain({ width, height }) {
-  return function(d) {
-    d.x.domain([0, width]);
-    d.y.domain([0, height]);
-    return d;
-  };
-}
-
 function apply(o, fn) {
 	return fn(o);
-}
-
-function polarToVector({ radius, theta, phi }) {
-	return {
-		x: radius * Math.sin(phi) * Math.sin(theta),
-		z: radius * Math.cos(phi) * Math.sin(theta),
-		y: radius * Math.cos(theta)
-	};
-}
-
-function getFloor(room_size) {
-	var FLOOR_SIZE = 100;
-	var floorGeom = new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE);
-	var c = 0.46;
-	var floorMat = new THREE.MeshPhongMaterial({
-		color: new THREE.Color(c, c, c),
-		side: THREE.DoubleSide,
-		depthWrite: false
-	});
-	var e = 0.5;
-	floorMat.emissive = new THREE.Color(e, e, e);
-	var floor = new THREE.Mesh(floorGeom, floorMat);
-	floor.name = 'floor';
-	floor.rotateX(Math.PI / 2);
-	floor.position.setY(-room_size.height / 2);
-	var grid = new THREE.GridHelper(FLOOR_SIZE / 2, 2);
-	grid.rotateX(Math.PI / 2);
-	grid.material.transparent = true;
-	grid.material.opacity = 0.2;
-	grid.material.linewidth = 2;
-	grid.material.depthWrite = false;
-	floor.add(grid);
-	floor.receiveShadow = true;
-	return floor;
-}
-
-function getSpotlight() {
-	var spotLight = new THREE.SpotLight(0xffffff, 0.95);
-	spotLight.position.setY(100);
-	spotLight.castShadow = true;
-	spotLight.shadow.mapSize.width = 4000;
-	spotLight.shadow.mapSize.height = 4000; 
-	spotLight.intensity = 1;
-	spotLight.exponent = 1;
-	return spotLight;
 }
 
 function d3TweenStream(duration, name) {
