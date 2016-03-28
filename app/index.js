@@ -40,7 +40,7 @@ d3.selection.prototype.nodes = function() {
 	return nodes;
 };
 
-function main({custom}) {
+function main({ custom, cameras$ }) {
 	const log = console.log.bind(console);
 	
 	const size$ = stream
@@ -81,7 +81,7 @@ function main({custom}) {
 		.map(scene => scene.querySelector({ name: 'floor' }))
 	  .map(floor => [floor]);
 	
-	const main_camera_state$ = custom.cameras$
+	const main_camera_state$ = cameras$
 		.map(c => c.querySelector({ name: 'main' }));
 
   const main_canvas_event$ = stream
@@ -178,11 +178,10 @@ function main({custom}) {
 				return obj;
 			});
 		});
-		
-	const cameras$ = camera.component({ dom$: custom.dom, size$ })
+
+	const camera_model$ = camera
+		.component({ dom$: custom.dom, size$ })
 		.shareReplay();
-	
-	const camera_model$ = cameras$;
 	
 	const camera_reducer$ = camera_model$.map(camera.state_reducer);
 		
@@ -345,42 +344,45 @@ function main({custom}) {
 		.scan(apply, new Selectable())
 		.do(d => debug('foooooo')(d.children))
 		
-	combineLatestObj
+	const renderSets$ = stream
+		.of([
+			{
+				render_id: 'main',
+				scene_id: 'main',
+				camera_id: 'main'
+			},
+			{
+				render_id: 'editor',
+				scene_id: 'editor',
+				camera_id: 'editor'
+			}
+		]);
+		
+	const renderFunction$ = combineLatestObj
 		({
 			renderers$,
 			scenes$: custom.scenes$,
-			cameras$: custom.cameras$
+			cameras$: cameras$,
+			renderSets$
 		})
-		.subscribe(({ renderers, scenes, cameras }) => {
-			const renderSets = [
-				{
-					render_id: 'main',
-					scene_id: 'main',
-					camera_id: 'main'
-				},
-				{
-					render_id: 'editor',
-					scene_id: 'editor',
-					camera_id: 'editor'
-				}
-			];
-			
+		.map(({ renderers, scenes, cameras, renderSets }) => () => {
 			renderSets.forEach(({ render_id, scene_id, camera_id }) => {
 				const renderer = renderers.querySelector({ name: render_id });
 				const scene = scenes.querySelector({ name: scene_id });
 				const camera = cameras.querySelector({ name: camera_id });
-				renderer.render(scene, camera)
-			})
+				renderer.render(scene, camera);
+			});
 		});
 	
 	const view$ = combineLatestObj({
-			cameras$,
+			// cameras$,
+			camera_model$,
 			size$,
 			foo$,
 			sound_objects$,
 			editor$,
 		})
-		.map(({ cameras, size, foo, sound_objects, editor }) => {
+		.map(({ camera_model, size, foo, sound_objects, editor }) => {
 			return {
 				dom: {
 					type: 'main',
@@ -410,49 +412,22 @@ function main({custom}) {
 						],
 						sound_objects: sound_objects,
 					}
-				],
-				cameras: cameras,
-				renderers: [
-					{
-						id: 'main',
-						name: 'main',
-						canvas: '#main-canvas',
-						size: size
-					},
-					{
-						name: 'editor',
-						canvas: '#editor-canvas',
-						size: {
-							width: 300,
-							height: 300
-						}
-					}
-				],
-				renderSets: [
-					{
-						render_id: 'main',
-						scene_id: 'main',
-						camera_id: 'main'
-					},
-					{
-						render_id: 'editor',
-						scene_id: 'editor',
-						camera_id: 'editor'
-					}
 				]
 			};
 		});
 	
 	return {
 		custom: view$,
-		camera: camera_reducer$
+		cameras$: camera_reducer$,
+		render: renderFunction$
 	};
 }
 
 Cycle.run(main, {
 	custom: makeCustomDriver('#app'),
-	camera: makeStateDriver('camera'),
-	render: makeSinkDriver()
+	cameras$: makeStateDriver('cameras'),
+	scenes: makeStateDriver('scenes'),
+	render: (source$) => source$.subscribe(fn => fn())
 });
 
 function makeSinkDriver() {
@@ -471,7 +446,7 @@ function makeStateDriver(name) {
 			.do(s => debug(name)(s.children))
 			.subscribe();
 		
-		return stream.empty();
+		return state$;
 	};
 }
 
@@ -521,16 +496,7 @@ function makeCustomDriver() {
 		.append('button')
 		.attr('id', 'add_object')
 		.text('add object');
-	
-	const state = {
-		dom: container,
-		renderers: d3.select(new Selectable()),
-		scenes: d3.select(new Selectable()),
-		cameras: d3.select(new Selectable())
-	};
-	
-	const _state = d3.select(new Selectable());
-	
+
 	return function customDriver(view$) {
 		const cameras$ = view$
 			.pluck('cameras')
@@ -543,46 +509,18 @@ function makeCustomDriver() {
 			.scan(apply, new Selectable())
 			.do(log);
 			
-		const renderers$ = view$
-			.pluck('renderers')
-			.map(model => selectable => {
-				return selectable
-			})
-			.scan(apply, new Selectable())
-			.do(d => debug('foooooo')(d))
-			.subscribe()
-			
 		const dom$ = new Rx.ReplaySubject();
-		const state$ = new Rx.ReplaySubject();
+		// const state$ = new Rx.ReplaySubject();
 		
 		view$.map(view => {
 			debug('view')('view update');
-	
-			updateRenderers(view, _state, container);
 			
-			dom$.onNext(state.dom);
+			dom$.onNext(container);
 
-			state$.onNext(state);
+			// state$.onNext(state);
 			return view;
 		})
 		.subscribe()
-		
-		// view$
-		// .withLatestFrom(
-		// 	cameras$,
-		// 	scenes$,
-		// 	(v,c,s) => ({ view: v, cameras: c, scenes: s })
-		// )
-		// .subscribe(({ view, cameras, scenes }) => {
-		// 	view.renderSets
-		// 		.forEach(({render_id, scene_id, camera_id}) => {
-		// 			let renderer = _state.select({ _type: 'renderer', name: render_id }).node();
-					
-		// 			let scene = scenes.querySelector({ name: scene_id });
-		// 			let camera = cameras.querySelector({ name: camera_id });
-		// 			renderer.render(scene, camera);
-		// 		});
-		// });
 		
 		return {
 			dom: {
@@ -590,7 +528,7 @@ function makeCustomDriver() {
 					let selection$ = dom$.map(dom => dom.select(selector));
 					return {
 						observable: function() {
-							return selection$
+							return selection$;
 						},
 						events: function(type) {
 							return selection$.flatMap(observableFromD3Event(type));
@@ -612,41 +550,10 @@ function makeCustomDriver() {
 				}
 			},
 			scenes: scenes$,
-			states: state$,
 			scenes$,
 			cameras$
 		};
 	};
-}
-
-function updateRenderers(view, state, dom) {
-	let renderers = state.selectAll({ _type: 'renderer' }).data(view.renderers);
-	renderers
-		.enter()
-		.append(function(d) {
-			debug('renderer')('new renderer');
-			let renderer = new THREE.WebGLRenderer({
-				canvas: dom.select(d.canvas).node(),
-				antialias: true
-			});
-			renderer._type = 'renderer';
-			renderer.shadowMap.enabled = true;
-			renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-			renderer.name = d.name;
-			renderer._id = d.name;
-			renderer.setClearColor(0xf0f0f0);
-			return renderer;
-		});
-	renderers
-		.each(function(d) {
-			// console.log(this);
-			let current = this.getSize();
-			let diff = _.difference(_.values(current), _.values(d.size));
-			if (diff.length > 0) {
-				debug('renderer')('set size');
-				this.setSize(d.size.width, d.size.height);
-			}
-		});
 }
 
 function Selectable(array) {
