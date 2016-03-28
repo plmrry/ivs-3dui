@@ -182,15 +182,6 @@ export function state_reducer(model) {
     return selectable;
   };
 }
-
-export function updateCamera() {
-  console.log('TEST')
-}
-
-export function again() {
-  console.log('AGAIN')
-}
-
 function d3TweenStream(duration, name) {
   return stream.create(function(observer) {
     return d3.select({})

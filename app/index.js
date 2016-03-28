@@ -22,6 +22,8 @@ THREE.Object3D.prototype.appendChild = function (c) {
 	return c; 
 };
 
+THREE.Object3D.prototype.insertBefore = THREE.Object3D.prototype.appendChild;
+
 THREE.Object3D.prototype.querySelector = function(query) {
 	let key = Object.keys(query)[0];
 	return this.getObjectByProperty(key, query[key]);
@@ -58,17 +60,19 @@ function main({custom}) {
   	.d3dragHandler();
 
 	const main_scene$ = custom.scenes
-	  .map(scenes => scenes.select({ name: 'main' }))
-	  .filter(s => s.size() > 0)
+	  // .map(scenes => scenes.select({ name: 'main' }))
+	  .map(scenes => scenes.querySelector({ name: 'main' }))
+	  // .filter(s => s.size() > 0)
 	  .do(s => debug('scene')('state'))
 	  
 	const floor$ = main_scene$
-		.map(scene => scene.select({ name: 'floor' }))
-	  .filter(s => s.size() > 0)
-	  .map(floor => floor.node())
+		.map(scene => scene.querySelector({ name: 'floor' }))
+		// .map(scene => scene.select({ name: 'floor' }))
+	 // .filter(s => s.size() > 0)
+	 // .map(floor => floor.node())
 	  .map(floor => [floor]);
 	
-	const main_camera_state$ = custom.camera$
+	const main_camera_state$ = custom.cameras$
 		.map(c => c.querySelector({ name: 'main' }));
 
   const main_canvas_event$ = stream
@@ -103,7 +107,7 @@ function main({custom}) {
   		return event;
   	})
   	.withLatestFrom(
-  		main_scene$.map(s => s.node()),
+  		main_scene$, //.map(s => s.node()),
   		(event, scene) => ({ event, scene })
   	)
   	.map(({ event, scene }) => {
@@ -166,9 +170,12 @@ function main({custom}) {
 			});
 		});
 		
-	const cameras$ = camera.component({ dom$: custom.dom, size$ });
+	const cameras$ = camera.component({ dom$: custom.dom, size$ })
+		.shareReplay();
 	
 	const camera_model$ = cameras$;
+	
+	const camera_reducer$ = camera_model$.map(camera.state_reducer);
 		
 	const add_object$ = custom.dom
 		.select('#add_object')
@@ -337,27 +344,34 @@ function main({custom}) {
 		});
 	
 	return {
-		custom: view$
+		custom: view$,
+		// camera: camera_reducer$
 	};
 }
 
 Cycle.run(main, {
-	DOM: CycleDOM.makeDOMDriver('#app'),
 	custom: makeCustomDriver('#app'),
-	camera: makeStateDriver()
+	camera: makeStateDriver('camera'),
+	render: makeSinkDriver()
 });
 
-function makeStateDriver() {
+function makeSinkDriver() {
+	return function sinkDriver(source$) {
+		source$.subscribe(fn => fn());
+	};
+}
+
+function makeStateDriver(name) {
 	return function stateDriver(state_reducer$) {
 		const state$ = state_reducer$
 			.scan(apply, new Selectable())
 			.shareReplay();
 			
 		state$
-			.do(s => debug('the simpsons')(s))
+			.do(s => debug('camera')(s.children))
 			.subscribe();
 		
-		return state$;
+		return stream.empty();
 	};
 }
 
@@ -424,14 +438,59 @@ function makeCustomDriver() {
 	const _state = d3.select(new Selectable());
 	
 	return function customDriver(view$) {
-		const camera$ = view$
+		const cameras$ = view$
 			.pluck('cameras')
 			.map(model => camera.state_reducer(model))
 			.scan(apply, new Selectable());
+			
+		const scenes$ = view$
+			.pluck('scenes')
+			.map(model => selectable => {
+				const scenes_join = d3_selection
+					.select(selectable)
+					.selectAll()
+					.data(model);
+					
+				const scenes = scenes_join
+					.enter()
+					.append(function(d) {
+						debug('scene')('new scene');
+						var new_scene = new THREE.Scene();
+						new_scene._type = 'scene';
+						new_scene._id = d.name;
+						new_scene.name = d.name;
+						new_scene.add(getSpotlight());
+						new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
+						return new_scene;
+					})
+					.merge(scenes_join)
+					
+				const floors_join = scenes
+					.selectAll({ name: 'floor' })
+					.data(d => d.floors || []);
+				
+				const floors = floors_join
+					.enter()
+					.append(d => {
+						return getFloor(room_size);
+					})
+					.merge(floors_join);
+					
+				const sound_objects = updateSoundObjects2(scenes);
+				
+				// updateCones(sound_objects);
+				
+				return selectable;
+			})
+			.scan(apply, new Selectable())
+			.do(log)
+			// .subscribe()
+			
 
 		const dom$ = new Rx.ReplaySubject();
-		const scenes$ = new Rx.ReplaySubject();
+		const _scenes$ = new Rx.ReplaySubject();
 		const state$ = new Rx.ReplaySubject();
+		
 		view$.map(view => {
 			debug('view')('view update');
 				
@@ -447,7 +506,7 @@ function makeCustomDriver() {
 					new_scene.name = d.name;
 					new_scene.add(getSpotlight());
 					new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
-					scenes$.onNext(scenes);
+					_scenes$.onNext(scenes);
 					return new_scene;
 				});
 				
@@ -475,15 +534,18 @@ function makeCustomDriver() {
 		
 		view$
 		.withLatestFrom(
-			camera$,
-			(v,c) => ({ view: v, cameras: c })
+			cameras$,
+			scenes$,
+			(v,c,s) => ({ view: v, cameras: c, scenes: s })
 		)
-		.subscribe(({ view, cameras }) => {
-			// console.log(d)
+		.subscribe(({ view, cameras, scenes }) => {
+			console.warn('waaaaaaa', scenes);
 			view.renderSets
 				.forEach(({render_id, scene_id, camera_id}) => {
 					let renderer = _state.select({ _type: 'renderer', name: render_id }).node();
-					let scene = _state.select({ _type: 'scene', name: scene_id }).node();
+					// let scene = _state.select({ _type: 'scene', name: scene_id }).node();
+					
+					let scene = scenes.querySelector({ name: scene_id });
 					
 					let camera = cameras.querySelector({ name: camera_id });
 					renderer.render(scene, camera);
@@ -514,11 +576,72 @@ function makeCustomDriver() {
 					};
 				}
 			},
+			// scenes: _scenes$,
 			scenes: scenes$,
 			states: state$,
-			camera$
+			cameras$
 		};
 	};
+}
+
+function updateSoundObjects2(scenes) {
+
+	let sound_objects_join = scenes
+		.selectAll({ name: 'sound_object' })
+		.data(function(d) { return d.sound_objects || [] });
+		
+	sound_objects_join
+		.exit()
+		.each(function(d) {
+			this.parent.remove(this);
+		});
+			
+	const sound_objects = sound_objects_join
+		.enter()
+		.append(function(d) {
+			debug('sound object')('new object');
+			var geometry = new THREE.SphereGeometry(0.1, 30, 30);
+			var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
+			var material = new THREE.MeshPhongMaterial({
+				color: PARENT_SPHERE_COLOR,
+				transparent: true,
+				opacity: 0.3,
+				side: THREE.DoubleSide
+			});
+			var sphere = new THREE.Mesh(geometry, material);
+			sphere.castShadow = true;
+			sphere.receiveShadow = true;
+			sphere.name = d.name;
+			sphere._type = 'sound_object';
+			sphere._volume = 1;
+			sphere.renderOrder = 10;
+			return sphere;
+		})
+		.merge(sound_objects_join)
+		.each(function(d) {
+			/** Update position */
+			if (! _.isMatch(this.position, d.position)) {
+				debug('sound object')('set position', d.position);
+				this.position.copy(d.position);
+			}
+			/** Update geometry */
+			let params = this.geometry.parameters;
+			if (! _.isMatch(params, { radius: d.volume })) {
+				debug('sound object')('set radius', d.volume);
+				Object.assign(params, { radius: d.volume });
+				let newGeom = new THREE.SphereGeometry(
+					params.radius,
+					params.widthSegments,
+					params.heightSegments
+				);
+				this.geometry.dispose();
+				this.geometry = newGeom;
+			}
+			/** Update color */
+			this.material.color = new THREE.Color(`#${d.material.color}`);
+		});
+		
+	return sound_objects;
 }
 
 function updateSoundObjects(scenes) {
@@ -526,6 +649,12 @@ function updateSoundObjects(scenes) {
 	let sound_objects = scenes
 		.selectAll({ name: 'sound_object' })
 		.data(function(d) { return d.sound_objects || [] });
+		
+	sound_objects
+		.exit()
+		.each(function(d) {
+			this.parent.remove(this);
+		});
 			
 	sound_objects
 		.enter()
@@ -571,12 +700,6 @@ function updateSoundObjects(scenes) {
 			}
 			/** Update color */
 			this.material.color = new THREE.Color(`#${d.material.color}`);
-		});
-		
-	sound_objects
-		.exit()
-		.each(function(d) {
-			this.parent.remove(this);
 		});
 		
 	return sound_objects;
@@ -816,4 +939,8 @@ function d3TweenStream(duration, name) {
         return observer.onCompleted();
       });
   });
+}
+
+function log(d) {
+	console.log(d);
 }
