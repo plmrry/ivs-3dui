@@ -54,7 +54,21 @@ function main({custom}) {
   	}));
 	
 	const main_canvas$ = custom.dom
-    .select('#main-canvas');
+    .select('#main-canvas')
+    // .shareReplay()
+    
+  const main_canvas_node$ = main_canvas$
+  	.observable()
+  	.map(o => o.node())
+  	.first()
+  	.do(log)
+  	
+  const editor_canvas_node$ = custom.dom
+  	.select('#editor-canvas')
+  	.observable()
+  	.map(o => o.node())
+  	.first()
+  	.do(log)
     
   const main_canvas_drag_handler$ = main_canvas$
   	.d3dragHandler();
@@ -264,15 +278,109 @@ function main({custom}) {
 	
 	const foo$ = stream.of(1,2);
 	
+	const renderer_model$ = combineLatestObj
+		({
+			main: main_canvas_node$,
+			editor: editor_canvas_node$,
+			size$
+		})
+		.map(({main, editor, size}) => {
+			return [
+				{
+					id: 'main',
+					name: 'main',
+					canvas: '#main-canvas',
+					canvas_node: main,
+					size: size
+				},
+				{
+					name: 'editor',
+					canvas: '#editor-canvas',
+					canvas_node: editor,
+					size: {
+						width: 300,
+						height: 300
+					}
+				}
+			]
+		})
+		.do(log)
+		.shareReplay();
+		
+	const renderers$ = renderer_model$
+		.map(model => selectable => { 
+			const join = d3_selection
+				.select(selectable)
+				.selectAll()
+				.data(model);
+				
+			const renderers = join
+				.enter()
+				.append(function(d) {
+					debug('renderer')('new renderer');
+					let renderer = new THREE.WebGLRenderer({
+						canvas: d.canvas_node,
+						antialias: true
+					});
+					renderer._type = 'renderer';
+					renderer.shadowMap.enabled = true;
+					renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+					renderer.name = d.name;
+					renderer._id = d.name;
+					renderer.setClearColor(0xf0f0f0);
+					return renderer;
+				})
+				.merge(join)
+				.each(function(d) {
+					let current = this.getSize();
+					let diff = _.difference(_.values(current), _.values(d.size));
+					if (diff.length > 0) {
+						debug('renderer')('set size');
+						this.setSize(d.size.width, d.size.height);
+					}
+				});
+				
+			return selectable;
+		})
+		.scan(apply, new Selectable())
+		.do(d => debug('foooooo')(d.children))
+		
+	combineLatestObj
+		({
+			renderers$,
+			scenes$: custom.scenes$,
+			cameras$: custom.cameras$
+		})
+		.subscribe(({ renderers, scenes, cameras }) => {
+			const renderSets = [
+				{
+					render_id: 'main',
+					scene_id: 'main',
+					camera_id: 'main'
+				},
+				{
+					render_id: 'editor',
+					scene_id: 'editor',
+					camera_id: 'editor'
+				}
+			];
+			
+			renderSets.forEach(({ render_id, scene_id, camera_id }) => {
+				const renderer = renderers.querySelector({ name: render_id });
+				const scene = scenes.querySelector({ name: scene_id });
+				const camera = cameras.querySelector({ name: camera_id });
+				renderer.render(scene, camera)
+			})
+		});
+	
 	const view$ = combineLatestObj({
 			cameras$,
 			size$,
 			foo$,
 			sound_objects$,
-			editor$
+			editor$,
 		})
 		.map(({ cameras, size, foo, sound_objects, editor }) => {
-		// .map(({ main_camera, editor_camera, size, foo, sound_objects, editor }) => {
 			return {
 				dom: {
 					type: 'main',
@@ -337,7 +445,7 @@ function main({custom}) {
 	
 	return {
 		custom: view$,
-		// camera: camera_reducer$
+		camera: camera_reducer$
 	};
 }
 
@@ -360,7 +468,7 @@ function makeStateDriver(name) {
 			.shareReplay();
 			
 		state$
-			.do(s => debug('camera')(s.children))
+			.do(s => debug(name)(s.children))
 			.subscribe();
 		
 		return stream.empty();
@@ -413,12 +521,6 @@ function makeCustomDriver() {
 		.append('button')
 		.attr('id', 'add_object')
 		.text('add object');
-
-	var room_size = {
-		width: 20,
-		length: 18,
-		height: 3
-	};
 	
 	const state = {
 		dom: container,
@@ -441,8 +543,16 @@ function makeCustomDriver() {
 			.scan(apply, new Selectable())
 			.do(log);
 			
+		const renderers$ = view$
+			.pluck('renderers')
+			.map(model => selectable => {
+				return selectable
+			})
+			.scan(apply, new Selectable())
+			.do(d => debug('foooooo')(d))
+			.subscribe()
+			
 		const dom$ = new Rx.ReplaySubject();
-		const _scenes$ = new Rx.ReplaySubject();
 		const state$ = new Rx.ReplaySubject();
 		
 		view$.map(view => {
@@ -457,31 +567,31 @@ function makeCustomDriver() {
 		})
 		.subscribe()
 		
-		view$
-		.withLatestFrom(
-			cameras$,
-			scenes$,
-			(v,c,s) => ({ view: v, cameras: c, scenes: s })
-		)
-		.subscribe(({ view, cameras, scenes }) => {
-			console.warn('waaaaaaa', scenes);
-			view.renderSets
-				.forEach(({render_id, scene_id, camera_id}) => {
-					let renderer = _state.select({ _type: 'renderer', name: render_id }).node();
-					// let scene = _state.select({ _type: 'scene', name: scene_id }).node();
+		// view$
+		// .withLatestFrom(
+		// 	cameras$,
+		// 	scenes$,
+		// 	(v,c,s) => ({ view: v, cameras: c, scenes: s })
+		// )
+		// .subscribe(({ view, cameras, scenes }) => {
+		// 	view.renderSets
+		// 		.forEach(({render_id, scene_id, camera_id}) => {
+		// 			let renderer = _state.select({ _type: 'renderer', name: render_id }).node();
 					
-					let scene = scenes.querySelector({ name: scene_id });
-					
-					let camera = cameras.querySelector({ name: camera_id });
-					renderer.render(scene, camera);
-				});
-		});
+		// 			let scene = scenes.querySelector({ name: scene_id });
+		// 			let camera = cameras.querySelector({ name: camera_id });
+		// 			renderer.render(scene, camera);
+		// 		});
+		// });
 		
 		return {
 			dom: {
 				select: function(selector) {
 					let selection$ = dom$.map(dom => dom.select(selector));
 					return {
+						observable: function() {
+							return selection$
+						},
 						events: function(type) {
 							return selection$.flatMap(observableFromD3Event(type));
 						},
@@ -503,6 +613,7 @@ function makeCustomDriver() {
 			},
 			scenes: scenes$,
 			states: state$,
+			scenes$,
 			cameras$
 		};
 	};
