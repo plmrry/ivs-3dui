@@ -16,11 +16,10 @@ app.set('port', 9877);
 var appPath = path.resolve(__dirname, 'app', 'index.js');
 
 const external = [
-  'three/three.js', 
-  '@cycle/dom', 
+  'three/three.js',
   '@cycle/core', 
-  'rx', 
-  'd3', 
+  'rx',
+  'd3',
   'debug',
   'underscore'
 ];

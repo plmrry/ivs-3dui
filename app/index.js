@@ -1,5 +1,4 @@
 import Cycle from '@cycle/core';
-import CycleDOM from '@cycle/dom';
 import debug from 'debug';
 import d3 from 'd3';
 import Rx from 'rx';
@@ -258,6 +257,19 @@ function main({ custom, cameras$, scenes$ }) {
 		.startWith([])
 		.scan(apply)
 		.shareReplay();
+		
+	const main_scene_model$ = sound_objects$
+		.map(sound_objects => {
+			return {
+				name: 'main',
+				floors: [
+					{
+						name: 'floor'
+					}
+				],
+				sound_objects
+			};
+		});
 
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0]);
@@ -270,8 +282,14 @@ function main({ custom, cameras$, scenes$ }) {
 			}
 			else return [];
 		});
-	
-	const foo$ = stream.of(1,2);
+		
+	const editor_scene_model$ = editor$
+		.map(sound_objects => {
+			return {
+				name: 'editor',
+				sound_objects
+			};
+		});
 	
 	const renderer_model$ = combineLatestObj
 		({
@@ -337,8 +355,7 @@ function main({ custom, cameras$, scenes$ }) {
 				
 			return selectable;
 		})
-		.scan(apply, new Selectable())
-		// .do(d => debug('foooooo')(d.children))
+		.scan(apply, new Selectable());
 		
 	const renderSets$ = stream
 		.of([
@@ -370,40 +387,17 @@ function main({ custom, cameras$, scenes$ }) {
 			});
 		});
 	
-	const view$ = combineLatestObj({
-			sound_objects$,
-			editor$,
-		})
-		.map(({ sound_objects, editor }) => {
-			return {
-				scenes: [
-					{
-						name: 'editor',
-						// floors: [
-						//   {
-						//     name: 'floor',
-						//     _type: 'floor'
-						//   }
-						// ],
-						sound_objects: editor
-					},
-					{
-						name: 'main',
-						floors: [
-						  {
-						    name: 'floor',
-						  }
-						],
-						sound_objects: sound_objects,
-					}
-				]
-			};
-		});
+	const scenes_reducer$ = stream
+		.combineLatest(
+			main_scene_model$,
+			editor_scene_model$
+		)
+		.map(model => scene.state_reducer(model));
 	
 	return {
-		custom: view$,
+		custom: scenes_reducer$,
 		cameras$: camera_reducer$,
-		scenes$: view$.pluck('scenes').map(model => scene.state_reducer(model)),
+		scenes$: scenes_reducer$,
 		render: renderFunction$
 	};
 }
