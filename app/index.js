@@ -60,16 +60,11 @@ function main({custom}) {
   	.d3dragHandler();
 
 	const main_scene$ = custom.scenes
-	  // .map(scenes => scenes.select({ name: 'main' }))
 	  .map(scenes => scenes.querySelector({ name: 'main' }))
-	  // .filter(s => s.size() > 0)
 	  .do(s => debug('scene')('state'))
 	  
 	const floor$ = main_scene$
 		.map(scene => scene.querySelector({ name: 'floor' }))
-		// .map(scene => scene.select({ name: 'floor' }))
-	 // .filter(s => s.size() > 0)
-	 // .map(floor => floor.node())
 	  .map(floor => [floor]);
 	
 	const main_camera_state$ = custom.cameras$
@@ -251,10 +246,8 @@ function main({custom}) {
 		);
 		
 	const sound_objects$ = sound_objects_update$	
-		// .startWith({})
 		.startWith([])
 		.scan(apply)
-		// .map(_.values)
 		.shareReplay();
 
 	const selected$ = sound_objects$
@@ -267,8 +260,7 @@ function main({custom}) {
 				return [obj];
 			}
 			else return [];
-		})
-		// .do(log);
+		});
 	
 	const foo$ = stream.of(1,2);
 	
@@ -493,35 +485,6 @@ function makeCustomDriver() {
 		
 		view$.map(view => {
 			debug('view')('view update');
-				
-			let scenes = _state.selectAll({ _type: 'scene' }).data(view.scenes);
-				
-			scenes
-				.enter()
-				.append(function(d) {
-					debug('scene')('new scene');
-					var new_scene = new THREE.Scene();
-					new_scene._type = 'scene';
-					new_scene._id = d.name;
-					new_scene.name = d.name;
-					new_scene.add(getSpotlight());
-					new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
-					_scenes$.onNext(scenes);
-					return new_scene;
-				});
-				
-			let floors = scenes
-				.selectAll({ name: 'floor' })
-				.data(d => d.floors || []);
-				
-			floors.enter()
-				.append(d => {
-					return getFloor(room_size);
-				});
-				
-			let sound_objects = updateSoundObjects(scenes);
-			
-			updateCones(sound_objects);
 	
 			updateRenderers(view, _state, container);
 			
@@ -618,67 +581,6 @@ function updateSoundObjects2(scenes) {
 			return sphere;
 		})
 		.merge(sound_objects_join)
-		.each(function(d) {
-			/** Update position */
-			if (! _.isMatch(this.position, d.position)) {
-				debug('sound object')('set position', d.position);
-				this.position.copy(d.position);
-			}
-			/** Update geometry */
-			let params = this.geometry.parameters;
-			if (! _.isMatch(params, { radius: d.volume })) {
-				debug('sound object')('set radius', d.volume);
-				Object.assign(params, { radius: d.volume });
-				let newGeom = new THREE.SphereGeometry(
-					params.radius,
-					params.widthSegments,
-					params.heightSegments
-				);
-				this.geometry.dispose();
-				this.geometry = newGeom;
-			}
-			/** Update color */
-			this.material.color = new THREE.Color(`#${d.material.color}`);
-		});
-		
-	return sound_objects;
-}
-
-function updateSoundObjects(scenes) {
-
-	let sound_objects = scenes
-		.selectAll({ name: 'sound_object' })
-		.data(function(d) { return d.sound_objects || [] });
-		
-	sound_objects
-		.exit()
-		.each(function(d) {
-			this.parent.remove(this);
-		});
-			
-	sound_objects
-		.enter()
-		.append(function(d) {
-			debug('sound object')('new object');
-			var geometry = new THREE.SphereGeometry(0.1, 30, 30);
-			var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
-			var material = new THREE.MeshPhongMaterial({
-				color: PARENT_SPHERE_COLOR,
-				transparent: true,
-				opacity: 0.3,
-				side: THREE.DoubleSide
-			});
-			var sphere = new THREE.Mesh(geometry, material);
-			sphere.castShadow = true;
-			sphere.receiveShadow = true;
-			sphere.name = d.name;
-			sphere._type = 'sound_object';
-			sphere._volume = 1;
-			sphere.renderOrder = 10;
-			return sphere;
-		});
-			
-	sound_objects
 		.each(function(d) {
 			/** Update position */
 			if (! _.isMatch(this.position, d.position)) {
