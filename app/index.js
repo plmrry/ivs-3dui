@@ -42,7 +42,7 @@ function main({custom}) {
 	const log = console.log.bind(console);
 	
 	const size$ = stream
-		.of({ width: 600, height: 700 })
+		.of({ width: 400, height: 400 })
 		.shareReplay();
 		
   const ndcScale$ = size$
@@ -167,6 +167,8 @@ function main({custom}) {
 		});
 		
 	const cameras$ = camera.component({ dom$: custom.dom, size$ });
+	
+	const camera_model$ = cameras$;
 		
 	const add_object$ = custom.dom
 		.select('#add_object')
@@ -341,8 +343,24 @@ function main({custom}) {
 
 Cycle.run(main, {
 	DOM: CycleDOM.makeDOMDriver('#app'),
-	custom: makeCustomDriver('#app')
+	custom: makeCustomDriver('#app'),
+	camera: makeStateDriver()
 });
+
+function makeStateDriver() {
+	return function stateDriver(state_reducer$) {
+		const state$ = state_reducer$
+			.scan(apply, new Selectable())
+			.shareReplay();
+			
+		state$
+			.do(s => debug('the simpsons')(s))
+			.subscribe();
+		
+		return state$;
+	};
+}
+
 
 function makeCustomDriver() {
 

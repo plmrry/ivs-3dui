@@ -183,50 +183,6 @@ export function state_reducer(model) {
   };
 }
 
-export function updateCameras(view, _state, state) {
-	let cameras = _state.cameras.selectAll().data(view.cameras);
-			
-	cameras.enter()
-		.append(function(d) {
-			debug('camera')('new camera');
-			let cam = new THREE.OrthographicCamera();
-			cam.name = d.name;
-		  return cam;
-		});
-		
-	cameras
-		.each(function(d) {
-			/** Update camera size if needed */
-			if (! _.isMatch(this._size, d.size)) {
-				debug('camera')('update size');
-				var s = d.size;
-				[ this.left, this.right ] = [-1,+1].map(d => d * s.width * 0.5);
-				[ this.bottom, this.top ] = [-1,+1].map(d => d * s.height * 0.5);
-				this.updateProjectionMatrix();
-				this._size = d.size;
-			}
-			/** Always update lookAt and up with position! */
-			if (! _.isMatch(this.position, d.position)) {
-			  debug('camera')('update position');
-			  this.position.copy(d.position);
-			  this.lookAt(d.lookAt || new THREE.Vector3());
-			  this.up.copy(new THREE.Vector3(0, 1, 0));
-			  /** Apparently we do not need to call `updateProjectionMatrix()` */
-			}
-			/**
-			 * NOTE: You could, in theory, raycast from the middle of the camera's
-			 * view to the floor in order to get the "current lookat". But that's
-			 * a little crazy, don't you think?
-			 */
-			/** Update camera zoom */
-			if (this.zoom !== d.zoom) {
-				debug('camera')('update zoom');
-				this.zoom = d.zoom;
-				this.updateProjectionMatrix();
-			}
-		});
-}
-
 export function updateCamera() {
   console.log('TEST')
 }
