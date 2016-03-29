@@ -6,6 +6,7 @@
 		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 		<style>
 			body {
+				font-family: Monospace;
 				background-color: #f0f0f0;
 				margin: 0px;
 				overflow: hidden;
@@ -15,43 +16,35 @@
 		</style>
 	</head>
 	<body>
-<<<<<<< HEAD
-		<script src="js/three.min.js"></script>
-		<script src="js/Detector.js"></script>
-		<script src="FlyControlsUpdated.js"></script>
-		<script src="AxisHelper.js"></script>
-=======
 		<!--<script src="../../build/three.min.js"></script>-->
 		<!--<script src="../../examples/js/Detector.js"></script>-->
 		<script src="lib/three.min.js"></script>
 		<script src="lib/TrackballControls.js"></script>
 		<script src="FlyControlsUpdated.js"></script>
 		<!--<script src="../../examples/js/controls/TrackballControls.js"></script>-->
->>>>>>> origin/master
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.16/d3.js"></script>
 
     <script>
       // if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
 			var audio, listener;
 			var soundCones = [];
-			var sphere, axisHelper;
 			var container;
-      var camera, controls, scene, renderer;
+      var camera, controls, trackball, scene, renderer;
       var mouse, raycaster, isShiftDown = false;
 
       var soundCones = [];
-      var objects = [];
 			var soundConeMaterial, soundConeGeo;
-			var interactiveCone;
+      var objects = [];
 
-			var prevMousePos = {};
+      var positionEnabled = true;
+      var velocityEnabled = true;
+      var orientationEnabled = true;
 
 			var clock = new THREE.Clock();
 
 			var MOUSEDOWN = false;
-
-			var placingCone = false;
-			var rePlacingCone = false;
 
       init();
 			animate();
@@ -64,55 +57,58 @@
 
 				camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
 				camera.position.set(0, 0, 1300);
+				//camera.lookAt(new THREE.Vector3());
 
 				controls = new THREE.FlyControls(camera);
 				controls.dragToLook = true;
 				controls.movementSpeed = 1000;
 				controls.domElement = container;
-				controls.rollSpeed = Math.PI/24.;
+				controls.rollSpeed = Math.PI / 24;
 				controls.autoForward = false;
 				controls.dragToLook = false;
+
+				trackball = new THREE.TrackballControls(camera);
+
+				trackball.rotateSpeed = 4.0;
+				trackball.zoomSpeed = 1.2;
+				trackball.panSpeed = 0.8;
+
+				trackball.noZoom = false;
+				trackball.noPan = false;
+
+				trackball.staticMoving = true;
+				trackball.dynamicDampingFactor = 0.3;
+
+				trackball.keys = [ 65, 83, 68 ];
+
+				//trackball.addEventListener( 'change', render );
 
 				scene = new THREE.Scene();
 
 				raycaster = new THREE.Raycaster();
 				mouse = new THREE.Vector2();
 
-				var visibleSphereGeometry = new THREE.SphereBufferGeometry(300, 100, 100);
-				var visibleSphereMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.8});
-				var visibleSphere = new THREE.Mesh(visibleSphereGeometry, visibleSphereMaterial);
-				visibleSphere.material.transparent = true;
-				scene.add(visibleSphere);
+				var geometry = new THREE.SphereBufferGeometry(300, 100, 100);
 
-				var addButtonGeo = new THREE.BoxGeometry(100, 100, 0);
-				var addButtonMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.6})
-				var addButton = new THREE.Mesh(addButtonGeo, addButtonMaterial);
-				addButton.position.x = 500;
-				addButton.position.y = -500;
-				addButton.name = "addButton";
-				scene.add(addButton);
-				objects.push(addButton);
-
-				var sphereGeometry = new THREE.SphereBufferGeometry(600, 100, 100);
-				var sphereMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.5});
-				sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+				sphere = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.6}));
 				sphere.material.transparent = true;
+				scene.add(sphere);
 
-				var coneGeoLength = 500;
-				soundConeGeo = new THREE.CylinderGeometry(100, 0, coneGeoLength, 100, 1, true);
-				soundConeGeo.translate(0, coneGeoLength/2., 0);
-				soundConeGeo.rotateX(Math.PI/2.);
-				soundConeMaterial = new THREE.MeshBasicMaterial({color: 0x80FFE5, opacity: 0.5});
-				soundConeMaterial.side = THREE.DoubleSide;
+				objects.push(sphere);
+
+				// Lights
+				var ambientLight = new THREE.AmbientLight(0x606060);
+				scene.add(ambientLight);
+
+				var directionalLight = new THREE.DirectionalLight(0xffffff);
+				directionalLight.position.set(1, 0.75, 0.5).normalize();
+				scene.add(directionalLight);
 
 				renderer = new THREE.WebGLRenderer({antialias: true});
 				renderer.setClearColor(0xf0f0f0);
 				renderer.setPixelRatio(window.devicePixelRatio);
 				renderer.setSize(window.innerWidth, window.innerHeight);
 				container.appendChild(renderer.domElement);
-
-				axisHelper = new THREE.AxisHelper( 500 );
-				scene.add( axisHelper );
 
 				document.addEventListener('mousemove', onDocumentMouseMove, false);
 				document.addEventListener('mousedown', onDocumentMouseDown, false);
@@ -121,6 +117,25 @@
 				document.addEventListener('keyup', onDocumentKeyUp, false);
 
 				window.addEventListener('resize', onWindowResize, false);
+			}
+
+			function createCone(orientation){
+				soundConeGeo = new THREE.CylinderGeometry(100, 0, 600, 100, 1, true);
+				soundConeGeo.translate(0, 300, 0);
+				soundConeGeo.rotateX(Math.PI/2.);
+				soundConeMaterial = new THREE.MeshBasicMaterial({color: 0x80FFE5, opacity: 0.5});
+				soundCones.push(new THREE.Mesh(soundConeGeo, soundConeMaterial));
+				soundCones[soundCones.length - 1].material.side = THREE.DoubleSide;
+				soundCones[soundCones.length - 1].material.transparent = true;
+				soundCones[soundCones.length - 1].lookAt(orientation);
+
+				scene.add(soundCones[soundCones.length - 1]);
+
+				soundCones[soundCones.length - 1] = soundCones[0];
+				soundCones[soundCones.length - 1].sound = loadSound('samples/wetShort.wav');
+				soundCones[soundCones.length - 1].sound.panner.coneInnerAngle = 0.01*180/Math.PI;
+				soundCones[soundCones.length - 1].sound.panner.coneOuterAngle = 1*180/Math.PI;
+				soundCones[soundCones.length - 1].sound.panner.coneOuterGain = 0.03;
 			}
 
       function setupAudio(){
@@ -175,17 +190,18 @@
 
 			function setPosition(object){
 				object.sound.panner.position = object.position;
-
-				var vec = new THREE.Vector3(0,0,1);
-				var m = object.matrixWorld;
-				var mx = m.elements[12], my = m.elements[13], mz = m.elements[14];
-				m.elements[12] = m.elements[13] = m.elements[14] = 0;
-				vec.applyProjection(m);
-				vec.normalize();
-				object.sound.panner.setOrientation(vec.x, vec.y, vec.z);
-				m.elements[12] = mx;
-				m.elements[13] = my;
-				m.elements[14] = mz;
+				if (this.orientationEnabled) {
+					var vec = new THREE.Vector3(0,0,1);
+					var m = object.matrixWorld;
+					var mx = m.elements[12], my = m.elements[13], mz = m.elements[14];
+					m.elements[12] = m.elements[13] = m.elements[14] = 0;
+					vec.applyProjection(m);
+					vec.normalize();
+					object.sound.panner.setOrientation(vec.x, vec.y, vec.z);
+					m.elements[12] = mx;
+					m.elements[13] = my;
+					m.elements[14] = mz;
+				}
 			}
 
 			function setPositionAndVelocity(object, audioNode){
@@ -232,52 +248,31 @@
 				mouse.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
 				raycaster.setFromCamera(mouse, camera);
 
-				var intersects = raycaster.intersectObject(sphere);
-				var intersect = intersects[0];
+				var x_to_phi = d3.scale.linear().domain([-0.35, 0.35]).range([-Math.PI/2, Math.PI/2])
+				var y_to_theta = d3.scale.linear().domain([-0.70, 0.70]).range([Math.PI/2, -Math.PI/2])
+				var flipped = d3.scale.linear().domain([-0.70, 0.70]).range([-Math.PI/2, Math.PI/2])
 
-				if (intersects.length > 0 && placingCone){
+				// soundCones[soundCones.length - 1].rotation.y = Math.PI/2; //mouse.x;
+				soundCones[soundCones.length - 1].rotation.y = x_to_phi(mouse.x);
+				if (x_to_phi(mouse.x) > Math.PI/2) {
+					soundCones[soundCones.length - 1].rotation.x = flipped(mouse.y);
+				}
+				else {
+					soundCones[soundCones.length - 1].rotation.x = y_to_theta(mouse.y);
+				}
+				//soundCones[soundCones.length - 1].rotation.x = y_to_theta(mouse.y);
 
-					soundCones[interactiveCone].lookAt(intersect.point);
-					setPosition(soundCones[interactiveCone]);
+				console.log(mouse.x)
+
+				var intersects = raycaster.intersectObjects(objects);
+				if (intersects.length > 0 && !MOUSEDOWN){
+					// var intersect = intersects[0];
+					// soundCones[soundCones.length - 1].lookAt(intersect.point);
+					// setPosition(soundCones[soundCones.length - 1]);
 				}
 				else if(MOUSEDOWN){
-
-					if(rePlacingCone){
-
-						soundCones[interactiveCone].lookAt(intersect.point);
-						setPosition(soundCones[interactiveCone]);
-					}
-					else{
-
-						var deltaMove = {
-								x: event.offsetX-prevMousePos.x,
-								y: event.offsetY-prevMousePos.y
-						};
-						var deltaRotationQuaternion = new THREE.Quaternion()
-								.setFromEuler(new THREE.Euler(
-										toRadians(deltaMove.y * 0.2),
-										toRadians(deltaMove.x * 0.2),
-										0,
-										'XYZ'
-								));
-
-
-						axisHelper.quaternion.multiplyQuaternions(deltaRotationQuaternion, axisHelper.quaternion);
-						for(var i = 0; i < soundCones.length; i++){
-							soundCones[i].quaternion.multiplyQuaternions(deltaRotationQuaternion, soundCones[i].quaternion);
-							setPosition(soundCones[i]);
-						}
-					}
+					trackball.update();
 				}
-
-				prevMousePos = {
-						x: event.offsetX,
-						y: event.offsetY
-				};
-			}
-
-			function toRadians(angle) {
-			    return angle * (Math.PI / 180);
 			}
 
 			function onDocumentMouseDown(event){
@@ -288,45 +283,23 @@
 				raycaster.setFromCamera( mouse, camera );
 
 				var intersects = raycaster.intersectObjects(objects);
-
 				if (intersects.length > 0) {
-
 					var intersect = intersects[0];
+					createCone(intersect.point);
 
-					switch(intersect.object.name){
-						case "addButton":
-							placingCone = true;
-							createCone(intersect.point);
-							interactiveCone = soundCones.length - 1;
-						break;
-						case "cone":
-							placingCone = false;
-							rePlacingCone = true;
-							interactiveCone = intersect.object.id - soundCones[0].id;
-						break;
+					if (isShiftDown){
+						if (intersect.object != sphere) {
+							scene.remove(intersect.object);
+							objects.splice(objects.indexOf(intersect.object), 1);
+						}
+					}
+					else{
+	            //var placedCone = new THREE.Mesh(soundConeGeo, soundConeMaterial);
+							//placedCone.lookAt(intersect.point);
+							//scene.add(placedCone);
+	            //objects.push(placedCone);
 					}
 				}
-				else{
-					placingCone = false;
-					rePlacingCone = false;
-					interactiveCone = null;
-				}
-			}
-
-			function createCone(orientation){
-
-				soundConeGeo.radiusTop = 2;
-				soundCones.push(new THREE.Mesh(soundConeGeo, soundConeMaterial));
-				soundCones[soundCones.length - 1].lookAt(orientation);
-				soundCones[soundCones.length - 1].name = "cone";
-
-				scene.add(soundCones[soundCones.length - 1]);
-				objects.push(soundCones[soundCones.length - 1]);
-
-				soundCones[soundCones.length - 1].sound = loadSound('samples/wetShort.wav');
-				soundCones[soundCones.length - 1].sound.panner.coneInnerAngle = 0.01*180/Math.PI;
-				soundCones[soundCones.length - 1].sound.panner.coneOuterAngle = 1*180/Math.PI;
-				soundCones[soundCones.length - 1].sound.panner.coneOuterGain = 0.03;
 			}
 
 			function onDocumentMouseUp(event){
