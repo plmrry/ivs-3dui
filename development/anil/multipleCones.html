@@ -6,7 +6,6 @@
 		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 		<style>
 			body {
-				font-family: Monospace;
 				background-color: #f0f0f0;
 				margin: 0px;
 				overflow: hidden;
@@ -19,13 +18,14 @@
 		<script src="js/three.min.js"></script>
 		<script src="js/Detector.js"></script>
 		<script src="FlyControlsUpdated.js"></script>
+		<script src="AxisHelper.js"></script>
 
     <script>
       if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
 			var audio, listener;
 			var soundCones = [];
-			var sphere;
+			var sphere, axisHelper;
 			var container;
       var camera, controls, scene, renderer;
       var mouse, raycaster, isShiftDown = false;
@@ -60,7 +60,7 @@
 				controls.dragToLook = true;
 				controls.movementSpeed = 1000;
 				controls.domElement = container;
-				controls.rollSpeed = Math.PI / 24;
+				controls.rollSpeed = Math.PI/24.;
 				controls.autoForward = false;
 				controls.dragToLook = false;
 
@@ -80,6 +80,7 @@
 				var addButton = new THREE.Mesh(addButtonGeo, addButtonMaterial);
 				addButton.position.x = 500;
 				addButton.position.y = -500;
+				addButton.name = "addButton";
 				scene.add(addButton);
 				objects.push(addButton);
 
@@ -88,8 +89,8 @@
 				sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
 				sphere.material.transparent = true;
 
-				var coneGeoLength = 600;
-				soundConeGeo = new THREE.CylinderGeometry(100, 0, coneGeoLength, 100, 1, true);
+				var coneGeoLength = 500;
+				soundConeGeo = new THREE.CylinderGeometry(200, 0, coneGeoLength, 100, 1, true);
 				soundConeGeo.translate(0, coneGeoLength/2., 0);
 				soundConeGeo.rotateX(Math.PI/2.);
 				soundConeMaterial = new THREE.MeshBasicMaterial({color: 0x80FFE5, opacity: 0.5});
@@ -100,6 +101,9 @@
 				renderer.setPixelRatio(window.devicePixelRatio);
 				renderer.setSize(window.innerWidth, window.innerHeight);
 				container.appendChild(renderer.domElement);
+
+				axisHelper = new THREE.AxisHelper( 500 );
+				scene.add( axisHelper );
 
 				document.addEventListener('mousemove', onDocumentMouseMove, false);
 				document.addEventListener('mousedown', onDocumentMouseDown, false);
@@ -248,6 +252,8 @@
 										'XYZ'
 								));
 
+
+						axisHelper.quaternion.multiplyQuaternions(deltaRotationQuaternion, axisHelper.quaternion);
 						for(var i = 0; i < soundCones.length; i++){
 							soundCones[i].quaternion.multiplyQuaternions(deltaRotationQuaternion, soundCones[i].quaternion);
 							setPosition(soundCones[i]);
@@ -274,28 +280,25 @@
 
 				var intersects = raycaster.intersectObjects(objects);
 
-				console.log(intersects);
-
 				if (intersects.length > 0) {
 
 					var intersect = intersects[0];
 
-					if(intersect.object.id == 4){
-						placingCone = true;
-						createCone(intersect.point);
-						interactiveCone = soundCones.length - 1;
-					}
-					else if(intersect.object.id > 4 && !placingCone){
-						rePlacingCone = true;
-						interactiveCone = intersect.object.id - 6;
-					}
-					else{
-						rePlacingCone = false;
-						placingCone = false;
-						interactiveCone = null;
+					switch(intersect.object.name){
+						case "addButton":
+							placingCone = true;
+							createCone(intersect.point);
+							interactiveCone = soundCones.length - 1;
+						break;
+						case "cone":
+							placingCone = false;
+							rePlacingCone = true;
+							interactiveCone = intersect.object.id - soundCones[0].id;
+						break;
 					}
 				}
 				else{
+					placingCone = false;
 					rePlacingCone = false;
 					interactiveCone = null;
 				}
@@ -303,8 +306,10 @@
 
 			function createCone(orientation){
 
+				soundConeGeo.radiusTop = 2;
 				soundCones.push(new THREE.Mesh(soundConeGeo, soundConeMaterial));
 				soundCones[soundCones.length - 1].lookAt(orientation);
+				soundCones[soundCones.length - 1].name = "cone";
 
 				scene.add(soundCones[soundCones.length - 1]);
 				objects.push(soundCones[soundCones.length - 1]);
