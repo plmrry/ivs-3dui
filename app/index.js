@@ -271,16 +271,14 @@ function main({ custom, cameras$, scenes$ }) {
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0]);
 		
-	const editor$ = selected$
+	const editor_scene_model$ = selected$
 		.map(obj => {
 			if (typeof obj !== 'undefined') {
 				obj.position = undefined;
 				return [obj];
 			}
 			else return [];
-		});
-		
-	const editor_scene_model$ = editor$
+		})
 		.map(sound_objects => {
 			return {
 				name: 'editor',
@@ -405,12 +403,6 @@ Cycle.run(main, {
 	scenes$: makeStateDriver('scenes'),
 	render: (source$) => source$.subscribe(fn => fn())
 });
-
-function makeSinkDriver() {
-	return function sinkDriver(source$) {
-		source$.subscribe(fn => fn());
-	};
-}
 
 function makeStateDriver(name) {
 	return function stateDriver(state_reducer$) {
