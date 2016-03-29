@@ -42,7 +42,7 @@ d3.selection.prototype.nodes = function() {
 function main({ custom, cameras$, scenes$ }) {
 	
 	const size$ = stream
-		.of({ width: 600, height: 600 })
+		.of({ width: 400, height: 400 })
 		.shareReplay();
 		
   const ndcScale$ = size$
@@ -52,18 +52,21 @@ function main({ custom, cameras$, scenes$ }) {
   	}));
 	
 	const main_canvas$ = custom.dom
-    .select('#main-canvas');
+    .select('#main-canvas')
+    // .shareReplay()
     
   const main_canvas_node$ = main_canvas$
   	.observable()
   	.map(o => o.node())
-  	.first();
+  	.first()
+  	// .do(log)
   	
   const editor_canvas_node$ = custom.dom
   	.select('#editor-canvas')
   	.observable()
   	.map(o => o.node())
-  	.first();
+  	.first()
+  	.do(log)
     
   const main_canvas_drag_handler$ = main_canvas$
   	.d3dragHandler();
@@ -270,14 +273,16 @@ function main({ custom, cameras$, scenes$ }) {
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0]);
 		
-	const editor_scene_model$ = selected$
+	const editor$ = selected$
 		.map(obj => {
 			if (typeof obj !== 'undefined') {
 				obj.position = undefined;
 				return [obj];
 			}
 			else return [];
-		})
+		});
+		
+	const editor_scene_model$ = editor$
 		.map(sound_objects => {
 			return {
 				name: 'editor',
@@ -404,6 +409,12 @@ Cycle.run(main, {
 	dom: makeD3DomDriver('#app')
 });
 
+function makeSinkDriver() {
+	return function sinkDriver(source$) {
+		source$.subscribe(fn => fn());
+	};
+}
+
 function makeStateDriver(name) {
 	return function stateDriver(state_reducer$) {
 		const state$ = state_reducer$
@@ -418,19 +429,6 @@ function makeStateDriver(name) {
 	};
 }
 
-function makeD3DomDriver(selector) {
-	return function domDriver(dom_reducer$) {
-		const state$ = dom_reducer$
-			.scan(apply, d3.select(selector))
-			.shareReplay();
-			
-		state$
-			.do(s => debug('dom')('update'))
-			.subscribe();
-			
-		return state$
-	}
-}
 
 function makeCustomDriver() {
 

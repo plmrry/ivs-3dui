@@ -15,6 +15,7 @@ export function state_reducer(model) {
 			.select(selectable)
 			.selectAll()
 			.data(model);
+					
 		const scenes = scenes_join
 			.enter()
 			.append(function(d) {
@@ -27,17 +28,21 @@ export function state_reducer(model) {
 				new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
 				return new_scene;
 			})
-			.merge(scenes_join);
+			.merge(scenes_join)
+					
 		const floors_join = scenes
 			.selectAll({ name: 'floor' })
 			.data(d => d.floors || []);
+				
 		const floors = floors_join
 			.enter()
 			.append(d => {
 				return getFloor(room_size);
 			})
 			.merge(floors_join);
+					
 		const sound_objects = updateSoundObjects2(scenes);
+		
 		updateCones(sound_objects);
     return selectable;
   };
@@ -147,11 +152,13 @@ function updateSoundObjects2(scenes) {
 	let sound_objects_join = scenes
 		.selectAll({ name: 'sound_object' })
 		.data(function(d) { return d.sound_objects || [] });
+		
 	sound_objects_join
 		.exit()
 		.each(function(d) {
 			this.parent.remove(this);
 		});
+			
 	const sound_objects = sound_objects_join
 		.enter()
 		.append(function(d) {
@@ -196,6 +203,7 @@ function updateSoundObjects2(scenes) {
 			/** Update color */
 			this.material.color = new THREE.Color(`#${d.material.color}`);
 		});
+		
 	return sound_objects;
 }
 
