@@ -82,11 +82,11 @@
 				sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
 				sphere.material.transparent = true;
 
-				// var visibleSphereGeometry = new THREE.SphereBufferGeometry(300, 100, 100);
-				// var visibleSphereMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.2});
-				// var visibleSphere = new THREE.Mesh(visibleSphereGeometry, visibleSphereMaterial);
-				// visibleSphere.material.transparent = true;
-				// scene.add(visibleSphere);
+				var visibleSphereGeometry = new THREE.SphereBufferGeometry(300, 100, 100);
+				var visibleSphereMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.5});
+				var visibleSphere = new THREE.Mesh(visibleSphereGeometry, visibleSphereMaterial);
+				visibleSphere.material.transparent = true;
+				scene.add(visibleSphere);
 
 				soundConeGeo = new THREE.CylinderGeometry(100, 0, 600, 100, 1, true);
 				soundConeGeo.translate(0, 300, 0);
