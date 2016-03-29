@@ -40,7 +40,6 @@ d3.selection.prototype.nodes = function() {
 };
 
 function main({ custom, cameras$, scenes$ }) {
-	const log = console.log.bind(console);
 	
 	const size$ = stream
 		.of({ width: 400, height: 400 })
@@ -111,7 +110,7 @@ function main({ custom, cameras$, scenes$ }) {
   		return event;
   	})
   	.withLatestFrom(
-  		main_scene$, //.map(s => s.node()),
+  		main_scene$,
   		(event, scene) => ({ event, scene })
   	)
   	.map(({ event, scene }) => {
@@ -315,7 +314,7 @@ function main({ custom, cameras$, scenes$ }) {
 						height: 300
 					}
 				}
-			]
+			];
 		})
 		// .do(log)
 		.shareReplay();
@@ -406,7 +405,8 @@ Cycle.run(main, {
 	custom: makeCustomDriver('#app'),
 	cameras$: makeStateDriver('cameras'),
 	scenes$: makeStateDriver('scenes'),
-	render: (source$) => source$.subscribe(fn => fn())
+	render: (source$) => source$.subscribe(fn => fn()),
+	dom: makeD3DomDriver('#app')
 });
 
 function makeSinkDriver() {
