@@ -85,12 +85,12 @@
 				objects.push(addButton);
 
 				var sphereGeometry = new THREE.SphereBufferGeometry(600, 100, 100);
-				var sphereMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.6});
+				var sphereMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.5});
 				sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
 				sphere.material.transparent = true;
 
 				var coneGeoLength = 500;
-				soundConeGeo = new THREE.CylinderGeometry(200, 0, coneGeoLength, 100, 1, true);
+				soundConeGeo = new THREE.CylinderGeometry(100, 0, coneGeoLength, 100, 1, true);
 				soundConeGeo.translate(0, coneGeoLength/2., 0);
 				soundConeGeo.rotateX(Math.PI/2.);
 				soundConeMaterial = new THREE.MeshBasicMaterial({color: 0x80FFE5, opacity: 0.5});

@@ -14,9 +14,9 @@ THREE.AxisHelper = function ( size ) {
 	] );
 
 	var colors = new Float32Array( [
-		1, 0, 0,  1, 0.6, 0,
-		0, 1, 0,  0.6, 1, 0,
-		0, 0, 1,  0, 0.6, 1
+		1, 0.8, 0,  1, 0.8, 0,
+		0, 0.8, 1,  0, 0.8, 1,
+		1, 0, 0.7,  1, 0, 0.7
 	] );
 
 	var geometry = new THREE.BufferGeometry();
@@ -24,6 +24,7 @@ THREE.AxisHelper = function ( size ) {
 	geometry.addAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
 
 	var material = new THREE.LineBasicMaterial( { vertexColors: THREE.VertexColors } );
+	material.linewidth = 4;
 
 	THREE.LineSegments.call( this, geometry, material );
 
