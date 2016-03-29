@@ -55,7 +55,6 @@
 
 				camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
 				camera.position.set(0, 0, 1300);
-				//camera.lookAt(new THREE.Vector3());
 
 				controls = new THREE.FlyControls(camera);
 				controls.dragToLook = true;
@@ -89,18 +88,12 @@
 				sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
 				sphere.material.transparent = true;
 
-				soundConeGeo = new THREE.CylinderGeometry(100, 0, 600, 100, 1, true);
-				soundConeGeo.translate(0, 300, 0);
+				var coneGeoLength = 600;
+				soundConeGeo = new THREE.CylinderGeometry(100, 0, coneGeoLength, 100, 1, true);
+				soundConeGeo.translate(0, coneGeoLength/2., 0);
 				soundConeGeo.rotateX(Math.PI/2.);
 				soundConeMaterial = new THREE.MeshBasicMaterial({color: 0x80FFE5, opacity: 0.5});
-
-				// Lights
-				var ambientLight = new THREE.AmbientLight(0x606060);
-				scene.add(ambientLight);
-
-				var directionalLight = new THREE.DirectionalLight(0xffffff);
-				directionalLight.position.set(1, 0.75, 0.5).normalize();
-				scene.add(directionalLight);
+				soundConeMaterial.side = THREE.DoubleSide;
 
 				renderer = new THREE.WebGLRenderer({antialias: true});
 				renderer.setClearColor(0xf0f0f0);
@@ -281,6 +274,8 @@
 
 				var intersects = raycaster.intersectObjects(objects);
 
+				console.log(intersects);
+
 				if (intersects.length > 0) {
 
 					var intersect = intersects[0];
@@ -292,7 +287,7 @@
 					}
 					else if(intersect.object.id > 4 && !placingCone){
 						rePlacingCone = true;
-						interactiveCone = intersect.object.id - 9;
+						interactiveCone = intersect.object.id - 6;
 					}
 					else{
 						rePlacingCone = false;
@@ -309,8 +304,6 @@
 			function createCone(orientation){
 
 				soundCones.push(new THREE.Mesh(soundConeGeo, soundConeMaterial));
-				soundCones[soundCones.length - 1].material.side = THREE.DoubleSide;
-				soundCones[soundCones.length - 1].material.transparent = true;
 				soundCones[soundCones.length - 1].lookAt(orientation);
 
 				scene.add(soundCones[soundCones.length - 1]);
