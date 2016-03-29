@@ -43,7 +43,7 @@ function main({ custom, cameras$, scenes$ }) {
 	const log = console.log.bind(console);
 	
 	const size$ = stream
-		.of({ width: 400, height: 400 })
+		.of({ width: 600, height: 600 })
 		.shareReplay();
 		
   const ndcScale$ = size$
@@ -53,21 +53,18 @@ function main({ custom, cameras$, scenes$ }) {
   	}));
 	
 	const main_canvas$ = custom.dom
-    .select('#main-canvas')
-    // .shareReplay()
+    .select('#main-canvas');
     
   const main_canvas_node$ = main_canvas$
   	.observable()
   	.map(o => o.node())
-  	.first()
-  	// .do(log)
+  	.first();
   	
   const editor_canvas_node$ = custom.dom
   	.select('#editor-canvas')
   	.observable()
   	.map(o => o.node())
-  	.first()
-  	.do(log)
+  	.first();
     
   const main_canvas_drag_handler$ = main_canvas$
   	.d3dragHandler();
@@ -429,6 +426,19 @@ function makeStateDriver(name) {
 	};
 }
 
+function makeD3DomDriver(selector) {
+	return function domDriver(dom_reducer$) {
+		const state$ = dom_reducer$
+			.scan(apply, d3.select(selector))
+			.shareReplay();
+			
+		state$
+			.do(s => debug('dom')('update'))
+			.subscribe();
+			
+		return state$
+	}
+}
 
 function makeCustomDriver() {
 
