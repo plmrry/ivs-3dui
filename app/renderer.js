@@ -3,6 +3,30 @@ import THREE from 'three/three.js';
 import _ from 'underscore';
 import d3_selection from 'd3-selection';
 
+export function component({ size$ }) {
+		const renderers_model$ = size$
+			.map(size => {
+				return [
+					{
+						name: 'main',
+						size: size
+					},
+					{
+						name: 'editor',
+						size: {
+							width: 300,
+							height: 300
+						}
+					}
+				];
+			});
+			
+		const renderers_state_reducer$ = renderers_model$
+			.map(state_reducer);
+			
+		return renderers_state_reducer$;
+	}
+
 export function state_reducer(model) {
   return function(selectable) {
     const join = d3_selection
