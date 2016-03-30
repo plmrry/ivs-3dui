@@ -2,6 +2,9 @@ import debug from 'debug';
 import THREE from 'three/three.js';
 import _ from 'underscore';
 import d3_selection from 'd3-selection';
+import Rx from 'rx';
+
+const stream = Rx.Observable;
 
 export function component({ size$ }) {
 		const renderers_model$ = size$

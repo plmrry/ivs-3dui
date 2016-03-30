@@ -2,12 +2,81 @@ import debug from 'debug';
 import THREE from 'three/three.js';
 import _ from 'underscore';
 import d3_selection from 'd3-selection';
+import Rx from 'rx';
+
+const stream = Rx.Observable;
 
 const room_size = {
 	width: 20,
 	length: 18,
 	height: 3
 };
+
+export function component({ dom }) {
+	const add_object$ = dom
+		.select('#add-object')
+		.events('click')
+		.map((ev, i) => ({
+			count: i,
+			key: i,
+			class: 'sound_object',
+			type: 'sound_object',
+			name: 'sound_object',
+			position: {
+				x: Math.random() * 2 - 1,
+				y: Math.random() * 2 - 1,
+				z: Math.random() * 2 - 1,
+			},
+			volume: Math.random() + 0.4,
+			material: {
+				color: 'ffffff'
+			},
+			cones: [
+				{
+					volume: 2,
+					spread: 0.5,
+					rotation: {
+						x: 0.5,
+						y: 0.1,
+						z: 0.1
+					},
+					lookAt: {
+						x: 2,
+						y: 1,
+						z: 1
+					}
+				}
+			],
+		}))
+		.map(obj => objects => {
+			return objects.concat(obj);
+		});
+		
+	const sound_objects_update$ = stream
+		.merge(
+			add_object$
+		);
+		
+	const sound_objects$ = sound_objects_update$	
+		.startWith([])
+		.scan(apply)
+		.shareReplay();
+	
+	const main_scene_model$ = sound_objects$
+		.map(sound_objects => {
+			return {
+				name: 'main',
+				floors: [
+					{
+						name: 'floor'
+					}
+				],
+				sound_objects
+			};
+		});
+		
+	return main_scene_model$;
+}
 
 export function state_reducer(model) {
   return function(selectable) {
@@ -28,7 +97,7 @@ export function state_reducer(model) {
 				new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
 				return new_scene;
 			})
-			.merge(scenes_join)
+			.merge(scenes_join);
 					
 		const floors_join = scenes
 			.selectAll({ name: 'floor' })
@@ -222,3 +291,7 @@ function cylinder_geometry_from_params(params) {
 		params.openEnded
 	);
 }
+
+function log(d) { console.log(d); }
+
+function apply(o, fn) { return fn(o); }

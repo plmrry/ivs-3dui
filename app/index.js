@@ -30,15 +30,60 @@ THREE.Object3D.prototype.querySelectorAll = function (query) {
 	return this.children.filter(d => _.isMatch(d, query));
 };
 
-function main({ renderers }) {
+// intent = dom$ => actions$
+// model = actions$ => model$
+// view = model$ => state_reducer$
+
+function main({ renderers, dom, scenes, cameras }) {
 	
 	const size$ = stream
 		.of({ width: 400, height: 400 })
 		.shareReplay();
 		
 	const renderers_state_reducer$ = renderer.component({ size$ });
+	
+	const scenes_model$ = scene.component({ dom });
+	const scenes_state_reducer$ = scenes_model$
+		.map(main_scene => [ main_scene ])
+		.map(model => scene.state_reducer(model));
 		
-	const dom_reducer$ = stream
+	const camera_model$ = camera
+		.component({ dom$: dom.state$, size$ })
+		.shareReplay();
+	const cameras_state_reducer$ = camera_model$
+		.map(camera.state_reducer);
+		
+	const renderSets$ = stream
+		.of([
+			{
+				render_id: 'main',
+				scene_id: 'main',
+				camera_id: 'main'
+			},
+			// {
+			// 	render_id: 'editor',
+			// 	scene_id: 'editor',
+			// 	camera_id: 'editor'
+			// }
+		]);
+		
+	const render_function$ = combineLatestObj
+		({
+			renderers,
+			scenes,
+			cameras,
+			renderSets$
+		})
+		.map(({ renderers, scenes, cameras, renderSets }) => () => {
+			renderSets.forEach(({ render_id, scene_id, camera_id }) => {
+				const renderer = renderers.querySelector({ name: render_id });
+				const scene = scenes.querySelector({ name: scene_id });
+				const camera = cameras.querySelector({ name: camera_id });
+				renderer.render(scene, camera);
+			});
+		});
+		
+	const dom_state_reducer$ = stream
 		.of({ main: { } }, { main: { } }, { main: { } }, { main: { } })
 		.withLatestFrom(
 			renderers,
@@ -138,8 +183,11 @@ function main({ renderers }) {
 		});
 	
 	return {
+		dom: dom_state_reducer$,
 		renderers: renderers_state_reducer$,
-		dom: dom_reducer$
+		scenes: scenes_state_reducer$,
+		cameras: cameras_state_reducer$,
+		render: render_function$
 	};
 }
 
