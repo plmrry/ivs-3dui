@@ -86,13 +86,18 @@ function getFloor(room_size) {
 }
 
 function updateCones(sound_objects) {
-	let cones_join = sound_objects
+	let join = sound_objects
 		.selectAll()
 		.data(function(d) { return d.cones || [] });
-	cones_join
+	join
+		.exit()
+		.each(function(d) {
+			this.parent.remove(this);
+		});
+	return join
 		.enter()
 		.append(getNewCone)
-		.merge(cones_join)
+		.merge(join)
 		.each(updateOneCone);
 }
 

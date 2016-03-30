@@ -519,22 +519,6 @@ function makeCustomDriver() {
 		
 	controls
 		.append('button')
-		.attr('id', 'orbit_camera')
-		.text('orbit_camera')
-		.style('height', '100px');
-		
-	controls
-		.append('button')
-		.attr('id', 'camera_to_birds_eye')
-		.text('camera to birds eye');
-		
-	// controls
-	// 	.append('button')
-	// 	.attr('id', 'add_cone')
-	// 	.text('add cone to selected');
-		
-	controls
-		.append('button')
 		.attr('id', 'add_object')
 		.text('add object');
 
