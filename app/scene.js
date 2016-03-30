@@ -12,7 +12,60 @@ const room_size = {
 	height: 3
 };
 
-export function component({ dom }) {
+export function component({ dom, main_intersects$ }) {
+	const main_canvas$ = dom
+    .select('#main-canvas');
+  	
+  const clicked$ = main_intersects$
+		.pairwise()
+		.filter(arr => arr[0].event.type === 'dragstart')
+		.filter(arr => arr[1].event.type === 'dragend')
+		.pluck('1');
+		
+	const clicked_key$ = clicked$
+		// .pluck('intersects', 'sound_objects', '0', 'object')
+		.pluck('intersects')
+		.map(arr => arr.filter(d => d.key === 'sound_objects'))
+		.pluck('0', 'intersects', '0', 'object')
+		.map(o => {
+			if (typeof o !== 'undefined') {
+				/** TODO: Better way of selecting parent when child cone is clicked? */
+				if (o._type === 'cone') return o.parent.parent.__data__.key;
+				return o.__data__.key;
+			}
+			return undefined;
+		})
+		.distinctUntilChanged()
+		.shareReplay();
+		
+	const select_object$ = clicked_key$
+		.filter(key => typeof key !== 'undefined')
+		.map(key => objects => {
+			return objects.map(obj => {
+				if (obj.key === key) {
+					obj.selected = true;
+					obj.material.color = '66c2ff';
+					return obj;
+				}
+				return obj;
+			});
+		});
+ 		
+	const unselect_object$ = clicked_key$
+		.pairwise()
+		.pluck('0')
+		.filter(key => typeof key !== 'undefined')
+		.map(key => objects => {
+			return objects.map(obj => {
+				if (obj.key === key) {
+					obj.selected = false;
+					obj.material.color = 'ffffff';
+					return obj;
+				}
+				return obj;
+			});
+		});
+		
 	const add_object$ = dom
 		.select('#add-object')
 		.events('click')
@@ -54,7 +107,9 @@ export function component({ dom }) {
 		
 	const sound_objects_update$ = stream
 		.merge(
-			add_object$
+			add_object$,
+			select_object$,
+			unselect_object$
 		);
 		
 	const sound_objects$ = sound_objects_update$	

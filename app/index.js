@@ -34,15 +34,97 @@ THREE.Object3D.prototype.querySelectorAll = function (query) {
 // model = actions$ => model$
 // view = model$ => state_reducer$
 
+function mouse({ dom$, size$ }) {
+	const ndcScale$ = size$
+  	.map(({ width, height }) => ({
+  		x: d3.scale.linear().domain([0, width]).range([-1, +1]),
+  		y: d3.scale.linear().domain([0, height]).range([+1, -1])
+  	}));
+	const drag_handler$ = dom$
+  	.d3dragHandler();
+  const event$ = stream
+  	.merge(
+  		drag_handler$.events('drag'),
+  		drag_handler$.events('dragstart'),
+  		drag_handler$.events('dragend'),
+  		dom$.events('mousemove')
+  	);
+  const mouse$ = event$
+  	.map((obj) => { 
+  		obj.mouse = d3.mouse(obj.node);
+  		return obj;
+  	})
+  	.withLatestFrom(
+  		ndcScale$,
+  		(event, ndcScale) => { 
+  			event.ndc = {
+  				x: ndcScale.x(event.mouse[0]), 
+  				y: ndcScale.y(event.mouse[1]) 
+  			};
+  			return event;
+  		}
+  	);
+  return mouse$;
+}
+
 function main({ renderers, dom, scenes, cameras }) {
 	
 	const size$ = stream
 		.of({ width: 400, height: 400 })
 		.shareReplay();
 		
-	const renderers_state_reducer$ = renderer.component({ size$ });
+	const main_canvas$ = dom
+    .select('#main-canvas');
+		
+	const main_mouse$ = mouse({ dom$: main_canvas$, size$ });
 	
-	const scenes_model$ = scene.component({ dom });
+	const main_camera_state$ = cameras
+		.map(c => c.querySelector({ name: 'main' }));
+		
+	const main_scene$ = scenes
+	  .map(scenes => scenes.querySelector({ name: 'main' }));
+		
+	const main_raycaster$ = main_mouse$
+		.withLatestFrom(
+			main_camera_state$,
+			(ev, c) => ({ event: ev, camera: c })
+		)
+		.map(({ event, camera }) => { 
+  		const raycaster = new THREE.Raycaster();
+  		raycaster.setFromCamera(event.ndc, camera);
+  		event.raycaster = raycaster;
+  		return event;
+  	});
+  	
+  const main_intersect_targets$ = main_scene$
+  	.map(scene => {
+  		const floor = scene.getObjectByProperty('name', 'floor');
+  		const sound_objects = scene.children.filter(d => d.name === 'sound_object');
+  		return [
+  			{ key: 'floor', targets: [floor] },
+  			{ key: 'sound_objects', targets: sound_objects }
+  		];
+  	});
+  	
+  const main_intersects$ = combineLatestObj
+  	({
+  		event: main_raycaster$,
+  		targets: main_intersect_targets$,
+  	})
+  	.map(({ event, targets }) => {
+  		event.intersects = targets
+  			.map(obj => {
+  				obj.intersects = event.raycaster.intersectObjects(obj.targets, true);
+  				return obj;
+  			});
+  		return event;
+  	});
+		
+	const renderers_state_reducer$ = renderer
+		.component({ size$ });
+	
+	const scenes_model$ = scene
+		.component({ dom, main_intersects$ });
 	const scenes_state_reducer$ = scenes_model$
 		.map(main_scene => [ main_scene ])
 		.map(model => scene.state_reducer(model));
@@ -111,7 +193,8 @@ function main({ renderers, dom, scenes, cameras }) {
 				
 			main_canvas
 				.enter()
-				.append(d => d);
+				.append(d => d)
+				.attr('id', 'main-canvas');
 				
 			entered
 				.append('div')
@@ -183,8 +266,8 @@ function main({ renderers, dom, scenes, cameras }) {
 		});
 	
 	return {
-		dom: dom_state_reducer$,
 		renderers: renderers_state_reducer$,
+		dom: dom_state_reducer$,
 		scenes: scenes_state_reducer$,
 		cameras: cameras_state_reducer$,
 		render: render_function$
