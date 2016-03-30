@@ -11,18 +11,21 @@ const stream = Rx.Observable;
 export function component({ dom$, size$ }) {
 	
 	const orbit$ = dom$
-    .select('#orbit_camera')
-    .d3dragHandler()
-    .events('drag')
-    .pluck('event')
-    .shareReplay();
+		.map(dom => dom.select('#orbit_camera'))
+		.flatMap(selection => {
+			let handler = d3.behavior.drag();
+			handler.call(selection);
+			return observableFromD3Event('drag')(handler);
+		})
+		.pluck('event')
+		.shareReplay();
     
 	const MAX_LATITUDE = 89.99;
 	const MIN_LATITUDE = 5;
 	
 	const to_birds_eye$ = dom$
-		.select('#camera_to_birds_eye')
-		.events('click')
+		.map(dom => dom.select('#camera-to-birds-eye'))
+		.flatMap(observableFromD3Event('click'))
 		.flatMap(ev => {
 			let destination = MAX_LATITUDE;
       return d3TweenStream(500)
@@ -204,5 +207,20 @@ function polarToVector({ radius, theta, phi }) {
 		x: radius * Math.sin(phi) * Math.sin(theta),
 		z: radius * Math.cos(phi) * Math.sin(theta),
 		y: radius * Math.cos(theta)
+	};
+}
+
+function observableFromD3Event(type) {
+	return function(selection) {
+		return stream
+			.create(observer => 
+				selection.on(type, function(d) {
+					observer.onNext({
+						datum: d,
+						node: this,
+						event: d3.event
+					});
+				})
+			);
 	};
 }
