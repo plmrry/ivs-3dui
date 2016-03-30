@@ -11,7 +11,8 @@ import * as camera from './camera.js';
 import * as scene from './scene.js';
 import * as renderer from './renderer.js';
 
-debug.disable();
+// debug.disable();
+debug.enable('*');
 
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
@@ -30,15 +31,9 @@ THREE.Object3D.prototype.querySelectorAll = function (query) {
 	return this.children.filter(d => _.isMatch(d, query));
 };
 
-// d3.selection.prototype.nodes = function() {
-// 	let nodes = [];
-// 	this.each(function() { nodes.push(this); });
-// 	return nodes;
-// };
-
-function main({ custom, cameras$, scenes$, dom }) {
+function main({ cameras$, scenes$, dom }) {
 	
-	const dom_state$ = dom;
+	const dom_state$ = dom.state$;
 	
 	const size$ = stream
 		.of({ width: 400, height: 400 })
@@ -50,27 +45,16 @@ function main({ custom, cameras$, scenes$, dom }) {
   		y: d3.scale.linear().domain([0, height]).range([+1, -1])
   	}));
 	
-	const main_canvas$ = custom.dom
-    .select('#main-canvas')
-    // .shareReplay()
-    
-  // const main_canvas_node$ = dom_state$
-  // 	.map(dom => dom.select('#main-canvas').node());
+	const main_canvas$ = dom
+    .select('#main-canvas');
   	
   const main_canvas_node$ = main_canvas$
   	.observable()
   	.map(o => o.node())
   	.first()
   	
-  // const editor_canvas_node$ = dom_state$
-  	// .map(dom => dom.select('#editor-canvas'))
-  	
-  const editor_canvas_node$ = custom.dom
-  	.select('#editor-canvas')
-  	.observable()
-  	.map(o => o.node())
-  	.first()
-  	// .do(log)
+  const editor_canvas_node$ = dom_state$
+  	.map(dom => dom.select('#editor-canvas').node());
     
   const main_canvas_drag_handler$ = main_canvas$
   	.d3dragHandler();
@@ -178,15 +162,14 @@ function main({ custom, cameras$, scenes$, dom }) {
 		});
 
 	const camera_model$ = camera
-		// .component({ dom$: custom.dom, size$ })
-		.component({ dom$: dom, size$ })
+		.component({ dom$: dom_state$, size$ })
 		.shareReplay();
 	
 	const camera_reducer$ = camera_model$.map(camera.state_reducer);
 		
-	const add_object$ = custom.dom
-		.select('#add_object')
-		.events('click')
+	const add_object$ = dom_state$
+		.map(dom => dom.select('#add-object'))
+		.flatMap(observableFromD3Event('click'))
 		.map((ev, i) => ({
 			count: i,
 			key: i,
@@ -298,7 +281,7 @@ function main({ custom, cameras$, scenes$, dom }) {
 	const renderer_model$ = combineLatestObj
 		({
 			main: main_canvas_node$.first(),
-			editor: editor_canvas_node$,
+			editor: editor_canvas_node$.first(),
 			size$
 		})
 		.map(({main, editor, size}) => {
@@ -378,15 +361,13 @@ function main({ custom, cameras$, scenes$, dom }) {
 				.enter()
 				.append('main')
 				.style('border', '1px solid black')
-				.style('height', '500px')
-				.style('width', '500px')
+				.style('height', '600px')
+				.style('width', '600px')
 				.style('position', 'relative');
 				
 			entered
 				.append('canvas')
 				.attr('id', 'main-canvas')
-				.attr('width', '400px')
-				.attr('height', '400px')
 				.style('border', '1px solid blue');
 				
 			entered
@@ -399,7 +380,7 @@ function main({ custom, cameras$, scenes$, dom }) {
 				.style('width', '100px')
 				.style('border', '1px solid orange');
 				
-			entered
+			const scene_controls = entered
 				.append('div')
 				.attr('id', 'scene-controls')
 				.style('right', '0')
@@ -408,6 +389,21 @@ function main({ custom, cameras$, scenes$, dom }) {
 				.style('height', '100px')
 				.style('width', '100px')
 				.style('border', '1px solid red');
+				
+			scene_controls
+				.append('button')
+				.attr('id', 'add-object')
+				.text('add object');
+				
+			scene_controls
+				.append('canvas')
+				.attr('id', 'editor-canvas')
+				.style('border', '1px solid green');
+				
+			scene_controls
+				.append('button')
+				.attr('id', 'add_cone')
+				.text('add cone to selected');
 				
 			const camera_controls = entered
 				.append('div')
@@ -440,16 +436,11 @@ function main({ custom, cameras$, scenes$, dom }) {
 				.style('width', '100px')
 				.style('border', '1px solid red');
 				
-			debug
-				.append('button')
-				.attr('id', 'add_cone')
-				.text('add cone to selected');
-				
 			return dom;
 		});
 	
 	return {
-		custom: scenes_reducer$,
+		// custom: scenes_reducer$,
 		cameras$: camera_reducer$,
 		scenes$: scenes_reducer$,
 		render: renderFunction$,
@@ -458,7 +449,7 @@ function main({ custom, cameras$, scenes$, dom }) {
 }
 
 Cycle.run(main, {
-	custom: makeCustomDriver('#app'),
+	// custom: makeCustomDriver('#app'),
 	cameras$: makeStateDriver('cameras'),
 	scenes$: makeStateDriver('scenes'),
 	render: (source$) => source$.subscribe(fn => fn()),
@@ -473,7 +464,41 @@ function makeD3DomDriver(selector) {
 		dom_state$
 			.do(s => debug('dom')('update'))
 			.subscribe();
-		return dom_state$;
+		return {
+			state$: dom_state$,
+			select: function(selector) {
+				let selection$ = dom_state$.map(dom => dom.select(selector));
+				return {
+					observable: function() {
+						return selection$;
+					},
+					events: makeEventsGetter(selection$),
+					d3dragHandler: makeDragHandler(selection$)
+				};
+			}
+		};
+	};
+}
+
+function makeEventsGetter(selection$) {
+	return function(type) {
+		return selection$.flatMap(observableFromD3Event(type));
+	};
+}
+
+function makeDragHandler(selection$) {
+	return function() {
+		const handler = d3.behavior.drag();
+		const dragHandler$ = selection$
+			.map(s => {
+				handler.call(s); 
+				return handler;
+			});
+		return {
+			events: function(type) {
+				return dragHandler$.flatMap(observableFromD3Event(type));
+			}
+		};
 	};
 }
 
@@ -491,80 +516,28 @@ function makeStateDriver(name) {
 	};
 }
 
+// function makeCustomDriver() {
 
-function makeCustomDriver() {
+// 	var container = d3.select('body')
+// 		.append('div');
 
-	var container = d3.select('body')
-		.append('div');
-	
-	container
-		.append('canvas')
-		.attr('id', 'main-canvas')
-		.style({
-			border: '1px solid black'
-		});
-		
-	container
-		.append('canvas')
-		.attr('id', 'editor-canvas')
-		.style({
-			border: '1px solid red'
-		})
-		.attr({
-			height: '300px',
-			width: '300px'
-		});
-		
-	var controls = container.append('div');
-		
-	controls
-		.append('button')
-		.attr('id', 'add_object')
-		.text('add object');
-
-	return function customDriver(view$) {
+// 	return function customDriver(view$) {
 			
-		const dom$ = new Rx.ReplaySubject();
+// 		const dom$ = new Rx.ReplaySubject();
 		
-		view$.map(view => {
-			debug('view')('view update');
+// 		view$.map(view => {
+// 			debug('view')('view update');
 			
-			dom$.onNext(container);
+// 			dom$.onNext(container);
 
-			return view;
-		})
-		.subscribe()
+// 			return view;
+// 		})
+// 		.subscribe()
 		
-		return {
-			dom: {
-				select: function(selector) {
-					let selection$ = dom$.map(dom => dom.select(selector));
-					return {
-						observable: function() {
-							return selection$;
-						},
-						events: function(type) {
-							return selection$.flatMap(observableFromD3Event(type));
-						},
-						d3dragHandler: function() {
-							let handler = d3.behavior.drag();
-							let dragHandler$ = selection$
-								.map(s => {
-									handler.call(s); 
-									return handler;
-								});
-							return {
-								events: function(type) {
-									return dragHandler$.flatMap(observableFromD3Event(type));
-								}
-							};
-						}
-					};
-				}
-			}
-		};
-	};
-}
+// 		return {
+// 		};
+// 	};
+// }
 
 function Selectable(array) {
 	this.children = array || [];
