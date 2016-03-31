@@ -12,12 +12,15 @@ const room_size = {
 	height: 3
 };
 
-export function component({ dom, main_intersects$ }) {
+export function component({ dom, main_intersects$, editor_intersects$ }) {
   const clicked$ = main_intersects$
 		.pairwise()
 		.filter(arr => arr[0].event.type === 'dragstart')
 		.filter(arr => arr[1].event.type === 'dragend')
 		.pluck('1');
+		
+	// const editor_mousemove$ = dom
+	// 	.select('#editor-canvas')
 		
 	const clicked_key$ = clicked$
 		.pluck('intersects')
@@ -118,7 +121,8 @@ export function component({ dom, main_intersects$ }) {
 					x: Math.random(),
 					y: Math.random(),
 					z: Math.random()
-				}
+				},
+				interactive: true
 			};
 		})
 		.map(cone => objects => {
@@ -281,6 +285,7 @@ function getNewCone() {
 	cone.castShadow = true;
 	cone.receiveShadow = true;
 	let coneParent = new THREE.Object3D();
+	coneParent.name = 'cone_parent';
 	coneParent.add(cone);
 	return coneParent;	
 }

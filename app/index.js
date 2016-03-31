@@ -34,8 +34,10 @@ THREE.Object3D.prototype.querySelectorAll = function (query) {
 // model = actions$ => model$
 // view = model$ => state_reducer$
 
-function mouse({ dom$, size$ }) {
-	const ndcScale$ = size$
+function mouse({ dom$ }) {
+	const ndcScale$ = dom$
+		.observable()
+		.map(dom => dom.node())
   	.map(({ width, height }) => ({
   		x: d3.scale.linear().domain([0, width]).range([-1, +1]),
   		y: d3.scale.linear().domain([0, height]).range([+1, -1])
@@ -112,14 +114,21 @@ function main({ renderers, dom, scenes, cameras }) {
 		.shareReplay();
 		
 	const main_mouse$ = mouse({ 
-		dom$: dom.select('#main-canvas'), 
-		size$ 
+		dom$: dom.select('#main-canvas')
 	});
-	// .do(m => debug('mouse')(m))
-
+	
+	const editor_mouse$ = mouse({
+		dom$: dom.select('#editor-canvas')
+	});
+	
  	const main_raycaster$ = get_raycaster({ 
  		mouse$: main_mouse$, 
  		camera$: cameras.map(select({ name: 'main' }))
+ 	});
+ 	
+ 	const editor_raycaster$ = get_raycaster({
+ 		mouse$: editor_mouse$,
+ 		camera$: cameras.map(select({ name: 'editor' }))
  	});
   	
   const main_intersect_targets$ = scenes
@@ -132,17 +141,32 @@ function main({ renderers, dom, scenes, cameras }) {
   			{ key: 'sound_objects', targets: sound_objects }
   		];
   	});
+  	
+  const editor_intersect_targets$ = scenes
+ 		.map(select({ name: 'editor' }))
+ 		.map(scene => {
+ 			return [
+ 				{ key: 'children', targets: scene.children }
+ 			];
+ 		});
   
   const main_intersects$ = get_intersects({
   	raycaster$: main_raycaster$,
   	targets$: main_intersect_targets$
   });
+  
+  const editor_intersects$ = get_intersects({
+  	raycaster$: editor_raycaster$,
+  	targets$: editor_intersect_targets$
+  });
+  // .pluck('intersects', '0', 'intersects')
+  // .subscribe(log)
 		
 	const renderers_state_reducer$ = renderer
 		.component({ size$ });
 	
 	const main_scene_model$ = scene
-		.component({ dom, main_intersects$ })
+		.component({ dom, main_intersects$, editor_intersects$ })
 		.shareReplay();
 		
 	const selected$ = main_scene_model$
@@ -409,7 +433,9 @@ function makeD3DomDriver(selector) {
 		return {
 			state$: dom_state$,
 			select: function(selector) {
-				let selection$ = dom_state$.map(dom => dom.select(selector));
+				let selection$ = dom_state$
+					.map(dom => dom.select(selector))
+					.filter(s => s.node() !== null);
 				return {
 					observable: function() {
 						return selection$;
