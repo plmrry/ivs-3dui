@@ -11,7 +11,7 @@ const stream = Rx.Observable;
 export function component({ dom$, size$ }) {
 	
 	const orbit$ = dom$
-		.map(dom => dom.select('#orbit_camera'))
+		.map(dom => dom.select('#orbit-camera'))
 		.flatMap(selection => {
 			let handler = d3.behavior.drag();
 			handler.call(selection);

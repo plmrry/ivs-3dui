@@ -13,9 +13,6 @@ const room_size = {
 };
 
 export function component({ dom, main_intersects$ }) {
-	const main_canvas$ = dom
-    .select('#main-canvas');
-  	
   const clicked$ = main_intersects$
 		.pairwise()
 		.filter(arr => arr[0].event.type === 'dragstart')
@@ -23,7 +20,6 @@ export function component({ dom, main_intersects$ }) {
 		.pluck('1');
 		
 	const clicked_key$ = clicked$
-		// .pluck('intersects', 'sound_objects', '0', 'object')
 		.pluck('intersects')
 		.map(arr => arr.filter(d => d.key === 'sound_objects'))
 		.pluck('0', 'intersects', '0', 'object')
@@ -116,6 +112,11 @@ export function component({ dom, main_intersects$ }) {
 		.startWith([])
 		.scan(apply)
 		.shareReplay();
+		
+	// const selected$ = sound_objects$
+	// 	.map(arr => arr.filter(d => d.selected)[0])
+	// 	.do(s => debug('selected')(s))
+	// 	.subscribe()
 	
 	const main_scene_model$ = sound_objects$
 		.map(sound_objects => {

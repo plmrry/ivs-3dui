@@ -123,10 +123,47 @@ function main({ renderers, dom, scenes, cameras }) {
 	const renderers_state_reducer$ = renderer
 		.component({ size$ });
 	
-	const scenes_model$ = scene
-		.component({ dom, main_intersects$ });
-	const scenes_state_reducer$ = scenes_model$
-		.map(main_scene => [ main_scene ])
+	const main_scene_model$ = scene
+		.component({ dom, main_intersects$ })
+		.shareReplay();
+		
+	const selected$ = main_scene_model$
+		.pluck('sound_objects')
+		.map(arr => arr.filter(d => d.selected)[0])
+		.do(s => debug('selected')(s));
+		
+	const editor_cards$ = selected$
+		.withLatestFrom(
+			renderers.map(r => r.querySelector({ name: 'editor' })),
+			(s, r) => ({ selected: s, renderer: r })
+		)
+		.map(({ selected, renderer }) => {
+			if (typeof selected === 'undefined') return [];
+			return [{ canvases: [ { node: renderer.domElement } ] }];
+		});
+		
+	const editor_sound_objects_model$ = selected$
+		.map(obj => {
+			if (typeof obj !== 'undefined') {
+				obj.position = undefined;
+				return [obj];
+			}
+			else return [];
+		});
+		
+	const editor_scene_model$ = editor_sound_objects_model$
+		.map(sound_objects => {
+			return {
+				name: 'editor',
+				sound_objects
+			};
+		});
+		
+	const scenes_state_reducer$ = stream
+		.combineLatest(
+			main_scene_model$,
+			editor_scene_model$
+		)
 		.map(model => scene.state_reducer(model));
 		
 	const camera_model$ = camera
@@ -142,11 +179,11 @@ function main({ renderers, dom, scenes, cameras }) {
 				scene_id: 'main',
 				camera_id: 'main'
 			},
-			// {
-			// 	render_id: 'editor',
-			// 	scene_id: 'editor',
-			// 	camera_id: 'editor'
-			// }
+			{
+				render_id: 'editor',
+				scene_id: 'editor',
+				camera_id: 'editor'
+			}
 		]);
 		
 	const render_function$ = combineLatestObj
@@ -165,18 +202,27 @@ function main({ renderers, dom, scenes, cameras }) {
 			});
 		});
 		
-	const dom_state_reducer$ = stream
-		.of({ main: { } }, { main: { } }, { main: { } }, { main: { } })
-		.withLatestFrom(
+	const dom_model$ = combineLatestObj
+		({
 			renderers,
-			(model, renderers) => { 
-				model.main.canvases = [
-					renderers.querySelector({ name: 'main' }).domElement
-				];
-				return model;
-			}
-		)
+			editor_cards$
+		})
+		.map(({ renderers, editor_cards }) => {
+			return {
+				main: {
+					canvases: [
+						{
+							node: renderers.querySelector({ name: 'main' }).domElement
+						}
+					]
+				},
+				editor_cards
+			};
+		});
+
+	const dom_state_reducer$ = dom_model$
 		.map(model => dom => {
+			console.log(model);
 			const main = dom.selectAll('main').data([model.main]);
 			
 			const entered = main
@@ -193,74 +239,102 @@ function main({ renderers, dom, scenes, cameras }) {
 				
 			main_canvas
 				.enter()
-				.append(d => d)
+				.append(d => d.node)
 				.attr('id', 'main-canvas');
-				
-			entered
+			
+			const controls_data = [
+				{
+					id: 'scene-controls',
+					style: {
+						right: 0,
+						top: 0
+					},
+					buttons: [
+						{
+							id: 'add-object',
+							text: 'add object'
+						}
+					],
+					cards: model.editor_cards
+				},
+				{
+					id: 'camera-controls',
+					style: {
+						bottom: 0,
+						right: 0
+					},
+					buttons: [
+						{
+							id: 'orbit-camera',
+							text: 'orbit camera'
+						},
+						{
+							id: 'camera-to-birds-eye',
+							text: 'camera to birds eye'
+						}
+					]
+				}
+			];
+			
+			const controls = main
+				.selectAll('div.controls')
+				.data(d => controls_data)
+				.enter()
 				.append('div')
-				.attr('id', 'file-controls')
-				.style('left', '0')
-				.style('top', '0')
-				.style('position', 'absolute')
-				.style('height', '100px')
-				.style('width', '100px')
-				.style('border', '1px solid orange');
+				.attr('id', d => d.id)
+				.classed('controls', true)
+				.style({
+					width: '100px',
+					height: '100px',
+					border: '1px solid black',
+					position: 'absolute'
+				})
+				.each(function(d) {
+					d3.select(this)
+						.style(d.style);
+				});
 				
-			const scene_controls = entered
+			controls
+				.selectAll('button')
+				.data(d => d.buttons || [])
+				.enter()
+				.append('button')
+				.attr('id', d => d.id)
+				.text(d => d.text);
+				
+			const editor_cards = main
+				.selectAll('.controls')
+				.selectAll('.card')
+				.data(d => {
+					return d.cards || [];
+				});
+				
+			editor_cards
+				.exit()
+				.remove();
+
+			editor_cards
+				.enter()
 				.append('div')
-				.attr('id', 'scene-controls')
-				.style('right', '0')
-				.style('top', '0')
-				.style('position', 'absolute')
-				.style('height', '100px')
-				.style('width', '100px')
-				.style('border', '1px solid red');
+				.classed('card', true)
+				.style({
+					width: '100px',
+					height: '100px',
+					border: '2px solid red'
+				});
 				
-			scene_controls
-				.append('button')
-				.attr('id', 'add-object')
-				.text('add object');
+			const editor_canvas = editor_cards
+				.selectAll('canvas')
+				.data(d => d.canvases || []);
 				
-			scene_controls
-				.append('canvas')
-				.attr('id', 'editor-canvas')
-				.style('border', '1px solid green');
+			editor_canvas	
+				.enter()
+				.append(d => d.node);
 				
-			scene_controls
-				.append('button')
-				.attr('id', 'add_cone')
-				.text('add cone to selected');
-				
-			const camera_controls = entered
-				.append('div')
-				.attr('id', 'camera-controls')
-				.style('right', '0')
-				.style('bottom', '0')
-				.style('position', 'absolute')
-				.style('height', '100px')
-				.style('width', '100px')
-				.style('border', '1px solid green');
-				
-			camera_controls
-				.append('button')
-				.attr('id', 'orbit_camera')
-				.text('orbit_camera')
-				.style('height', '100px');
-				
-			camera_controls
-				.append('button')
-				.attr('id', 'camera-to-birds-eye')
-				.text('camera to birds eye');
-				
-			const debug = entered
-				.append('div')
-				.attr('id', 'debug')
-				.style('left', '0')
-				.style('bottom', '0')
-				.style('position', 'absolute')
-				.style('height', '100px')
-				.style('width', '100px')
-				.style('border', '1px solid red');
+			// scene_controls
+			// 	.append('button')
+			// 	.attr('id', 'add_cone')
+			// 	.text('add cone to selected');
 				
 			return dom;
 		});
@@ -286,6 +360,7 @@ function makeD3DomDriver(selector) {
 	return function d3DomDriver(state_reducer$) {
 		const dom_state$ = state_reducer$
 			.scan(apply, d3.select(selector))
+			// .scan(apply, d3_selection.select(selector))
 			.shareReplay();
 		dom_state$
 			.do(s => debug('dom')('update'))
