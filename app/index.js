@@ -85,11 +85,11 @@ function get_raycaster({ mouse$, camera$ }) {
 }
 
 function get_intersects({ raycaster$, targets$ }) {
-	const intersects$ = combineLatestObj
-  	({
-  		event: raycaster$,
-  		targets: targets$,
-  	})
+	const intersects$ = raycaster$
+		.withLatestFrom(
+			targets$,
+			(r, t) => ({ event: r, targets: t })
+		)
   	.map(({ event, targets }) => {
   		event.intersects = targets
   			.map(obj => {
@@ -189,10 +189,6 @@ function main({ renderers, dom, scenes, cameras }) {
 					},
 					buttons: [
 						{
-							id: 'add-cone-random',
-							text: 'add cone at random'
-						},
-						{
 							id: 'add-cone',
 							text: 'add cone'
 						}
@@ -215,7 +211,10 @@ function main({ renderers, dom, scenes, cameras }) {
 		.map(sound_objects => {
 			return {
 				name: 'editor',
-				sound_objects
+				sound_objects,
+				screens: [
+					{}
+				]
 			};
 		});
 		

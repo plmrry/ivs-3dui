@@ -19,8 +19,28 @@ export function component({ dom, main_intersects$, editor_intersects$ }) {
 		.filter(arr => arr[1].event.type === 'dragend')
 		.pluck('1');
 		
+	const move_interactive$ = editor_intersects$
+		.pluck('intersects', '0', 'intersects', '0', 'point')
+		.do(log)
+		.map(point => objects => {
+			return objects.map(obj => {
+				if (obj.selected === true) {
+					obj.cones = obj.cones.map(cone => {
+						if (cone.interactive === true) {
+							cone.lookAt = point;
+						}
+						return cone;
+					});
+					return obj;
+				}
+				return obj;
+			});
+		});
+		// .subscribe()
+		
 	// const editor_mousemove$ = dom
 	// 	.select('#editor-canvas')
+	// 	.events('mousemove')
 		
 	const clicked_key$ = clicked$
 		.pluck('intersects')
@@ -105,7 +125,7 @@ export function component({ dom, main_intersects$, editor_intersects$ }) {
 		});
 		
 	const add_cone_click$ = dom
-		.select('#add-cone-random')
+		.select('#add-cone')
 		.events('click')
 		.shareReplay()
 		// .subscribe(log)
@@ -137,18 +157,14 @@ export function component({ dom, main_intersects$, editor_intersects$ }) {
 			add_object$,
 			select_object$,
 			unselect_object$,
-			add_cone_random$
+			add_cone_random$,
+			move_interactive$
 		);
 		
 	const sound_objects$ = sound_objects_update$	
 		.startWith([])
 		.scan(apply)
 		.shareReplay();
-		
-	// const selected$ = sound_objects$
-	// 	.map(arr => arr.filter(d => d.selected)[0])
-	// 	.do(s => debug('selected')(s))
-	// 	.subscribe()
 	
 	const main_scene_model$ = sound_objects$
 		.map(sound_objects => {
@@ -197,12 +213,38 @@ export function state_reducer(model) {
 				return getFloor(room_size);
 			})
 			.merge(floors_join);
+			
+		const screens_join = scenes
+			.selectAll({ name: 'screen' })
+			.data(d => d.screens || []);
+			
+		const screens = screens_join
+			.enter()
+			.append(d => {
+				return getScreen()
+			})
+			.merge(screens_join);
 					
 		const sound_objects = updateSoundObjects2(scenes);
 		
 		updateCones(sound_objects);
     return selectable;
   };
+}
+
+function getScreen() {
+	const geometry = new THREE.PlaneGeometry(6, 6);
+	const material = new THREE.MeshPhongMaterial({
+		// color: new THREE.Color(1, 0.5, 0.5),
+		// side: THREE.DoubleSide,
+		depthWrite: false
+	});
+	material.opacity = 0;
+	material.transparent = true;
+	const screen = new THREE.Mesh(geometry, material);
+	screen.position.z = 4;
+	screen.name = 'screen';
+	return screen;
 }
 
 function getSpotlight() {

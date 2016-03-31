@@ -123,7 +123,7 @@ export function component({ dom$, size$ }) {
 				height: 300
 			},
 			position: {
-				x: 10, y: 1, z: 0
+				x: 0, y: 0, z: 10
 			},
 			zoom: 50
 		});
