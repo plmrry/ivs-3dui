@@ -67,26 +67,10 @@ function mouse({ dom$, size$ }) {
   return mouse$;
 }
 
-function main({ renderers, dom, scenes, cameras }) {
-	
-	const size$ = stream
-		.of({ width: 400, height: 400 })
-		.shareReplay();
-		
-	const main_canvas$ = dom
-    .select('#main-canvas');
-		
-	const main_mouse$ = mouse({ dom$: main_canvas$, size$ });
-	
-	const main_camera_state$ = cameras
-		.map(c => c.querySelector({ name: 'main' }));
-		
-	const main_scene$ = scenes
-	  .map(scenes => scenes.querySelector({ name: 'main' }));
-		
-	const main_raycaster$ = main_mouse$
+function get_raycaster({ mouse$, camera$ }) {
+	const raycaster$ = mouse$
 		.withLatestFrom(
-			main_camera_state$,
+			camera$,
 			(ev, c) => ({ event: ev, camera: c })
 		)
 		.map(({ event, camera }) => { 
@@ -95,21 +79,14 @@ function main({ renderers, dom, scenes, cameras }) {
   		event.raycaster = raycaster;
   		return event;
   	});
-  	
-  const main_intersect_targets$ = main_scene$
-  	.map(scene => {
-  		const floor = scene.getObjectByProperty('name', 'floor');
-  		const sound_objects = scene.children.filter(d => d.name === 'sound_object');
-  		return [
-  			{ key: 'floor', targets: [floor] },
-  			{ key: 'sound_objects', targets: sound_objects }
-  		];
-  	});
-  	
-  const main_intersects$ = combineLatestObj
+  return raycaster$;
+}
+
+function get_intersects({ raycaster$, targets$ }) {
+	const intersects$ = combineLatestObj
   	({
-  		event: main_raycaster$,
-  		targets: main_intersect_targets$,
+  		event: raycaster$,
+  		targets: targets$,
   	})
   	.map(({ event, targets }) => {
   		event.intersects = targets
@@ -119,6 +96,47 @@ function main({ renderers, dom, scenes, cameras }) {
   			});
   		return event;
   	});
+  return intersects$;
+}
+
+function select(query) {
+	return function(d) {
+		return d.querySelector(query);
+	};
+}
+
+function main({ renderers, dom, scenes, cameras }) {
+	
+	const size$ = stream
+		.of({ width: 400, height: 400 })
+		.shareReplay();
+		
+	const main_mouse$ = mouse({ 
+		dom$: dom.select('#main-canvas'), 
+		size$ 
+	});
+	// .do(m => debug('mouse')(m))
+
+ 	const main_raycaster$ = get_raycaster({ 
+ 		mouse$: main_mouse$, 
+ 		camera$: cameras.map(select({ name: 'main' }))
+ 	});
+  	
+  const main_intersect_targets$ = scenes
+	  .map(select({ name: 'main' }))
+  	.map(scene => {
+  		const floor = scene.getObjectByProperty('name', 'floor');
+  		const sound_objects = scene.children.filter(d => d.name === 'sound_object');
+  		return [
+  			{ key: 'floor', targets: [floor] },
+  			{ key: 'sound_objects', targets: sound_objects }
+  		];
+  	});
+  
+  const main_intersects$ = get_intersects({
+  	raycaster$: main_raycaster$,
+  	targets$: main_intersect_targets$
+  });
 		
 	const renderers_state_reducer$ = renderer
 		.component({ size$ });
@@ -346,7 +364,8 @@ function main({ renderers, dom, scenes, cameras }) {
 				
 			editor_canvas	
 				.enter()
-				.append(d => d.node);
+				.append(d => d.node)
+				.attr('id', 'editor-canvas');
 				
 			const editor_buttons = editor_cards
 				.selectAll('button')
