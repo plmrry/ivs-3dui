@@ -31,9 +31,9 @@ export function component({ dom$, size$ }) {
       return d3TweenStream(500)
         .scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
         .map(({ t, dt }) => {
-          return p => {
-            let speed = (1-t) === 0 ? 0 : (destination - p)/(1 - t);
-            let step = p + dt * speed;
+          return position => {
+            let speed = (1-t) === 0 ? 0 : (destination - position)/(1 - t);
+            let step = position + dt * speed;
             let next = t === 1 ? destination : step;
             return next;
           };

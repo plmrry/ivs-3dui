@@ -101,11 +101,39 @@ export function component({ dom, main_intersects$ }) {
 			return objects.concat(obj);
 		});
 		
+	const add_cone_click$ = dom
+		.select('#add-cone-random')
+		.events('click')
+		.shareReplay()
+		// .subscribe(log)
+		
+	const add_cone_random$ = add_cone_click$
+		.map(ev => {
+			let DEFAULT_CONE_VOLUME = 1;
+			let DEFAULT_CONE_SPREAD = 0.5;
+			return {
+				volume: DEFAULT_CONE_VOLUME,
+				spread: DEFAULT_CONE_SPREAD,
+				lookAt: {
+					x: Math.random(),
+					y: Math.random(),
+					z: Math.random()
+				}
+			};
+		})
+		.map(cone => objects => {
+			return objects.map(obj => {
+				if (obj.selected === true) obj.cones.push(cone);
+				return obj;
+			});
+		});
+		
 	const sound_objects_update$ = stream
 		.merge(
 			add_object$,
 			select_object$,
-			unselect_object$
+			unselect_object$,
+			add_cone_random$
 		);
 		
 	const sound_objects$ = sound_objects_update$	

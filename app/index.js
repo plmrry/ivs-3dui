@@ -139,7 +139,25 @@ function main({ renderers, dom, scenes, cameras }) {
 		)
 		.map(({ selected, renderer }) => {
 			if (typeof selected === 'undefined') return [];
-			return [{ canvases: [ { node: renderer.domElement } ] }];
+			const cards = [
+				{ 
+					canvases: [ { node: renderer.domElement } ],
+					style: {
+						position: 'relative'
+					},
+					buttons: [
+						{
+							id: 'add-cone-random',
+							text: 'add cone at random'
+						},
+						{
+							id: 'add-cone',
+							text: 'add cone'
+						}
+					]
+				}
+			];
+			return cards;
 		});
 		
 	const editor_sound_objects_model$ = selected$
@@ -222,7 +240,6 @@ function main({ renderers, dom, scenes, cameras }) {
 
 	const dom_state_reducer$ = dom_model$
 		.map(model => dom => {
-			console.log(model);
 			const main = dom.selectAll('main').data([model.main]);
 			
 			const entered = main
@@ -331,10 +348,15 @@ function main({ renderers, dom, scenes, cameras }) {
 				.enter()
 				.append(d => d.node);
 				
-			// scene_controls
-			// 	.append('button')
-			// 	.attr('id', 'add_cone')
-			// 	.text('add cone to selected');
+			const editor_buttons = editor_cards
+				.selectAll('button')
+				.data(d => d.buttons || []);
+				
+			editor_buttons
+				.enter()
+				.append('button')
+				.attr('id', d => d.id)
+				.text(d => d.text);
 				
 			return dom;
 		});
