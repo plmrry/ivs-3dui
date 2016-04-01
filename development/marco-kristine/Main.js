@@ -1,8 +1,12 @@
 var Main = function() {
 
+    var self = this;
     this.camera = null;
     this.scene = null;
     this.renderer = null;
+
+    this.isMouseDown = false;
+    this.mouse = new THREE.Vector3();
 
     this.animate = function() {
         requestAnimationFrame( this.animate.bind(this) );
@@ -41,7 +45,43 @@ var Main = function() {
 
     this.appendToContainer = function(container) {
         container.appendChild( this.renderer.domElement );
+
+        container.addEventListener( 'mousedown', this.onMouseDown, false );
+        container.addEventListener( 'mouseup', this.onMouseUp, false );
+        container.addEventListener( 'mouseleave', this.onMouseUp, false );
+        container.addEventListener( 'mousemove', this.onMouseMove, false );
     };
+
+
+    this.setMousePosition2D = function(e) {
+        if(this.renderer != null) {
+            this.mouse.x = e.clientX - this.renderer.domElement.offsetLeft + this.camera.left;
+            this.mouse.y = e.clientY - this.renderer.domElement.offsetTop + this.camera.top;
+        }
+    }
+
+    this.onMouseDown = function(e) {
+        self.setMousePosition2D(e);
+        self.isMouseDown = true;
+        drawing.scene = self.scene;
+        drawing.beginAt(self.mouse.clone());
+    }
+
+    this.onMouseUp = function(e) {
+        self.setMousePosition2D(e);
+        self.isMouseDown = false;
+        var sz = drawing.createObject();
+        alert(sz);
+    }
+
+    this.onMouseMove = function(e) {
+        self.setMousePosition2D(e);
+    }
+
+    this.addSoundzone = function() {
+        
+    }
+
 
 
 }
