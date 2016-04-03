@@ -25,7 +25,6 @@
       // if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
 			var audio, listener;
-			var soundCones = [];
 			var sphere, axisHelper;
 			var container;
       var camera, controls, scene, renderer;
@@ -33,8 +32,9 @@
 
       var soundCones = [];
       var objects = [];
-			var soundConeMaterial, soundConeGeo;
-			var interactiveCone;
+			var interactiveCone, previousInteractiveCone = 0;
+
+			var selectedConeColor, unselectedConeColor;
 
 			var prevMousePos = {};
 
@@ -43,7 +43,7 @@
 			var MOUSEDOWN = false;
 
 			var placingCone = false;
-			var rePlacingCone = false;
+			var replacingCone = false;
 
       init();
 			animate();
@@ -90,12 +90,8 @@
 				sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
 				sphere.material.transparent = true;
 
-				var coneGeoLength = 500;
-				soundConeGeo = new THREE.CylinderGeometry(100, 0, coneGeoLength, 100, 1, true);
-				soundConeGeo.translate(0, coneGeoLength/2., 0);
-				soundConeGeo.rotateX(Math.PI/2.);
-				soundConeMaterial = new THREE.MeshBasicMaterial({color: 0x80FFE5, opacity: 0.5});
-				soundConeMaterial.side = THREE.DoubleSide;
+				unselectedConeColor = new THREE.Color(0x80FFE7);
+				selectedConeColor = new THREE.Color(0xFFCCCC);
 
 				renderer = new THREE.WebGLRenderer({antialias: true});
 				renderer.setClearColor(0xf0f0f0);
@@ -104,7 +100,7 @@
 				container.appendChild(renderer.domElement);
 
 				axisHelper = new THREE.AxisHelper( 500 );
-				scene.add( axisHelper );
+				scene.add(axisHelper);
 
 				document.addEventListener('mousemove', onDocumentMouseMove, false);
 				document.addEventListener('mousedown', onDocumentMouseDown, false);
@@ -228,19 +224,15 @@
 				var intersect = intersects[0];
 
 				if (intersects.length > 0 && placingCone){
-
 					soundCones[interactiveCone].lookAt(intersect.point);
 					setPosition(soundCones[interactiveCone]);
 				}
 				else if(MOUSEDOWN){
-
-					if(rePlacingCone){
-
+					if(replacingCone){
 						soundCones[interactiveCone].lookAt(intersect.point);
 						setPosition(soundCones[interactiveCone]);
 					}
 					else{
-
 						var deltaMove = {
 								x: event.offsetX-prevMousePos.x,
 								y: event.offsetY-prevMousePos.y
@@ -252,7 +244,6 @@
 										0,
 										'XYZ'
 								));
-
 
 						axisHelper.quaternion.multiplyQuaternions(deltaRotationQuaternion, axisHelper.quaternion);
 						for(var i = 0; i < soundCones.length; i++){
@@ -286,26 +277,46 @@
 					var intersect = intersects[0];
 
 					switch(intersect.object.name){
+
 						case "addButton":
+							previousInteractiveCone = interactiveCone;
 							placingCone = true;
 							createCone(intersect.point);
 							interactiveCone = soundCones.length - 1;
 						break;
+
 						case "cone":
-							placingCone = false;
-							rePlacingCone = true;
-							interactiveCone = intersect.object.id - soundCones[0].id;
+
+							previousInteractiveCone = interactiveCone;
+							if(interactiveCone == intersect.object.id - soundCones[0].id){
+								placingCone = false;
+								interactiveCone = null;
+							}
+							else{
+								interactiveCone = intersect.object.id - soundCones[0].id;
+								replacingCone = true;
+							}
 						break;
 					}
 				}
 				else{
+					previousInteractiveCone = interactiveCone;
 					placingCone = false;
-					rePlacingCone = false;
+					replacingCone = false;
 					interactiveCone = null;
 				}
+				if(previousInteractiveCone != null) soundCones[previousInteractiveCone].material.color = new THREE.Color(unselectedConeColor);
+				if(interactiveCone != null) soundCones[interactiveCone].material.color = new THREE.Color(selectedConeColor);
 			}
 
 			function createCone(orientation){
+
+				var coneGeoLength = 500;
+				var soundConeGeo = new THREE.CylinderGeometry(100, 0, coneGeoLength, 100, 1, true);
+				soundConeGeo.translate(0, coneGeoLength/2., 0);
+				soundConeGeo.rotateX(Math.PI/2.);
+				var soundConeMaterial = new THREE.MeshBasicMaterial({color: selectedConeColor, opacity: 0.5});
+				soundConeMaterial.side = THREE.DoubleSide;
 
 				soundConeGeo.radiusTop = 2;
 				soundCones.push(new THREE.Mesh(soundConeGeo, soundConeMaterial));
@@ -327,14 +338,26 @@
 
 			function onDocumentKeyDown(event) {
 				switch(event.keyCode){
-					case 16: isShiftDown = true; break;
+					case 8:
+
+						console.log("DELETE" + soundCones[interactiveCone].id + " " + objects.length);
+						// var selectedObject = scene.getObjectByName(soundCones[interactiveCone].name);
+						//
+						// console.log(selectedObject);
+						// scene.remove(selectedObject);
+						//
+						soundCones[interactiveCone].sound.source.stop();
+						//soundCones.splice(interactiveCone, 1);
+
+						// +1 is necessary to accout for the addButton
+						objects.splice(soundCones[interactiveCone].id - soundCones[0].id + 1, 1);
+						scene.remove(soundCones[interactiveCone]);
+						break;
 				}
 			}
 
 			function onDocumentKeyUp(event){
-				switch (event.keyCode){
-					case 16: isShiftDown = false; break;
-				}
+
 			}
 
 			function animate() {
