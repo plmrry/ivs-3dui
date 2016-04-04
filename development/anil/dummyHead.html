@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Cones on a Sphere</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				background-color: #f0f0f0;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#oldie { background-color: #ddd !important }
+		</style>
+	</head>
+	<body>
+
+		<script src="js/three.min.js"></script>
+		<script src="js/Detector.js"></script>
+		<script src="FlyControlsUpdated.js"></script>
+		<script src="AxisHelper.js"></script>
+
+    <script>
+
+		var axisHelper;
+		var container;
+		var camera, scene, renderer;
+		var moveLeft = 0, moveRight= 0, moveForward = 0, moveBackwards = 0;
+		var pitchUp = 0, pitchDown = 0, yawLeft = 0, yawRight = 0;
+		var movementSpeed = 0.01;
+		var temporaryQuaternion;
+
+		init();
+		animate();
+
+		function init(){
+
+			container = document.createElement('div');
+			document.body.appendChild(container);
+
+			camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
+			camera.position.set(0, 0, 1300);
+
+			scene = new THREE.Scene();
+
+			renderer = new THREE.WebGLRenderer({antialias: true});
+			renderer.setClearColor(0xf0f0f0);
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			container.appendChild(renderer.domElement);
+
+			axisHelper = new THREE.AxisHelper(500);
+			scene.add(axisHelper);
+
+			temporaryQuaternion = new THREE.Quaternion();
+
+			// document.addEventListener('mousemove', onDocumentMouseMove, false);
+			// document.addEventListener('mousedown', onDocumentMouseDown, false);
+			// document.addEventListener('mouseup', onDocumentMouseUp, false);
+			document.addEventListener('keydown', onDocumentKeyDown, false);
+			document.addEventListener('keyup', onDocumentKeyUp, false);
+			//
+			// window.addEventListener('resize', onWindowResize, false);
+		}
+
+		function onDocumentKeyDown(event) {
+
+			switch(event.keyCode){
+				case 65: moveLeft += movementSpeed; break; //A
+				case 87: moveForward += movementSpeed; break; //W
+				case 68: moveRight += movementSpeed; break; //D
+				case 83: moveBackwards += movementSpeed; break; //S
+				case 37: yawLeft = 1 * movementSpeed; break; //Left
+				case 38: pitchUp = 1 * movementSpeed; break; //Top
+				case 39: yawRight = 1 * movementSpeed; break; //Right
+				case 40: pitchDown = 1 * movementSpeed; break; //Bottom
+			}
+		}
+
+		function onDocumentKeyUp(event) {
+
+			switch(event.keyCode){
+				case 65: moveLeft += 0; break; //A
+				case 87: moveForward += 0; break; //W
+				case 68: moveRight += 0; break; //D
+				case 83: moveBackwards += 0; break; //S
+				case 37: yawLeft = 0; console.log("deneme"); break; //Left
+				case 38: pitchUp = 0; break; //Top
+				case 39: yawRight = 0; break; //Right
+				case 40: pitchDown = 0; break; //Bottom
+			}
+		}
+
+		function updateDummyHead(){
+
+			temporaryQuaternion.set(- pitchUp + pitchDown, - yawLeft + yawRight, 0, 1).normalize();
+			axisHelper.quaternion.multiply(temporaryQuaternion);
+
+
+		}
+
+		function toRadians(angle) {
+				return angle * (Math.PI / 180);
+		}
+
+		function animate() {
+			requestAnimationFrame( animate );
+			render();
+		}
+
+		function render() {
+			renderer.render(scene, camera);
+			updateDummyHead();
+		}
+		</script>
+	</body>
+</html>

@@ -339,25 +339,13 @@
 			function onDocumentKeyDown(event) {
 				switch(event.keyCode){
 					case 8:
-
-						console.log("DELETE" + soundCones[interactiveCone].id + " " + objects.length);
-						// var selectedObject = scene.getObjectByName(soundCones[interactiveCone].name);
-						//
-						// console.log(selectedObject);
-						// scene.remove(selectedObject);
-						//
 						soundCones[interactiveCone].sound.source.stop();
-						//soundCones.splice(interactiveCone, 1);
 
 						// +1 is necessary to accout for the addButton
 						objects.splice(soundCones[interactiveCone].id - soundCones[0].id + 1, 1);
 						scene.remove(soundCones[interactiveCone]);
 						break;
 				}
-			}
-
-			function onDocumentKeyUp(event){
-
 			}
 
 			function animate() {
