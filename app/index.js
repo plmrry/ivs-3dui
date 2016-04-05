@@ -111,9 +111,13 @@ function main({ renderers, dom, scenes, cameras }) {
 		dom$: dom.select('#editor-canvas')
 	});
 	
+	const main_camera$ = cameras
+		.map(select({ name: 'main' }))
+		.shareReplay(1);
+	
  	const main_raycaster$ = get_raycaster({ 
  		mouse$: main_mouse$, 
- 		camera$: cameras.map(select({ name: 'main' }))
+ 		camera$: main_camera$
  	});
  	
  	const editor_raycaster$ = get_raycaster({
@@ -255,7 +259,7 @@ function main({ renderers, dom, scenes, cameras }) {
 		.map(renderers => renderers.querySelector({ name: 'main' }))
 		.map(renderer => renderer.domElement);
 		
-	const dom_model$ = dom_component.model({ main_canvas$, editor_dom$ });
+	const dom_model$ = dom_component.model({ main_canvas$, editor_dom$, size$ });
 	const dom_state_reducer$ = dom_component.view(dom_model$);
 	
 	return {

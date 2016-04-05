@@ -9,15 +9,19 @@ const stream = Rx.Observable;
 export function view(dom_model$) {
   const dom_state_reducer$ = dom_model$
 		.map(model => dom => {
-			const main = dom.selectAll('main').data([model.main]);
+			const main = dom
+			  .selectAll('main')
+			  .data([model.main]);
 			
 			const entered = main
 				.enter()
 				.append('main')
 				.style('border', '1px solid black')
-				.style('height', '600px')
-				.style('width', '600px')
 				.style('position', 'relative');
+				
+			main
+			  .style('height', d => `${d.size.height}px`)
+			  .style('width', d => `${d.size.width}px`);
 				
 			const main_canvas = main
 				.selectAll('canvas')
@@ -134,20 +138,22 @@ export function view(dom_model$) {
 	return dom_state_reducer$;
 }
 
-export function model({ main_canvas$, editor_dom$ }) {
+export function model({ main_canvas$, editor_dom$, size$ }) {
   const dom_model$ = combineLatestObj
 		({
 			main_canvas$,
-			editor_dom$
+			editor_dom$,
+			size$
 		})
-		.map(({ main_canvas, editor_dom }) => {
+		.map(({ main_canvas, editor_dom, size }) => {
 			return {
 				main: {
 					canvases: [
 						{
 							node: main_canvas
 						}
-					]
+					],
+					size
 				},
 				editor_cards: editor_dom
 			};
