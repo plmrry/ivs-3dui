@@ -92,17 +92,10 @@ function select(query) {
 
 function main({ renderers, dom, scenes, cameras }) {
 	
-	const size$ = dom
-		.select(d => window)
-		.events('resize')
-		.pluck('node')
-		.startWith(window)
-		.map(element => ({
-			width: element.innerWidth * 0.8,
-      height: element.innerHeight * 0.8
-		}))
-		.shareReplay(1);
-
+	const size$ = stream
+		.of({ width: 400, height: 400 })
+		.shareReplay();
+		
 	const main_mouse$ = mouse({ 
 		dom$: dom.select('#main-canvas')
 	});
