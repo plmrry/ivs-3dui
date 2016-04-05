@@ -426,3 +426,20 @@ function cylinder_geometry_from_params(params) {
 function log(d) { console.log(d); }
 
 function apply(o, fn) { return fn(o); }
+
+THREE.Object3D.prototype.appendChild = function (c) { 
+	this.add(c); 
+	return c; 
+};
+
+THREE.Object3D.prototype.insertBefore = THREE.Object3D.prototype.appendChild;
+
+THREE.Object3D.prototype.querySelector = function(query) {
+	let key = Object.keys(query)[0];
+	return this.getObjectByProperty(key, query[key]);
+};
+
+THREE.Object3D.prototype.querySelectorAll = function (query) { 
+	if (typeof query === 'undefined') return this.children;
+	return this.children.filter(d => _.isMatch(d, query));
+};
