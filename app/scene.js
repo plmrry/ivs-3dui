@@ -21,7 +21,7 @@ export function component({ dom, main_intersects$, editor_intersects$ }) {
 		
 	const move_interactive$ = editor_intersects$
 		.pluck('intersects', '0', 'intersects', '0', 'point')
-		.do(log)
+		// .do(log)
 		.map(point => objects => {
 			return objects.map(obj => {
 				if (obj.selected === true) {
