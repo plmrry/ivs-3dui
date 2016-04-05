@@ -12,7 +12,8 @@ import * as scene from './scene.js';
 import * as renderer from './renderer.js';
 import * as dom_component from './dom.js';
 
-debug.enable('*');
+debug.enable('*,-raycasters');
+// debug.disable('raycasters')
 
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
@@ -90,7 +91,10 @@ function select(query) {
 	};
 }
 
-function main({ renderers, dom, scenes, cameras }) {
+function main({ renderers, dom, scenes, cameras, raycasters }) {
+	
+	const main_intersects_2$ = raycasters
+		.select({ name: 'main' });
 	
 	const size$ = dom
 		.select(d => window)
@@ -105,7 +109,8 @@ function main({ renderers, dom, scenes, cameras }) {
 
 	const main_mouse$ = mouse({ 
 		dom$: dom.select('#main-canvas')
-	});
+	})
+	.shareReplay(1)
 	
 	const editor_mouse$ = mouse({
 		dom$: dom.select('#editor-canvas')
@@ -115,26 +120,64 @@ function main({ renderers, dom, scenes, cameras }) {
 		.map(select({ name: 'main' }))
 		.shareReplay(1);
 	
- 	const main_raycaster$ = get_raycaster({ 
- 		mouse$: main_mouse$, 
- 		camera$: main_camera$
- 	});
- 	
  	const editor_raycaster$ = get_raycaster({
  		mouse$: editor_mouse$,
  		camera$: cameras.map(select({ name: 'editor' }))
  	});
-  	
-  const main_intersect_targets$ = scenes
-	  .map(select({ name: 'main' }))
-  	.map(scene => {
-  		const floor = scene.getObjectByProperty('name', 'floor');
-  		const sound_objects = scene.children.filter(d => d.name === 'sound_object');
-  		return [
-  			{ key: 'floor', targets: [floor] },
-  			{ key: 'sound_objects', targets: sound_objects }
-  		];
-  	});
+ 	
+ 	const main_intersect_targets_2$ = scenes
+ 		.map(select({ name: 'main' }))
+ 		.map(scene => {
+ 			return [
+ 				{ key: 'children', targets: scene.children, recursive: true }
+ 			];
+ 		});
+ 		
+ 	const main_raycaster_model$ = combineLatestObj({
+ 		mouse$: main_mouse$,
+ 		camera$: main_camera$,
+ 		target_groups$: main_intersect_targets_2$
+ 	})
+ 	.map(obj => Object.assign(obj, { name: 'main' }));
+ 	
+ 	const raycasters_model$ = stream
+ 		.combineLatest(main_raycaster_model$);
+ 		
+ 	const raycasters_state_reducer$ = raycasters_model$
+ 		.map(model => selectable => {
+ 			const join = d3_selection
+ 				.select(selectable)
+ 				.selectAll()
+ 				.data(model, d => d.name);
+ 				
+ 			const objects = join
+ 				.enter()
+ 				.append(function(d) {
+ 					return { 
+ 						raycaster: new THREE.Raycaster(),
+ 						event$: new Rx.Subject(),
+ 						name: d.name
+ 					};
+ 				})
+ 				.merge(join)
+ 				.each(function(d) {
+ 					this.event = Object.assign({}, d.mouse.event);
+ 					// console.log(d.mouse.event)
+ 					this.raycaster.setFromCamera(d.mouse.ndc, d.camera);
+ 					const intersect_groups = d.target_groups
+ 						.map(obj => {
+ 							obj.intersects = this.raycaster.intersectObjects(obj.targets, obj.recursive);
+ 							return obj;
+ 						});
+ 					this.intersect_groups = intersect_groups;
+ 					this.event$.onNext({
+ 						event: d.mouse.event,
+ 						intersect_groups
+ 					});
+ 				});
+ 				
+ 			return selectable;
+ 		});
   	
   const editor_intersect_targets$ = scenes
  		.map(select({ name: 'editor' }))
@@ -144,23 +187,23 @@ function main({ renderers, dom, scenes, cameras }) {
  			];
  		});
   
-  const main_intersects$ = get_intersects({
-  	raycaster$: main_raycaster$,
-  	targets$: main_intersect_targets$
-  });
+  // const main_intersects$ = get_intersects({
+  // 	raycaster$: main_raycaster$,
+  // 	targets$: main_intersect_targets$
+  // });
+  
+  const main_intersects$ = main_intersects_2$;
   
   const editor_intersects$ = get_intersects({
   	raycaster$: editor_raycaster$,
   	targets$: editor_intersect_targets$
   });
-  // .pluck('intersects', '0', 'intersects')
-  // .subscribe(log)
 		
 	const renderers_state_reducer$ = renderer
 		.component({ size$ });
 	
 	const main_scene_model$ = scene
-		.component({ dom, main_intersects$, editor_intersects$ })
+		.component({ dom, main_intersects$, editor_intersects$, main_intersects_2$ })
 		.shareReplay();
 		
 	const selected$ = main_scene_model$
@@ -222,6 +265,7 @@ function main({ renderers, dom, scenes, cameras }) {
 	const camera_model$ = camera
 		.component({ dom$: dom.state$, size$ })
 		.shareReplay();
+		
 	const cameras_state_reducer$ = camera_model$
 		.map(camera.state_reducer);
 		
@@ -267,7 +311,8 @@ function main({ renderers, dom, scenes, cameras }) {
 		dom: dom_state_reducer$,
 		scenes: scenes_state_reducer$,
 		cameras: cameras_state_reducer$,
-		render: render_function$
+		render: render_function$,
+		raycasters: raycasters_state_reducer$
 	};
 }
 
@@ -276,8 +321,30 @@ Cycle.run(main, {
 	cameras: makeStateDriver('cameras'),
 	scenes: makeStateDriver('scenes'),
 	render: (source$) => source$.subscribe(fn => fn()),
-	dom: dom_component.makeD3DomDriver('#app')
+	dom: dom_component.makeD3DomDriver('#app'),
+	raycasters: makeStateDriver2('raycasters')
 });
+
+function makeStateDriver2(name) {
+	return function stateDriver(state_reducer$) {
+		const state$ = state_reducer$
+			.scan(apply, new Selectable())
+			.shareReplay();
+			
+		state$
+			.do(s => debug(name)(s.children))
+			.subscribe();
+		
+		return {
+			observable: state$,
+			select: function(selector) {
+			  const selection$ = state$
+			    .map(selectable => selectable.querySelector(selector));
+			  return selection$;
+			}
+		};
+	};
+}
 
 function makeStateDriver(name) {
 	return function stateDriver(state_reducer$) {

@@ -2,6 +2,7 @@ import debug from 'debug';
 import THREE from 'three/three.js';
 import _ from 'underscore';
 import d3_selection from 'd3-selection';
+import d3 from 'd3';
 import Rx from 'rx';
 
 const stream = Rx.Observable;
@@ -12,8 +13,10 @@ const room_size = {
 	height: 3
 };
 
-export function component({ dom, main_intersects$, editor_intersects$ }) {
-  const clicked$ = main_intersects$
+export function component({ dom, main_intersects$, editor_intersects$, main_intersects_2$ }) {
+		
+	const clicked_2$ = main_intersects_2$
+		.flatMapLatest(o => o.event$)
 		.pairwise()
 		.filter(arr => arr[0].event.type === 'dragstart')
 		.filter(arr => arr[1].event.type === 'dragend')
@@ -36,22 +39,16 @@ export function component({ dom, main_intersects$, editor_intersects$ }) {
 				return obj;
 			});
 		});
-		// .subscribe()
-		
-	// const editor_mousemove$ = dom
-	// 	.select('#editor-canvas')
-	// 	.events('mousemove')
-		
-	const clicked_key$ = clicked$
-		.pluck('intersects')
-		.map(arr => arr.filter(d => d.key === 'sound_objects'))
-		.pluck('0', 'intersects', '0', 'object')
-		.map(o => {
-			if (typeof o !== 'undefined') {
-				/** TODO: Better way of selecting parent when child cone is clicked? */
-				if (o._type === 'cone') return o.parent.parent.__data__.key;
-				return o.__data__.key;
-			}
+	
+	const clicked_key$ = clicked_2$
+		.pluck('intersect_groups')
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.key === 'children')
+		.pluck('intersects', '0', 'object')
+		.map(obj => {
+			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
+			/** TODO: Better way of selecting parent when child cone is clicked? */
+			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
 			return undefined;
 		})
 		.distinctUntilChanged()
