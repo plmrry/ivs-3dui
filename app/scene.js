@@ -13,15 +13,106 @@ const room_size = {
 	height: 3
 };
 
-export function component2({ dom, raycasters }) {
-	const main_scene_model$ = stream
-		.of({
-			name: 'main',
-			floors: [
-				{
-					name: 'floor'
+function scoped_sound_object(id, position) {
+	return function soundObject({ actions }) {
+		const select_update$ = actions.select_object$
+			.pluck('key')
+			.map(key => object => {
+				if (key === id) {
+					object.selected = true;
+					object.material.color = '66c2ff';
 				}
-			]
+				else {
+					object.selected = false;
+					object.material.color = 'ffffff';
+				};
+				
+				return object;
+			});
+			
+		const model_update$ = stream
+			.merge(
+				select_update$
+			);
+			
+		const model$ = model_update$
+			.startWith({
+				key: id,
+				class: 'sound_object',
+				type: 'sound_object',
+				name: 'sound_object',
+				position: {
+					x: position.x,
+					y: position.y,
+					z: position.z
+				},
+				volume: Math.random() + 0.4,
+				material: {
+					color: 'ffffff'
+				},
+				cones: [],
+			})
+			.scan(apply)
+			.do(log)
+			.shareReplay(1);
+			
+		// const update$ = stream
+		// 	.merge(
+		// 		actions.select_object$
+		// 	)
+		// const model$ = stream
+		// 	.of({
+		// 		key: id,
+		// 		class: 'sound_object',
+		// 		type: 'sound_object',
+		// 		name: 'sound_object',
+		// 		position: {
+		// 			x: position.x,
+		// 			y: position.y,
+		// 			z: position.z
+		// 		},
+		// 		volume: Math.random() + 0.4,
+		// 		material: {
+		// 			color: 'ffffff'
+		// 		},
+		// 		cones: [],
+		// 	})
+		// 	.shareReplay(1);
+			
+		return {
+			id,
+			model$
+		};
+	};
+}
+
+export function component2({ scene_actions }) {
+	
+	const new_object$ = scene_actions.add_object$
+		.pluck('position')
+		.map((position, index) => array => {
+			const new_obj = scoped_sound_object(index, position)({ actions: scene_actions });
+			return array.concat(new_obj);
+		})
+		
+	const sound_objects$ = new_object$
+		.startWith([])
+		.scan(apply)
+		.map(arr => arr.map(d => d.model$))
+		.flatMapLatest(stream.combineLatest)
+		.startWith([]);
+		
+	const main_scene_model$ = sound_objects$
+		.map(sound_objects => {
+			return {
+				name: 'main',
+				floors: [
+					{
+						name: 'floor'
+					}
+				],
+				sound_objects
+			};
 		});
 		
 	const editor_scene_model$ = stream
@@ -58,8 +149,7 @@ export function component({ dom, main_intersects$, editor_intersects$ }) {
 		.pluck('intersect_groups')
 		.flatMap(arr => stream.from(arr))
 		.filter(d => d.key === 'children')
-		.pluck('intersects', '0', 'point')
-		// .subscribe(d => console.log('bbbb', d))
+		.pluck('intersects', '0', 'point');
 		
 	const move_interactive$ = panel_point$
 	// const move_interactive$ = editor_intersects$

@@ -21,41 +21,6 @@ debug.enable('event:*');
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
-function mouse({ dom$ }) {
-	const ndcScale$ = dom$
-		.observable()
-		.map(dom => dom.node())
-  	.map(({ width, height }) => ({
-  		x: d3.scale.linear().domain([0, width]).range([-1, +1]),
-  		y: d3.scale.linear().domain([0, height]).range([+1, -1])
-  	}));
-	const drag_handler$ = dom$
-  	.d3dragHandler();
-  const event$ = stream
-  	.merge(
-  		drag_handler$.events('drag'),
-  		drag_handler$.events('dragstart'),
-  		drag_handler$.events('dragend'),
-  		dom$.events('mousemove')
-  	);
-  const mouse$ = event$
-  	.map((obj) => { 
-  		obj.mouse = d3.mouse(obj.node);
-  		return obj;
-  	})
-  	.withLatestFrom(
-  		ndcScale$,
-  		(event, ndcScale) => { 
-  			event.ndc = {
-  				x: ndcScale.x(event.mouse[0]), 
-  				y: ndcScale.y(event.mouse[1]) 
-  			};
-  			return event;
-  		}
-  	);
-  return mouse$;
-}
-
 function main({ renderers, dom, scenes, cameras, raycasters }) {
 	
 	const cameras_model_proxy$ = new Rx.Subject();
@@ -81,7 +46,42 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.shareReplay();
 		
 	const main_dragstart$ = main_raycaster$
-		.filter(({ event }) => event.type === 'dragstart');
+		.filter(({ event }) => event.type === 'dragstart')
+		.shareReplay(1);
+		
+	const dragstart_key$ = main_dragstart$
+		.pluck('intersect_groups')
+		.flatMapLatest(arr => stream.from(arr))
+		.pluck('intersects', '0', 'object')
+		.map(obj => {
+			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
+			/** TODO: Better way of selecting parent when child cone is clicked? */
+			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
+			return undefined;
+		})
+		
+	const select_object$ = dragstart_key$
+		.map(key => {
+			return {
+				event: 'select-object',
+				key
+			};
+		})
+		.shareReplay(1);
+		
+	const unselect_object$ = dragstart_key$
+		.pairwise()
+		.pluck('0')
+		.filter(key => typeof key !== 'undefined')
+		.map(key => {
+			return {
+				event: 'unselect-object',
+				key
+			};
+		})
+		.shareReplay(1);
+		// .flatMapLatest(arr => stream.from(arr))
+		// .subscribe(log)
 		
 	const add_button_update$ = add_object_click$
 		.map(ev => state => {
@@ -147,13 +147,21 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 			(floor, add) => ({ floor, add })
 		)
 		.filter(({ floor, add }) => add)
+		.pluck('floor')
 		.map(position => ({
 			event: 'add-object',
 			position
 		}))
-		.do(debug('event:add-object'));
+		.do(debug('event:add-object'))
+		.shareReplay(1);
 		
 	add_object$.subscribe(add_object_proxy$);
+	
+	const scene_actions = {
+		add_object$,
+		select_object$,
+		// unselect_object$
+	};
 		
 	const auto_birds_eye$ = add_object_click$
 		.withLatestFrom(
@@ -193,7 +201,11 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		});
 	const scenes_state_reducer$ = scene
 		/** TODO: Rename to component */
-		.component2({ dom, raycasters });
+		.component2({ 
+			dom, 
+			raycasters,
+			scene_actions
+		});
 	const cameras_model$ = camera
 		.model({ 
 			dom, 
