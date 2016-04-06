@@ -13,18 +13,28 @@ const room_size = {
 	height: 3
 };
 
-export function component({ dom, main_intersects$, editor_intersects$, main_intersects_2$ }) {
+export function component({ dom, main_intersects$, editor_intersects$ }) {
 		
-	const clicked_2$ = main_intersects_2$
+	const clicked_2$ = main_intersects$
 		.flatMapLatest(o => o.event$)
 		.pairwise()
 		.filter(arr => arr[0].event.type === 'dragstart')
 		.filter(arr => arr[1].event.type === 'dragend')
 		.pluck('1');
 		
-	const move_interactive$ = editor_intersects$
-		.pluck('intersects', '0', 'intersects', '0', 'point')
-		// .do(log)
+	const panel_point$ = editor_intersects$
+		.pluck('event$')
+		.flatMapLatest(obs => obs)
+		.pluck('intersect_groups')
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.key === 'children')
+		.pluck('intersects', '0', 'point')
+		// .subscribe(d => console.log('bbbb', d))
+		
+	const move_interactive$ = panel_point$
+	// const move_interactive$ = editor_intersects$
+	// 	.pluck('intersects', '0', 'intersects', '0', 'point')
+	// 	// .do(log)
 		.map(point => objects => {
 			return objects.map(obj => {
 				if (obj.selected === true) {
