@@ -161,6 +161,12 @@ Soundzone.prototype = {
 	},
 	setDeselected: function(obj) {
 
+	},
+
+	addPoint: function(position) {
+		this.splinePoints[this.splinePoints.length] = position;
+		//console.log(this.splinePoints);
+		return new Soundzone(this.splinePoints);
 	}
 }
 

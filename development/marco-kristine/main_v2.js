@@ -2,6 +2,7 @@ function Main() {
     var scene, camera, renderer;
 
     var mouse = new THREE.Vector3();
+    var pointer = new THREE.Vector3();
     var ray = new THREE.Raycaster();
 
     var isMouseDown = false;
@@ -11,6 +12,8 @@ function Main() {
                             //     (i.e., last clicked 'parent' object)
     var selectedObject;     // object being clicked
 
+
+    var floor;
 
     var soundzones = [];
 
@@ -32,6 +35,12 @@ function Main() {
         renderer.setClearColor( 0xf0f0f0 );
         renderer.setSize( width, height );
         drawing.setScene(scene);
+
+        //Adding floor
+        var geometry = new THREE.PlaneGeometry(width, height, 1 );
+        var material = new THREE.MeshBasicMaterial( {color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide} );
+        floor = new THREE.Mesh( geometry, material );
+        scene.add( floor );
     }
 
     this.appendToContainer = function(container) {
@@ -68,23 +77,47 @@ function Main() {
     }
 
     var setMousePosition = function(e) {
+               
+        /*
         if (isAdding === true) {
             mouse.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
             mouse.y = e.clientY - renderer.domElement.offsetTop +camera.top;
         }
-        else { // raycasting
-            var rect = renderer.domElement.getBoundingClientRect();
-            mouse.x = 2 * (e.clientX - rect.left) / rect.width - 1;
-            mouse.y = 1 - 2 * (e.clientY - rect.top) / rect.height;
+        */
+        // Mouse is normalized
+        var rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = 2 * (e.clientX - rect.left) / rect.width - 1;
+        mouse.y = 1 - 2 * (e.clientY - rect.top) / rect.height;
+        
+        ray.setFromCamera( mouse, camera );   
+
+        // calculate objects intersecting the picking ray
+        var intersects = ray.intersectObject( floor );
+        if(intersects.length > 0) {
+            pointer = intersects[0].point;
         }
+    
+
     }
 
     var setSelectedObject = function(obj) {
         if (selectedObject && selectedObject.material && selectedObject.material.color) {
             selectedObject.material.color.set(0xff0000);
         }
-        if (obj && obj.material && obj.material.color)
+        if (obj && obj.material && obj.material.color) {
             obj.material.color.set(0x0000ff);
+
+            if(activeObject.type == 'Soundzone' && obj.type == 'Line') {
+                //console.log(activeObject);
+                var updatedSoundzone = activeObject.addPoint(pointer);
+                activeObject.removeFromScene(scene);
+
+                updatedSoundzone.addToScene(scene);
+                setActiveObject(updatedSoundzone);
+                console.log('added object: ', updatedSoundzone);
+                soundzones.push(updatedSoundzone);
+            }
+        }
 
         selectedObject = obj;
     }
@@ -107,7 +140,7 @@ function Main() {
         setMousePosition(e);
 
         if (isAdding) {
-            drawing.beginAt(mouse.clone());
+            drawing.beginAt(pointer);
         }
         else {
             // make or cancel a selection
@@ -159,7 +192,7 @@ function Main() {
 
         if (isAdding === true) {
             if (isMouseDown === true) {
-                drawing.addPoint(mouse.clone());
+                drawing.addPoint(pointer);
             }
         }
         else {
