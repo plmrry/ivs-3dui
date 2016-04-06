@@ -13,8 +13,6 @@ import * as renderer from './renderer.js';
 import * as dom_component from './dom.js';
 
 debug.enable('*');
-// debug.enable('*,-raycasters');
-// debug.disable('raycasters')
 
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
@@ -54,47 +52,26 @@ function mouse({ dom$ }) {
   return mouse$;
 }
 
-function select(query) {
-	return function(d) {
-		return d.querySelector(query);
-	};
-}
-
 function main({ renderers, dom, scenes, cameras, raycasters }) {
 	
-	const editor_intersects$ = raycasters
-		.select({ name: 'editor' });
-	
-	const main_intersects$ = raycasters
-		.select({ name: 'main' });
-	
-	const size$ = dom
-		.select(() => window)
-		.events('resize')
-		.pluck('node')
-		.startWith(window)
-		.map(element => ({
-			width: element.innerWidth * 0.8,
-      height: element.innerHeight * 0.8
-		}))
-		.shareReplay(1);
-
 	const main_mouse$ = mouse({ 
-		dom$: dom.select('#main-canvas')
-	})
-	.shareReplay(1);
+			dom$: dom.select('#main-canvas')
+		})
+		.shareReplay(1);
 	
 	const editor_mouse$ = mouse({
-		dom$: dom.select('#editor-canvas')
-	})
-	.shareReplay(1);
+			dom$: dom.select('#editor-canvas')
+		})
+		.shareReplay(1);
 	
 	const main_camera$ = cameras
-		.map(select({ name: 'main' }))
+		// .map(select({ name: 'main' }))
+		.select({ name: 'main' })
 		.shareReplay(1);
- 	
- 	const main_intersect_targets$ = scenes
- 		.map(select({ name: 'main' }))
+	
+	const main_intersect_targets$ = scenes
+ 		// .map(select({ name: 'main' }))
+ 		.select({ name: 'main' })
  		.map(scene => {
  			return [
  				{ key: 'children', targets: scene.children, recursive: true }
@@ -102,15 +79,16 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
  		});
  		
  	const editor_intersect_targets$ = scenes
- 		.map(select({ name: 'editor' }))
+ 		// .map(select({ name: 'editor' }))
+ 		.select({ name: 'editor' })
  		.map(scene => {
  			return [
  				{ key: 'children', targets: scene.children, recursive: true }
  			];
  		})
  		.shareReplay(1);
- 		
- 	const main_raycaster_model$ = main_mouse$
+	
+	const main_raycaster_model$ = main_mouse$
  		.withLatestFrom(
  			main_camera$,
  			main_intersect_targets$,
@@ -120,19 +98,20 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
  	
  	const editor_raycaster_model$ = editor_mouse$
  		.withLatestFrom(
- 			cameras.map(select({ name: 'editor' })),
+ 			// cameras.map(select({ name: 'editor' })),
+ 			cameras.select({ name: 'editor' }),
  			editor_intersect_targets$,
  			(mouse, camera, target_groups) => ({ mouse, camera, target_groups })
  		)
  		.map(obj => Object.assign(obj, { name: 'editor' }));
- 	
- 	const raycasters_model$ = stream
+	
+	const raycasters_model$ = stream
  		.combineLatest(
  			main_raycaster_model$,
  			editor_raycaster_model$.startWith(null)
  		)
  		.map(arr => arr.filter(d => d !== null));
- 		
+	
  	const raycasters_state_reducer$ = raycasters_model$
  		.map(model => selectable => {
  			const join = d3_selection
@@ -165,78 +144,60 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
  				
  			return selectable;
  		});
-		
+	
+	
+	const size$ = windowSize(dom);
+	const editor_size$ = stream
+		.of({
+			width: 300,
+			height: 300
+		});
 	const renderers_state_reducer$ = renderer
 		.component({ size$ });
-	
-	const main_scene_model$ = scene
-		.component({ dom, main_intersects$, editor_intersects$ })
-		.shareReplay();
-		
-	const selected$ = main_scene_model$
-		.pluck('sound_objects')
-		.map(arr => arr.filter(d => d.selected)[0])
-		.do(s => debug('selected')(s));
-		
-	const editor_dom$ = selected$
-		.withLatestFrom(
-			renderers.map(r => r.querySelector({ name: 'editor' })),
-			(s, r) => ({ selected: s, renderer: r })
-		)
-		.map(({ selected, renderer }) => {
-			if (typeof selected === 'undefined') return [];
-			const cards = [
-				{ 
-					canvases: [ { node: renderer.domElement } ],
-					style: {
-						position: 'relative'
-					},
-					buttons: [
-						{
-							id: 'add-cone',
-							text: 'add cone'
-						}
-					]
-				}
-			];
-			return cards;
+	const dom_state_reducer$ = dom_component
+		.component({ 
+			renderers, 
+			selected$: stream.of(undefined),
+			size$
 		});
-		
-	const editor_sound_objects_model$ = selected$
-		.map(obj => {
-			if (typeof obj !== 'undefined') {
-				obj.position = undefined;
-				return [obj];
-			}
-			else return [];
-		});
-		
-	const editor_scene_model$ = editor_sound_objects_model$
-		.map(sound_objects => {
-			return {
-				name: 'editor',
-				sound_objects,
-				screens: [
-					{}
-				]
-			};
-		});
-		
-	const scenes_state_reducer$ = stream
-		.combineLatest(
-			main_scene_model$,
-			editor_scene_model$
-		)
-		.map(model => scene.state_reducer(model));
-		
-	const camera_model$ = camera
-		.component({ dom$: dom.state$, size$ })
-		.shareReplay();
-		
-	const cameras_state_reducer$ = camera_model$
-		.map(camera.state_reducer);
-		
-	const renderSets$ = stream
+	const scenes_state_reducer$ = scene
+		/** TODO: Rename to component */
+		.component2({});
+	const cameras_state_reducer$ = camera
+		/** TODO: Rename to component */
+		.component2({ dom, size$, editor_size$ });
+	const render_sets$ = getRenderSets();
+	const render_function$ = renderFunction({
+		renderers,
+		scenes,
+		cameras,
+		render_sets$
+	});
+	return {
+		renderers: renderers_state_reducer$,
+		scenes: scenes_state_reducer$,
+		cameras: cameras_state_reducer$,
+		render: render_function$,
+		raycasters: raycasters_state_reducer$,
+		dom: dom_state_reducer$
+	};
+}
+
+function renderFunction({ renderers, scenes, cameras, render_sets$ }) {
+	return render_sets$
+		.flatMap(arr => stream.from(arr))
+		.flatMap(({ render_id, scene_id, camera_id }) => { 
+			return combineLatestObj({
+				renderer: renderers.select({ name: render_id }),
+				scene: scenes.select({ name: scene_id }),
+				camera: cameras.select({ name: camera_id })
+			});
+		})
+		.map(({ renderer, scene, camera }) => () => renderer.render(scene, camera));
+}
+
+function getRenderSets() {
+	return stream
 		.of([
 			{
 				render_id: 'main',
@@ -249,50 +210,31 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 				camera_id: 'editor'
 			}
 		]);
-		
-	const render_function$ = combineLatestObj
-		({
-			renderers,
-			scenes,
-			cameras,
-			renderSets$
-		})
-		.map(({ renderers, scenes, cameras, renderSets }) => () => {
-			renderSets.forEach(({ render_id, scene_id, camera_id }) => {
-				const renderer = renderers.querySelector({ name: render_id });
-				const scene = scenes.querySelector({ name: scene_id });
-				const camera = cameras.querySelector({ name: camera_id });
-				renderer.render(scene, camera);
-			});
-		});
-		
-	const main_canvas$ = renderers
-		.map(renderers => renderers.querySelector({ name: 'main' }))
-		.map(renderer => renderer.domElement);
-		
-	const dom_model$ = dom_component.model({ main_canvas$, editor_dom$, size$ });
-	const dom_state_reducer$ = dom_component.view(dom_model$);
-	
-	return {
-		renderers: renderers_state_reducer$,
-		dom: dom_state_reducer$,
-		scenes: scenes_state_reducer$,
-		cameras: cameras_state_reducer$,
-		render: render_function$,
-		raycasters: raycasters_state_reducer$
-	};
+}
+
+function windowSize(dom$) {
+	return dom$
+		.select(() => window)
+		.events('resize')
+		.pluck('node')
+		.startWith(window)
+		.map(element => ({
+			width: element.innerWidth * 0.8,
+      height: element.innerHeight * 0.8
+		}))
+		.shareReplay(1);
 }
 
 Cycle.run(main, {
 	renderers: makeStateDriver('renderers'),
-	cameras: makeStateDriver('cameras'),
 	scenes: makeStateDriver('scenes'),
+	cameras: makeStateDriver('cameras'),
+	raycasters: makeStateDriver('raycasters'),
 	render: (source$) => source$.subscribe(fn => fn()),
-	dom: dom_component.makeD3DomDriver('#app'),
-	raycasters: makeStateDriver2('raycasters')
+	dom: dom_component.makeD3DomDriver('#app')
 });
 
-function makeStateDriver2(name) {
+function makeStateDriver(name) {
 	return function stateDriver(state_reducer$) {
 		const state$ = state_reducer$
 			.scan(apply, new Selectable())
@@ -311,20 +253,6 @@ function makeStateDriver2(name) {
 			  return selection$;
 			}
 		};
-	};
-}
-
-function makeStateDriver(name) {
-	return function stateDriver(state_reducer$) {
-		const state$ = state_reducer$
-			.scan(apply, new Selectable())
-			.shareReplay();
-			
-		state$
-			.do(s => debug(name)(s.children))
-			.subscribe();
-		
-		return state$;
 	};
 }
 
@@ -347,23 +275,6 @@ function Selectable(array) {
 function apply(o, fn) {
 	return fn(o);
 }
-
-// function d3TweenStream(duration, name) {
-//   return stream.create(function(observer) {
-//     return d3.select({})
-//       .transition()
-//       .duration(duration)
-//       .ease('linear')
-//       .tween(name, function() {
-//         return function(t) {
-//           return observer.onNext(t);
-//         };
-//       })
-//       .each("end", function() {
-//         return observer.onCompleted();
-//       });
-//   });
-// }
 
 function log(d) {
 	console.log(d);

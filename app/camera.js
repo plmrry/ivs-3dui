@@ -8,6 +8,142 @@ import combineLatestObj from 'rx-combine-latest-obj';
 
 const stream = Rx.Observable;
 
+export function component2({ dom, size$, editor_size$ }) {
+	const cameras_model$ = model({ dom, size$, editor_size$ });
+	const cameras_state_reducer$ = view(cameras_model$);
+	return cameras_state_reducer$;
+}
+
+function view(cameras_model$) {
+	return cameras_model$
+		.map(cameras => state_reducer(cameras));
+}
+
+function model({ dom, size$, editor_size$ }) {
+	const orbit$ = dom
+		.select('#orbit-camera')
+		.d3dragHandler()
+		.events('drag')
+		.pluck('event')
+		.shareReplay();
+    
+	const MAX_LATITUDE = 89.99;
+	const MIN_LATITUDE = 5;
+	
+	const to_birds_eye$ = dom
+		.select('#camera-to-birds-eye')
+		.events('click')
+		// .map(dom => dom.select('#camera-to-birds-eye'))
+		// .flatMap(observableFromD3Event('click'))
+		.flatMap(ev => {
+			let destination = MAX_LATITUDE;
+      return d3TweenStream(500)
+        .scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
+        .map(({ t, dt }) => {
+          return position => {
+            let speed = (1-t) === 0 ? 0 : (destination - position)/(1 - t);
+            let step = position + dt * speed;
+            let next = t === 1 ? destination : step;
+            return next;
+          };
+        });
+    });
+	
+	const latitude_to_theta = d3.scale.linear()
+		.domain([90, 0, -90])
+		.range([0, Math.PI/2, Math.PI]);
+		
+	const longitude_to_phi = d3.scale.linear()
+		.domain([0, 360])
+		.range([0, 2 * Math.PI]);
+	
+	const delta_theta$ = orbit$
+		.pluck('dy')
+		.map(dy => theta => theta - dy);
+		
+	const theta$ = stream
+		.merge(
+			delta_theta$, to_birds_eye$
+		)
+		.startWith(45)
+		.scan((theta, fn) => fn(theta))
+		.map(lat => {
+			if (lat >= MAX_LATITUDE) return MAX_LATITUDE;
+			if (lat <= MIN_LATITUDE) return MIN_LATITUDE;
+			return lat;
+		})
+		.map(latitude_to_theta);
+		
+	const phi$ = orbit$
+		.pluck('dx')
+		.startWith(45)
+		.scan((a,b) => a+b)
+		.map(longitude_to_phi)
+		.map(phi => phi % (2 * Math.PI))
+		.map(phi => (phi < 0) ? (2 * Math.PI) + phi : phi);
+	
+	const polar_position$ = stream
+		.combineLatest(
+			stream.of(100),
+			theta$,
+			phi$,
+			(radius, theta, phi) => ({ radius, theta, phi })
+		);
+	
+	const relative_position$ = polar_position$
+		.map(polarToVector);
+		
+	const lookAt$ = stream
+		.of({
+			x: 0, y: 0, z: 0
+		});
+		
+	const position$ = stream
+		.combineLatest(
+			relative_position$,
+			lookAt$,
+			(rel, look) => ({
+				x: rel.x + look.x,
+				y: rel.y + look.y,
+				z: rel.z + look.z
+			})
+		);
+		
+	const main_camera$ = combineLatestObj({
+			position$,
+			lookAt$,
+			size$
+		})
+		.map(({ position, lookAt, size }) => {
+			return {
+				name: 'main',
+				size: size,
+				position: position,
+				zoom: 40,
+				lookAt: lookAt
+			};
+		});
+		
+	const editor_camera$ = stream
+		.just({
+			name: 'editor',
+			size: {
+				width: 300,
+				height: 300
+			},
+			position: {
+				x: 0, y: 0, z: 10
+			},
+			zoom: 50
+		});
+		
+	return stream
+		.combineLatest(
+			main_camera$,
+			editor_camera$
+		)
+}
+
 export function component({ dom$, size$ }) {
 	
 	const orbit$ = dom$
@@ -223,4 +359,8 @@ function observableFromD3Event(type) {
 				})
 			);
 	};
+}
+
+function log(d) {
+	console.log(d);
 }

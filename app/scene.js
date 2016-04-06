@@ -13,6 +13,36 @@ const room_size = {
 	height: 3
 };
 
+export function component2({ dom }) {
+	const main_scene_model$ = stream
+		.of({
+			name: 'main',
+			floors: [
+				{
+					name: 'floor'
+				}
+			]
+		});
+		
+	const editor_scene_model$ = stream
+		.of({
+			name: 'editor',
+			screens: [
+				{}
+			]
+		});
+		
+	const scenes_model$ = stream
+		.combineLatest(
+			main_scene_model$,
+			editor_scene_model$
+		);
+		
+	const scenes_state_reducer$ = view(scenes_model$);
+	
+	return scenes_state_reducer$;
+}
+
 export function component({ dom, main_intersects$, editor_intersects$ }) {
 		
 	const clicked_2$ = main_intersects$
@@ -187,6 +217,11 @@ export function component({ dom, main_intersects$, editor_intersects$ }) {
 		});
 		
 	return main_scene_model$;
+}
+
+export function view(model$) {
+	return model$
+		.map(model => state_reducer(model));
 }
 
 export function state_reducer(model) {

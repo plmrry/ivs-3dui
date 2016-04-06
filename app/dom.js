@@ -138,6 +138,24 @@ export function view(dom_model$) {
 	return dom_state_reducer$;
 }
 
+export function component({ renderers, selected$, size$ }) {
+	const main_canvas$ = renderers
+		.select({ name: 'main' })
+		.map(renderer => renderer.domElement);
+		
+	const editor_dom$ = selected$
+		.map(s => {
+			if (typeof s === 'undefined' || s === null) return [];
+			return [s];
+		});
+		
+	const dom_model$ = model({ main_canvas$, editor_dom$, size$ });
+	
+	const dom_state_reducer$ = view(dom_model$);
+	
+	return dom_state_reducer$;
+}
+
 export function model({ main_canvas$, editor_dom$, size$ }) {
   const dom_model$ = combineLatestObj
 		({
@@ -226,4 +244,8 @@ function observableFromD3Event(type) {
 				})
 			);
 	};
+}
+
+function log(d) {
+	console.log(d);
 }
