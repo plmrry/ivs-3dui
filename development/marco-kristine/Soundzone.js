@@ -94,11 +94,12 @@ Soundzone.prototype = {
 	    scene.add(this.cursor);
 	},
 	removeFromScene: function(scene) {
-		scene.remove(this.objects, this.cursor);
+		this.objects.forEach(obj => scene.remove(obj));
+		scene.remove(this.cursor);
 	},
 
 	// raycast to this soundzone
-	isUnderMouse: function(raycaster, mouse, camera) {
+	isUnderMouse: function(raycaster) {
 		if (this.isActive) {
 			return raycaster.intersectObjects( this.objects ).length > 0;
 		}

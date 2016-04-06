@@ -41,6 +41,7 @@ function Main() {
         container.addEventListener( 'mouseup', onMouseUp, false );
         container.addEventListener( 'mouseleave', onMouseUp, false );
         container.addEventListener( 'mousemove', onMouseMove, false );
+        document.body.addEventListener( 'keydown', onKeyDown, false);
 
         // !!temporary
         document.querySelector('#add-btn').onclick = toggleAdd.bind(this);
@@ -67,10 +68,14 @@ function Main() {
     }
 
     var setMousePosition = function(e) {
-        if(renderer != null) {
-            mouse.x = e.clientX - renderer.domElement.offsetLeft + camera.left;
-            mouse.y = e.clientY - renderer.domElement.offsetTop + camera.top;
-            mouse.z = 0;
+        if (isAdding === true) {
+            mouse.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
+            mouse.y = e.clientY - renderer.domElement.offsetTop +camera.top;
+        }
+        else {
+            var rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = 2 * (e.clientX - rect.left) / rect.width - 1;
+            mouse.y = 1 - 2 * (e.clientY - rect.top) / rect.height;
         }
     }
 
@@ -81,15 +86,38 @@ function Main() {
         if (isAdding) {
             drawing.beginAt(mouse.clone());
         }
+        else {
+            // make or cancel a selection
+            ray.setFromCamera(mouse, camera);
+            
+//            console.log(intersects.length +' objects: ', intersects);
+
+
+            if (activeObject && activeObject.isUnderMouse(ray)) {
+
+            }
+            else {
+                if (activeObject)
+                    activeObject.setInactive();
+                activeObject = null;
+                
+                var intersects = soundzones.filter(obj => obj.isUnderMouse(ray));
+                if (intersects.length > 0) {
+                    activeObject = intersects[0];
+                    if (activeObject.type === 'Soundzone')
+                        activeObject.setActive();
+                }
+            }
+        }
     }
     var onMouseUp = function(e) {
         if (isMouseDown)
         {
-            // create an object
+            // create a new object
             if (isAdding) {
                 var obj = drawing.createObject();
-                console.log('added object: ',obj);
                 if (obj && obj.type === 'Soundzone') {
+                    console.log('added object: ',obj);
                     soundzones.push(obj);
 
                     // switch most recently added object to active
@@ -103,8 +131,10 @@ function Main() {
                 toggleAdd();
             }
 
-            // TODO: make or cancel a selection
+            // TODO: 
+            else if (/**/ true) {
 
+            }
         }
         isMouseDown = false;
         isAdding = false;
@@ -116,6 +146,24 @@ function Main() {
             if (isMouseDown === true) {
                 drawing.addPoint(mouse.clone());
             }
+        }
+    }
+
+    // delete an object when pressing delete key
+    var onKeyDown = function(e) {
+        var key = e.keyCode || e.which;
+        switch(key) {
+            case 8:         // backspace
+            case 46:        // delete
+                e.preventDefault();
+                if (activeObject && activeObject.type === 'Soundzone') {
+                    if (confirm('Delete object?')) {
+                        activeObject.removeFromScene(scene);
+                        activeObject = null;                        
+                    }
+                }
+            default:
+//                console.log(key);
         }
     }
 
