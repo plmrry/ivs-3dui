@@ -5,9 +5,11 @@ var Soundzone = function(points) {
 
 	this.splinePoints = points;
 	this.pointObjects;
-	this.cursor;
 	this.spline;
 	this.shape;
+
+	this.cursor;
+	this.mouseOffsetX = 0, this.mouseOffsetY = 0;
 
 	var geometry, material;
 
@@ -19,7 +21,7 @@ var Soundzone = function(points) {
 		var cubeMesh = new THREE.Mesh( cube, cubeMat );
 		
 		var collider = new THREE.SphereGeometry(10);
-		var colliderMat = new THREE.MeshBasicMaterial( {transparent:true, opacity:0});
+		var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
 		var colliderMesh = new THREE.Mesh( collider, colliderMat );
 
 		var group = new THREE.Object3D();
@@ -109,12 +111,34 @@ Soundzone.prototype = {
 		}
 	},
 	objectUnderMouse: function(raycaster) {
-		// todo
 		var intersects = raycaster.intersectObjects( this.objects, true );
-		return intersects.length ? intersects[0] : null;
+
+		if (intersects.length > 0) {
+			if (intersects[0].object.type === 'Line') {
+				return intersects[Math.floor(intersects.length/2)];
+			}
+/*			else if (intersects[0].object.parent.type === 'Object3D') {
+				return intersects[0];
+			}
+*/			else
+				return intersects[0];
+		}
+		return null;
 	},
 
-	move: function(x, y, offsetX = 0, offsetY = 0) {}, // todo
+	setOffset: function(x, y) {
+
+	},
+	move: function(x, y) {
+
+	},
+
+	setCursor: function(point) {
+		this.cursor.position.copy(point);
+	},
+	showCursor: function(bool=true) {
+		this.cursor.visible = bool;
+	},
 
 	setActive: function() {
 		this.isActive = true;
@@ -130,6 +154,13 @@ Soundzone.prototype = {
 			obj.visible = false;
 		});
 		this.spline.mesh.visible = false;
+	},
+
+	setSelected: function(obj) {
+
+	},
+	setDeselected: function(obj) {
+
 	}
 }
 

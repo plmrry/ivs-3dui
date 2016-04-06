@@ -116,7 +116,8 @@ function Main() {
             if (activeObject && activeObject.isUnderMouse(ray)) {
                 // click inside active object
                 var intersect = activeObject.objectUnderMouse(ray);
-                setSelectedObject(intersect.object);
+                if (intersect)
+                    setSelectedObject(intersect.object);
             }
             else {
                 // click outside active object
@@ -148,6 +149,8 @@ function Main() {
 
             }
         }
+
+        setSelectedObject(null);
         isMouseDown = false;
         isAdding = false;
     }
@@ -161,9 +164,16 @@ function Main() {
         }
         else {
             ray.setFromCamera(mouse, camera);
-            if (activeObject && activeObject.isUnderMouse(ray)) {
-                var intersection = 
-                console.log('selected: ',activeObject.objectUnderMouse(ray).object.type);
+            if (activeObject) {
+                var intersection = activeObject.objectUnderMouse(ray);
+
+                if (intersection && intersection.object.type === 'Line') {
+                    activeObject.showCursor();
+                    activeObject.setCursor(intersection.point);
+                }
+                else {
+                    activeObject.showCursor(false);
+                }
 
             }
 
