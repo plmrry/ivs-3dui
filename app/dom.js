@@ -37,12 +37,17 @@ export function view(dom_model$) {
 					id: 'scene-controls',
 					style: {
 						right: 0,
-						top: 0
+						top: 0,
+						width: '400px'
 					},
 					buttons: [
 						{
-							id: 'add-object',
+							id: 'add-object-random',
 							text: 'add object at random'
+						},
+						{
+							id: 'add-object',
+							text: 'add object'
 						}
 					],
 					cards: model.editor_cards
@@ -56,7 +61,10 @@ export function view(dom_model$) {
 					buttons: [
 						{
 							id: 'orbit-camera',
-							text: 'orbit camera'
+							text: 'orbit camera',
+							style: {
+								height: '100px'
+							}
 						},
 						{
 							id: 'camera-to-birds-eye',
@@ -74,7 +82,7 @@ export function view(dom_model$) {
 				.attr('id', d => d.id)
 				.classed('controls', true)
 				.style({
-					width: '100px',
+					width: '300px',
 					height: '100px',
 					border: '1px solid black',
 					position: 'absolute'
@@ -90,7 +98,11 @@ export function view(dom_model$) {
 				.enter()
 				.append('button')
 				.attr('id', d => d.id)
-				.text(d => d.text);
+				.text(d => d.text)
+				.each(function(d) {
+					d3.select(this)
+						.style(d.style);
+				});
 				
 			const editor_cards = main
 				.selectAll('.controls')

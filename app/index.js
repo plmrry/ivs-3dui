@@ -65,11 +65,14 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	// 	.filter(d => d.key === 'children')
 	// 	.pluck('intersects', '0', 'point')
 	// 	.subscribe(log);
+	
+	const cameras_model_proxy$ = new Rx.Subject();
+	
+	cameras_model_proxy$
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.name === 'main')
+		.subscribe(log);
 
-	const raycasters_state_reducer$ = raycaster
-		.component({
-			dom, cameras, scenes
-		});
 	const size$ = windowSize(dom);
 	const editor_size$ = stream
 		.of({
@@ -87,9 +90,13 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	const scenes_state_reducer$ = scene
 		/** TODO: Rename to component */
 		.component2({ dom, raycasters });
-	const cameras_state_reducer$ = camera
-		/** TODO: Rename to component */
-		.component2({ dom, size$, editor_size$ });
+	const cameras_model$ = camera.model({ dom, size$, editor_size$ });
+	cameras_model$.subscribe(cameras_model_proxy$);
+	const cameras_state_reducer$ = camera.view(cameras_model$);
+	const raycasters_state_reducer$ = raycaster
+		.component({
+			dom, cameras, scenes
+		});
 	const render_sets$ = getRenderSets();
 	const render_function$ = renderFunction({
 		renderers,
