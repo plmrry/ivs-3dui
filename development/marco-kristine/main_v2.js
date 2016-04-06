@@ -7,6 +7,14 @@ function Main() {
     var isMouseDown = false;
     var isAdding = false;
 
+    var activeObject = null;       // object to edit/inspect
+                            //     (i.e., last clicked 'parent' object)
+    var selectedObject;     // object being clicked
+
+
+    var soundzones = [];
+
+
     this.init = function() {
         var width = window.innerWidth,
             height = window.innerHeight;
@@ -62,6 +70,7 @@ function Main() {
         if(renderer != null) {
             mouse.x = e.clientX - renderer.domElement.offsetLeft + camera.left;
             mouse.y = e.clientY - renderer.domElement.offsetTop + camera.top;
+            mouse.z = 0;
         }
     }
 
@@ -74,12 +83,29 @@ function Main() {
         }
     }
     var onMouseUp = function(e) {
-        if (isMouseDown && isAdding) {
-            drawing.createObject();
-            isAdding = false;
-            toggleAdd();
-        }
+        if (isMouseDown)
+        {
+            // create an object
+            if (isAdding) {
+                var obj = drawing.createObject();
+                console.log('added object: ',obj);
+                if (obj && obj.type === 'Soundzone') {
+                    soundzones.push(obj);
 
+                    // switch most recently added object to active
+                    if (activeObject && activeObject.type === 'Soundzone') {
+                        activeObject.setInactive();
+                    }
+                    obj.setActive();
+
+                    activeObject = obj;
+                }
+                toggleAdd();
+            }
+
+            // TODO: make or cancel a selection
+
+        }
         isMouseDown = false;
         isAdding = false;
     }
