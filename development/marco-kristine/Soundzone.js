@@ -94,7 +94,8 @@ Soundzone.prototype = {
 	    scene.add(this.cursor);
 	},
 	removeFromScene: function(scene) {
-		this.objects.forEach(obj => scene.remove(obj));
+		this.setInactive();
+		this.objects.forEach(obj => scene.remove(obj, true));
 		scene.remove(this.cursor);
 	},
 
@@ -107,8 +108,10 @@ Soundzone.prototype = {
 			return raycaster.intersectObject( this.shape ).length > 0;
 		}
 	},
-	objectUnderMouse: function(raycaster, mouse, camera) {
+	objectUnderMouse: function(raycaster) {
 		// todo
+		var intersects = raycaster.intersectObjects( this.objects, true );
+		return intersects.length ? intersects[0] : null;
 	},
 
 	move: function(x, y, offsetX = 0, offsetY = 0) {}, // todo

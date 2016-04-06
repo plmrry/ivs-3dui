@@ -72,13 +72,36 @@ function Main() {
             mouse.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
             mouse.y = e.clientY - renderer.domElement.offsetTop +camera.top;
         }
-        else {
+        else { // raycasting
             var rect = renderer.domElement.getBoundingClientRect();
             mouse.x = 2 * (e.clientX - rect.left) / rect.width - 1;
             mouse.y = 1 - 2 * (e.clientY - rect.top) / rect.height;
         }
     }
 
+    var setSelectedObject = function(obj) {
+        if (selectedObject && selectedObject.material && selectedObject.material.color) {
+            selectedObject.material.color.set(0xff0000);
+        }
+        if (obj && obj.material && obj.material.color)
+            obj.material.color.set(0x0000ff);
+
+        selectedObject = obj;
+    }
+    var setActiveObject = function(obj) {
+        if (activeObject) {
+            activeObject.setInactive();
+        }
+        activeObject = obj;
+
+        if (obj && obj.type === 'Soundzone') {
+            obj.setActive();
+        }
+    }
+
+    //////////////
+    //   events  /
+    //////////////
     var onMouseDown = function(e) {
         isMouseDown = true;
         setMousePosition(e);
@@ -89,24 +112,20 @@ function Main() {
         else {
             // make or cancel a selection
             ray.setFromCamera(mouse, camera);
-            
-//            console.log(intersects.length +' objects: ', intersects);
-
 
             if (activeObject && activeObject.isUnderMouse(ray)) {
-
+                // click inside active object
+                var intersect = activeObject.objectUnderMouse(ray);
+                setSelectedObject(intersect.object);
             }
             else {
-                if (activeObject)
-                    activeObject.setInactive();
-                activeObject = null;
-                
+                // click outside active object
+                setSelectedObject(null);
                 var intersects = soundzones.filter(obj => obj.isUnderMouse(ray));
-                if (intersects.length > 0) {
-                    activeObject = intersects[0];
-                    if (activeObject.type === 'Soundzone')
-                        activeObject.setActive();
-                }
+                if (intersects.length > 0)
+                    setActiveObject(intersects[0]);
+                else
+                    setActiveObject(null);
             }
         }
     }
@@ -119,14 +138,7 @@ function Main() {
                 if (obj && obj.type === 'Soundzone') {
                     console.log('added object: ',obj);
                     soundzones.push(obj);
-
-                    // switch most recently added object to active
-                    if (activeObject && activeObject.type === 'Soundzone') {
-                        activeObject.setInactive();
-                    }
-                    obj.setActive();
-
-                    activeObject = obj;
+                    setActiveObject(obj);
                 }
                 toggleAdd();
             }
@@ -147,6 +159,19 @@ function Main() {
                 drawing.addPoint(mouse.clone());
             }
         }
+        else {
+            ray.setFromCamera(mouse, camera);
+            if (activeObject && activeObject.isUnderMouse(ray)) {
+                var intersection = 
+                console.log('selected: ',activeObject.objectUnderMouse(ray).object.type);
+
+            }
+
+
+
+
+
+        }
     }
 
     // delete an object when pressing delete key
@@ -159,7 +184,9 @@ function Main() {
                 if (activeObject && activeObject.type === 'Soundzone') {
                     if (confirm('Delete object?')) {
                         activeObject.removeFromScene(scene);
-                        activeObject = null;                        
+                        var i = soundzones.indexOf(activeObject);
+                        soundzones.splice(i,1);
+                        activeObject = null;
                     }
                 }
             default:
