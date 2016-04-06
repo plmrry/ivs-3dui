@@ -151,7 +151,7 @@ function Main() {
                 var intersect = activeObject.objectUnderMouse(ray);
                 if (intersect) {
                     setSelectedObject(intersect.object);
-                    activeObject.setMouseOffset(intersect.point);
+                    activeObject.setMouseOffset(pointer);
                 }
             }
             else {
@@ -203,9 +203,7 @@ function Main() {
 
             if (isMouseDown === true && selectedObject === activeObject.shape) {
                 // click+drag
-                // FIX intersection.point should be raycast to FLOOR (which does not exist), not to object
-                if (intersection)
-                    activeObject.move(intersection.point);
+                activeObject.move(pointer);
             }
             else {
                 // hover cursor

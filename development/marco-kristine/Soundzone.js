@@ -126,18 +126,6 @@ Soundzone.prototype = {
 		return null;
 	},
 
-/*
-2
-5
-m: 10
-(diff: 8)
-
-m=> 12
-4
-7
-*/
-
-
 	setMouseOffset: function(point) {
 		this.mouseOffsetX = point.x,
 		this.mouseOffsetY = point.y;
@@ -150,8 +138,11 @@ m=> 12
 		this.objects.forEach(function(obj) {
 			obj.position.x += dx;
 			obj.position.y += dy;
-
 		});
+		this.splinePoints.forEach(function(pt) {
+			pt.x += dx;
+			pt.y += dy;
+		})
 	},
 
 	setCursor: function(point) {
