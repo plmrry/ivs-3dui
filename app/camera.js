@@ -19,7 +19,7 @@ export function view(cameras_model$) {
 		.map(cameras => state_reducer(cameras));
 }
 
-export function model({ dom, size$, editor_size$ }) {
+export function model({ dom, size$, editor_size$, camera_action$ }) {
 	const orbit$ = dom
 		.select('#orbit-camera')
 		.d3dragHandler()
@@ -30,11 +30,9 @@ export function model({ dom, size$, editor_size$ }) {
 	const MAX_LATITUDE = 89.99;
 	const MIN_LATITUDE = 5;
 	
-	const to_birds_eye$ = dom
-		.select('#camera-to-birds-eye')
-		.events('click')
-		// .map(dom => dom.select('#camera-to-birds-eye'))
-		// .flatMap(observableFromD3Event('click'))
+	const to_birds_eye$ = camera_action$
+		.pluck('event')
+		.filter(ev => ev === 'move-to-birds-eye')
 		.flatMap(ev => {
 			let destination = MAX_LATITUDE;
       return d3TweenStream(500)
@@ -57,29 +55,37 @@ export function model({ dom, size$, editor_size$ }) {
 		.domain([0, 360])
 		.range([0, 2 * Math.PI]);
 	
-	const delta_theta$ = orbit$
+	const delta_latitude$ = orbit$
 		.pluck('dy')
-		.map(dy => theta => theta - dy);
+		.map(dy => lat => {
+			const new_lat = lat - dy;
+			if (new_lat >= MAX_LATITUDE) return MAX_LATITUDE;
+			if (new_lat <= MIN_LATITUDE) return MIN_LATITUDE;
+			return new_lat;
+		});
 		
 	const latitude$ = stream
 		.merge(
-			delta_theta$, to_birds_eye$
+			delta_latitude$,
+			to_birds_eye$
 		)
 		.startWith(45)
 		.scan((theta, fn) => fn(theta))
-		.map(lat => {
-			if (lat >= MAX_LATITUDE) return MAX_LATITUDE;
-			if (lat <= MIN_LATITUDE) return MIN_LATITUDE;
-			return lat;
-		});
+		.shareReplay(1);
+		
+	const is_max_lat$ = latitude$
+		.map(lat => lat >= MAX_LATITUDE);
+		
+	const longitude$ = orbit$
+		.pluck('dx')
+		.startWith(45)
+		.scan((a,b) => a+b)
+		.shareReplay(1);
 		
 	const theta$ = latitude$
 		.map(latitude_to_theta);
 		
-	const phi$ = orbit$
-		.pluck('dx')
-		.startWith(45)
-		.scan((a,b) => a+b)
+	const phi$ = longitude$
 		.map(longitude_to_phi)
 		.map(phi => phi % (2 * Math.PI))
 		.map(phi => (phi < 0) ? (2 * Math.PI) + phi : phi);
@@ -111,18 +117,25 @@ export function model({ dom, size$, editor_size$ }) {
 			})
 		);
 		
+	const lat_lng$ = combineLatestObj
+		({
+			latitude$, longitude$, is_max_lat$
+		});
+		
 	const main_camera$ = combineLatestObj({
 			position$,
 			lookAt$,
-			size$
+			size$,
+			lat_lng$
 		})
-		.map(({ position, lookAt, size }) => {
+		.map(({ position, lookAt, size, lat_lng }) => {
 			return {
 				name: 'main',
 				size: size,
 				position: position,
 				zoom: 40,
-				lookAt: lookAt
+				lookAt: lookAt,
+				lat_lng
 			};
 		});
 		

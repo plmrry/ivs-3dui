@@ -14,7 +14,9 @@ import * as dom_component from './dom.js';
 import * as raycaster from './raycaster.js';
 
 // debug.enable('*');
-debug.enable('*,-raycasters');
+// debug.enable('*,-raycasters');
+debug.disable();
+debug.enable('event:*');
 
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
@@ -68,10 +70,54 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	
 	const cameras_model_proxy$ = new Rx.Subject();
 	
-	cameras_model_proxy$
+	const camera_is_birds_eye$ = cameras_model_proxy$
 		.flatMap(arr => stream.from(arr))
 		.filter(d => d.name === 'main')
-		.subscribe(log);
+		.pluck('lat_lng', 'is_max_lat')
+		.distinctUntilChanged()
+		.do(debug('event:camera-is-top'))
+		// .subscribe();
+		
+	const add_object_click$ = dom
+		.select('#add-object')
+		.events('click');
+		
+	const auto_birds_eye$ = add_object_click$
+		.withLatestFrom(
+			camera_is_birds_eye$,
+			(ev, birds) => birds
+		)
+		.filter(d => !d);
+		
+	const birds_eye_button$ = dom
+		.select('#camera-to-birds-eye')
+		.events('click');
+		
+	const camera_action$ = stream
+		.merge(
+			auto_birds_eye$,
+			birds_eye_button$
+		)
+		.map(() => ({
+			scope: 'camera',
+			event: 'move-to-birds-eye'
+		}))
+		.do(debug('event:move-camera'));
+		
+	// const await_ready_add$ = add_object_click$
+	// 	.startWith(false)
+	// 	.scan(d => !d)
+	// 	.do(d => debug('event:await-ready-add')(d));
+	// 	// .subscribe();
+		
+	// const ready_add$ = stream
+	// 	.combineLatest(
+	// 		await_ready_add$,
+	// 		camera_is_birds_eye$
+	// 	)
+	// 	.map(arr => arr.every(d => d))
+	// 	.do(debug('event:ready-add'))
+	// 	.subscribe();
 
 	const size$ = windowSize(dom);
 	const editor_size$ = stream
@@ -90,7 +136,13 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	const scenes_state_reducer$ = scene
 		/** TODO: Rename to component */
 		.component2({ dom, raycasters });
-	const cameras_model$ = camera.model({ dom, size$, editor_size$ });
+	const cameras_model$ = camera
+		.model({ 
+			dom, 
+			size$, 
+			editor_size$,
+			camera_action$
+		});
 	cameras_model$.subscribe(cameras_model_proxy$);
 	const cameras_state_reducer$ = camera.view(cameras_model$);
 	const raycasters_state_reducer$ = raycaster

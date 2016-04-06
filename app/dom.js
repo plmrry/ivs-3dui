@@ -195,7 +195,7 @@ export function makeD3DomDriver(selector) {
 	return function d3DomDriver(state_reducer$) {
 		const dom_state$ = state_reducer$
 			.scan(apply, d3.select(selector))
-			.shareReplay();
+			.shareReplay(1);
 		dom_state$
 			.do(s => debug('dom')('update'))
 			.subscribe();
@@ -204,7 +204,8 @@ export function makeD3DomDriver(selector) {
 			select: function(selector) {
 				let selection$ = dom_state$
 					.map(dom => dom.select(selector))
-					.filter(s => s.node() !== null);
+					.filter(s => s.node() !== null)
+					.shareReplay(1);
 				return {
 					observable: function() {
 						return selection$;
