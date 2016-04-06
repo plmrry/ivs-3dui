@@ -13,8 +13,66 @@ const room_size = {
 	height: 3
 };
 
+function scoped_cone(id) {
+	return function cone({ actions }) {
+		const DEFAULT_CONE_VOLUME = 1;
+		const DEFAULT_CONE_SPREAD = 0.5;
+		
+		const move_interactive_update$ = actions.editor_mousemove_panel$
+			.map(point => cone => {
+				if (cone.interactive === true) cone.lookAt = point;
+				return cone;
+			});
+			
+		const model_update$ = stream
+			.merge(
+				move_interactive_update$
+			);
+			
+		const model$ = model_update$
+			.startWith({
+				volume: DEFAULT_CONE_VOLUME,
+				spread: DEFAULT_CONE_SPREAD,
+				lookAt: {
+					x: Math.random(),
+					y: Math.random(),
+					z: Math.random()
+				},
+				interactive: true
+			})
+			.scan(apply)
+			.shareReplay(1);
+			
+		return {
+			id,
+			model$
+		};
+	};
+}
+
 function scoped_sound_object(id, position) {
 	return function soundObject({ actions }) {
+		
+		const new_cone$ = actions.add_cone$
+			.map((ev, index) => {
+				return scoped_cone(index)({ actions });
+			});
+			
+		const add_cone_update$ = new_cone$
+			.map(new_cone => cones => {
+				return cones.concat(new_cone);
+			});
+			
+		const cones$$ = add_cone_update$
+			.startWith([])
+			.scan(apply)
+			.map(arr => arr.map(d => d.model$));
+		
+		const cones$ = cones$$
+			.flatMapLatest(stream.combineLatest)
+			.startWith([])
+			.shareReplay();
+		
 		const select_update$ = actions.select_object$
 			.pluck('key')
 			.map(key => object => {
@@ -51,8 +109,13 @@ function scoped_sound_object(id, position) {
 					color: 'ffffff'
 				},
 				cones: [],
+				selected: true
 			})
 			.scan(apply)
+			.combineLatest(
+				cones$,
+				(model, cones) => { model.cones = cones; return model; }
+			)
 			.shareReplay(1);
 			
 		return {
@@ -62,15 +125,14 @@ function scoped_sound_object(id, position) {
 	};
 }
 
-export function model({ scene_actions, renderers }) {
+export function model({ scene_actions }) {
+	
 	const new_object$ = scene_actions.add_object$
 		.pluck('position')
 		.map((position, index) => {
 			return scoped_sound_object(index, position)({ actions: scene_actions });
 		})
 		.shareReplay(1);
-		
-	const added_object$ = new Rx.Subject();
 		
 	const add_new_object$ = new_object$ 
 		.map(new_obj => array => {
@@ -85,7 +147,7 @@ export function model({ scene_actions, renderers }) {
 	const sound_objects$ = sound_object_obs$
 		.flatMapLatest(stream.combineLatest)
 		.startWith([])
-		.shareReplay()
+		.shareReplay();
 		
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0])
