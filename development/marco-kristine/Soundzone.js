@@ -185,7 +185,19 @@ m=> 12
 	},
 
 	addPoint: function(position) {
-		this.splinePoints[this.splinePoints.length] = position;
+		var minPoint = 0;
+		var minDistance = Number.MAX_VALUE;
+		console.log(minDistance);
+		for(i=0; i<this.splinePoints.length; i++) {
+			var dist = this.splinePoints[i].distanceTo(position);
+			console.log(dist);
+			if(dist < minDistance) {
+				minDistance = dist;
+				minPoint = i;
+			}
+		}
+		console.log("Min point: " + minPoint);
+		this.splinePoints.splice(minPoint, 0, position);
 		//console.log(this.splinePoints);
 		return new Soundzone(this.splinePoints);
 	}
