@@ -90,7 +90,8 @@ Soundzone.prototype = {
 	},
 
 	addToScene: function(scene) {
-	    scene.add(this.objects, this.cursor);
+		this.objects.forEach(obj => scene.add(obj));
+	    scene.add(this.cursor);
 	},
 	removeFromScene: function(scene) {
 		scene.remove(this.objects, this.cursor);
@@ -138,7 +139,7 @@ drawing = {                   // live drawing by mouse
 	setScene: function(scene) {
 		this.scene = scene;
 	},
-	beginAt: function(point) {
+	beginAt: function(point, scene) {
 		this.lastPoint = point;
 		this.points = [point];
 	},
@@ -166,7 +167,6 @@ drawing = {                   // live drawing by mouse
 		var points = simplify(this.points, 10, true);
 		var object;
 		if (points.length >= 3) {
-			clear();
 			object = new Soundzone(points);
 		}
 		// else {}                       // not enough points = a sound OBJECT
