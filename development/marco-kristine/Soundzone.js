@@ -126,11 +126,32 @@ Soundzone.prototype = {
 		return null;
 	},
 
-	setOffset: function(x, y) {
+/*
+2
+5
+m: 10
+(diff: 8)
 
+m=> 12
+4
+7
+*/
+
+
+	setMouseOffset: function(point) {
+		this.mouseOffsetX = point.x,
+		this.mouseOffsetY = point.y;
 	},
-	move: function(x, y) {
+	move: function(point) {
+		var dx = point.x - this.mouseOffsetX;
+		var dy = point.y - this.mouseOffsetY;
+		this.mouseOffsetX = point.x, this.mouseOffsetY = point.y;
 
+		this.objects.forEach(function(obj) {
+			obj.position.x += dx;
+			obj.position.y += dy;
+
+		});
 	},
 
 	setCursor: function(point) {
