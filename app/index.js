@@ -21,17 +21,10 @@ debug.enable('event:*');
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
-function main({ renderers, dom, scenes, cameras, raycasters }) {
+function intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ }) {
 	
-	const cameras_model_proxy$ = new Rx.Subject();
-	const add_object_proxy$ = new Rx.Subject();
-	const new_object_proxy$ = new Rx.ReplaySubject();
-	
-	const new_object_id$ = new_object_proxy$
-		.pluck('id')
-		.shareReplay(1);
-		
-	new_object_id$.subscribe();
+	// new_object_proxy$
+	// 	.subscribe(log)
 	
 	const camera_is_birds_eye$ = cameras_model_proxy$
 		.flatMap(arr => stream.from(arr))
@@ -46,106 +39,33 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.events('click')
 		.shareReplay(1);
 		
+	const add_object_mode$ = stream
+		.merge(
+			add_object_click$.map(ev => true),
+			new_object_proxy$.map(ev => false)
+		)
+		.startWith(false)
+		.shareReplay(1);
+	
 	const main_raycaster$ = raycasters
 		.select({ name: 'main' })
 		.pluck('event$')
 		.flatMapLatest(obs => obs)
 		.distinctUntilChanged()
-		.shareReplay();
+		.shareReplay(1);
 		
-	const main_dragstart$ = main_raycaster$
+	const new_object_key$ = new_object_proxy$
+		.pluck('id');
+		
+	const select_object$ = main_raycaster$
 		.filter(({ event }) => event.type === 'dragstart')
-		// .shareReplay(1);
-		
-	// const dragstart_key$ = main_dragstart$
-	// 	.pluck('intersect_groups')
-	// 	.flatMapLatest(arr => stream.from(arr))
-	// 	.pluck('intersects', '0', 'object')
-	// 	.map(obj => {
-	// 		if (obj.name === 'sound_object') return d3.select(obj).datum().key;
-	// 		/** TODO: Better way of selecting parent when child cone is clicked? */
-	// 		if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
-	// 		return undefined;
-	// 	});
-		
-	// const select_object$ = stream
-	// 	.merge(
-	// 		dragstart_key$
-	// 	  // new_object_id$.do(d => console.log('cccc'))
-	// 	)
-	// 	.map(key => {
-	// 		return {
-	// 			event: 'select-object',
-	// 			key
-	// 		};
-	// 	})
-	// 	.shareReplay(1);
-		
-	// const unselect_object$ = dragstart_key$
-	// 	.pairwise()
-	// 	.pluck('0')
-	// 	.filter(key => typeof key !== 'undefined')
-	// 	.map(key => {
-	// 		return {
-	// 			event: 'unselect-object',
-	// 			key
-	// 		};
-	// 	})
-	// 	.shareReplay(1);
-		// .flatMapLatest(arr => stream.from(arr))
-		// .subscribe(log)
-		
-	const add_button_update$ = add_object_click$
-		.map(ev => state => {
-			state.ready = true;
-			return state;
-		});
-		
-	const birds_eye_update$ = camera_is_birds_eye$
-		.map(value => state => {
-			state.camera_is_top = value;
-			return state;
-		});
-		
-	const main_dragstart_update$ = main_dragstart$
-		.map(ev => state => {
-			if (state.ready === true && state.camera_is_top === true) {
-				state.adding = true;
-			}
-			state.ready = false;
-			state.event = ev;
-			return state;
-		});
-
-	// const cancel_add$ = add_object_proxy$
-	const cancel_add$ = new_object_proxy$
-		.map(ev => state => {
-			if (state.adding === true) {
-				state.adding = false;
-			}
-			state.ready = false;
-			return state;
-		});
-		
-	const add_state$ = stream
-		.merge(
-			add_button_update$,
-			birds_eye_update$,
-			main_dragstart_update$,
-			cancel_add$
+		.withLatestFrom(
+			add_object_mode$,
+			camera_is_birds_eye$,
+			(event, mode, birds) => ({ event, mode, birds })
 		)
-		.startWith({
-			ready: false,
-			camera_is_top: false,
-			adding: false
-		})
-		.scan(apply)
-		.shareReplay()
-		
-	const dragstart_key_2$ = add_state$
-		.filter(state => state.ready === false && state.adding === false)
+		.filter(({ event, mode, birds}) => mode !== true)
 		.pluck('event', 'intersect_groups')
-		.filter(arr => typeof arr !== 'undefined')
 		.flatMapLatest(arr => stream.from(arr))
 		.pluck('intersects', '0', 'object')
 		.map(obj => {
@@ -154,23 +74,9 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
 			return undefined;
 		})
-		// .subscribe(log);
+		.merge(new_object_key$);
 		
-	const select_object$ = stream
-		.merge(
-			dragstart_key_2$
-		  // new_object_id$
-		)
-		.map(key => {
-			// console.log(key);
-			return {
-				event: 'select-object',
-				key
-			};
-		})
-		.shareReplay(1);
-		
-	const floor_click_point$ = main_raycaster$
+	const add_object$ = main_raycaster$
 		.pairwise()
 		.filter(arr => arr[0].event.type === 'dragstart')
 		.filter(arr => arr[1].event.type === 'dragend')
@@ -180,75 +86,71 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.pluck('intersects')
 		.flatMapLatest(arr => stream.from(arr))
 		.filter(({ object }) => object.name === 'floor')
-		.pluck('point');
-		
-	const add_object$ = floor_click_point$
+		.pluck('point')
 		.withLatestFrom(
-			add_state$.pluck('adding'),
-			(floor, add) => ({ floor, add })
+			add_object_mode$,
+			camera_is_birds_eye$,
+			(point, mode, birds) => ({ point, mode, birds })
 		)
-		.filter(({ floor, add }) => add)
-		.pluck('floor')
-		.map(position => ({
-			event: 'add-object',
-			position
-		}))
-		.do(debug('event:add-object'))
-		.shareReplay(1);
-		
-	add_object$.subscribe(add_object_proxy$);
+		.filter(({ point, mode, birds}) => mode === true && birds === true)
+		.pluck('point');
 	
-	const add_cone$ = dom
-		.select('#add-cone')
-		.events('click')
-		.shareReplay();
+	const size$ = windowSize(dom);
 		
-	const editor_raycaster$ = raycasters
-		.select({ name: 'editor' })
-		.pluck('event$')
-		.flatMapLatest(obs => obs)
-		.distinctUntilChanged()
-		.shareReplay()
-		// .subscribe(log)
+	return {
+		add_object_click$,
+		camera_is_birds_eye$,
+		add_object$,
+		select_object$,
+		size$
+	};
+}
+
+function main({ renderers, dom, scenes, cameras, raycasters }) {
 		
-	const editor_mousemove_panel$ = editor_raycaster$
-		.pluck('intersect_groups')
-		.flatMap(arr => stream.from(arr))
-		.filter(d => d.key === 'children')
-		.pluck('intersects', '0', 'point')
-		.shareReplay()
-		// .subscribe(log)
-		
-	// const panel_point$ = editor_intersects$
-	// 	.pluck('event$')
-	// 	.flatMapLatest(obs => obs)
-	// 	.pluck('intersect_groups')
-	// 	.flatMap(arr => stream.from(arr))
-	// 	.filter(d => d.key === 'children')
-	// 	.pluck('intersects', '0', 'point');
+	/** 
+	 *	ACTIONS
+	 */ 
+	 
+	const cameras_model_proxy$ = new Rx.Subject();
+	const new_object_proxy$ = new Rx.ReplaySubject(1);
 	
+	const { 
+		add_object_click$,
+		add_object$,
+		select_object$,
+		camera_is_birds_eye$,
+		size$
+	} = intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ });
+	
+	/** 
+	 *	RENDERERS
+	 */ 
+
+	const renderers_state_reducer$ = renderer
+		.component({ size$ });
+		
+	/** 
+	 *	SCENES
+	 */
+	 
 	const scene_actions = {
 		add_object$,
 		select_object$,
-		add_cone$,
-		editor_mousemove_panel$
+		// add_cone$,
+		// editor_mousemove_panel$
 		// unselect_object$
 	};
-		
-	const size$ = windowSize(dom);
-	const editor_size$ = stream
-		.of({
-			width: 300,
-			height: 300
-		});
-	const renderers_state_reducer$ = renderer
-		.component({ size$ });
 
-	const { scenes_model$, new_object$, selected$ } = scene.model({ scene_actions });
+	const { scenes_model$, new_object$, selected$ } = scene.model(scene_actions);
 	
 	new_object$.subscribe(new_object_proxy$);
 	
 	const scenes_state_reducer$ = scene.view(scenes_model$);
+	
+	/** 
+	 *	DOM
+	 */ 
 	
 	const dom_state_reducer$ = dom_component
 		.component({ 
@@ -257,40 +159,28 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 			size$
 		});
 		
-	/** CAMERA */
-	
-	const auto_birds_eye$ = add_object_click$
-		.withLatestFrom(
-			camera_is_birds_eye$,
-			(ev, birds) => birds
-		)
-		.filter(d => !d);
+	/** 
+	 *	CAMERAS
+	 */ 
 		
-	const birds_eye_button$ = dom
-		.select('#camera-to-birds-eye')
-		.events('click');
-		
-	const camera_action$ = stream
-		.merge(
-			auto_birds_eye$,
-			birds_eye_button$
-		)
-		.map(() => ({
-			scope: 'camera',
-			event: 'move-to-birds-eye'
-		}))
-		.do(d => debug('event:move-camera')(d.event));
-
+	const camera_actions = camera.intent({
+		add_object_click$,
+		camera_is_birds_eye$,
+		dom,
+		size$
+	});
 	
 	const cameras_model$ = camera
 		.model({ 
-			dom, 
-			size$, 
-			editor_size$,
-			camera_action$
+			actions: camera_actions
 		});
+		
 	cameras_model$.subscribe(cameras_model_proxy$);
-	const cameras_state_reducer$ = camera.view(cameras_model$);
+	
+	const cameras_state_reducer$ = camera
+		.view(cameras_model$);
+		
+	/** RAYCASTERS */
 	
 	const raycasters_state_reducer$ = raycaster
 		.component({

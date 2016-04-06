@@ -51,30 +51,29 @@ function scoped_cone(id) {
 }
 
 function scoped_sound_object(id, position) {
-	return function soundObject({ actions }) {
+	return function soundObject(actions) {
 		
-		const new_cone$ = actions.add_cone$
-			.map((ev, index) => {
-				return scoped_cone(index)({ actions });
-			});
+		// const new_cone$ = actions.add_cone$
+		// 	.map((ev, index) => {
+		// 		return scoped_cone(index)({ actions });
+		// 	});
 			
-		const add_cone_update$ = new_cone$
-			.map(new_cone => cones => {
-				return cones.concat(new_cone);
-			});
+		// const add_cone_update$ = new_cone$
+		// 	.map(new_cone => cones => {
+		// 		return cones.concat(new_cone);
+		// 	});
 			
-		const cones$$ = add_cone_update$
-			.startWith([])
-			.scan(apply)
-			.map(arr => arr.map(d => d.model$));
+		// const cones$$ = add_cone_update$
+		// 	.startWith([])
+		// 	.scan(apply)
+		// 	.map(arr => arr.map(d => d.model$));
 		
-		const cones$ = cones$$
-			.flatMapLatest(stream.combineLatest)
-			.startWith([])
-			.shareReplay();
+		// const cones$ = cones$$
+		// 	.flatMapLatest(stream.combineLatest)
+		// 	.startWith([])
+		// 	.shareReplay();
 		
 		const select_update$ = actions.select_object$
-			.pluck('key')
 			.map(key => object => {
 				if (key === id) {
 					object.selected = true;
@@ -84,7 +83,6 @@ function scoped_sound_object(id, position) {
 					object.selected = false;
 					object.material.color = 'ffffff';
 				};
-				
 				return object;
 			});
 			
@@ -92,6 +90,8 @@ function scoped_sound_object(id, position) {
 			.merge(
 				select_update$
 			);
+		
+		// const model_update$ = stream.empty()
 			
 		const model$ = model_update$
 			.startWith({
@@ -109,13 +109,13 @@ function scoped_sound_object(id, position) {
 					color: 'ffffff'
 				},
 				cones: [],
-				selected: true
+				// selected: true
 			})
 			.scan(apply)
-			.combineLatest(
-				cones$,
-				(model, cones) => { model.cones = cones; return model; }
-			)
+			// .combineLatest(
+			// 	cones$,
+			// 	(model, cones) => { model.cones = cones; return model; }
+			// )
 			.shareReplay(1);
 			
 		return {
@@ -125,33 +125,25 @@ function scoped_sound_object(id, position) {
 	};
 }
 
-export function model({ scene_actions }) {
+export function model(actions) {
 	
-	const new_object$ = scene_actions.add_object$
-		.pluck('position')
+	const new_object$ = actions.add_object$
 		.map((position, index) => {
-			return scoped_sound_object(index, position)({ actions: scene_actions });
+			return scoped_sound_object(index, position)(actions);
 		})
 		.shareReplay(1);
-		
-	const add_new_object$ = new_object$ 
-		.map(new_obj => array => {
-			return array.concat(new_obj);
-		});
-		
-	const sound_object_obs$ = add_new_object$
+	
+	const sound_objects$ = new_object$
+		.map(new_obj => array => array.concat(new_obj))
 		.startWith([])
 		.scan(apply)
-		.map(arr => arr.map(d => d.model$));
-		
-	const sound_objects$ = sound_object_obs$
+		.map(arr => arr.map(d => d.model$))
 		.flatMapLatest(stream.combineLatest)
-		.startWith([])
-		.shareReplay();
+		.startWith([]);
 		
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0])
-		.shareReplay()
+		.shareReplay();
 		
 	const main_scene_model$ = sound_objects$
 		.map(sound_objects => {
@@ -254,180 +246,180 @@ export function model({ scene_actions }) {
 // 	return scenes_state_reducer$;
 // }
 
-export function component({ dom, main_intersects$, editor_intersects$ }) {
+// export function component({ dom, main_intersects$, editor_intersects$ }) {
 		
-	const clicked_2$ = main_intersects$
-		.flatMapLatest(o => o.event$)
-		.pairwise()
-		.filter(arr => arr[0].event.type === 'dragstart')
-		.filter(arr => arr[1].event.type === 'dragend')
-		.pluck('1');
+// 	const clicked_2$ = main_intersects$
+// 		.flatMapLatest(o => o.event$)
+// 		.pairwise()
+// 		.filter(arr => arr[0].event.type === 'dragstart')
+// 		.filter(arr => arr[1].event.type === 'dragend')
+// 		.pluck('1');
 		
-	const panel_point$ = editor_intersects$
-		.pluck('event$')
-		.flatMapLatest(obs => obs)
-		.pluck('intersect_groups')
-		.flatMap(arr => stream.from(arr))
-		.filter(d => d.key === 'children')
-		.pluck('intersects', '0', 'point');
+// 	const panel_point$ = editor_intersects$
+// 		.pluck('event$')
+// 		.flatMapLatest(obs => obs)
+// 		.pluck('intersect_groups')
+// 		.flatMap(arr => stream.from(arr))
+// 		.filter(d => d.key === 'children')
+// 		.pluck('intersects', '0', 'point');
 		
-	const move_interactive$ = panel_point$
-	// const move_interactive$ = editor_intersects$
-	// 	.pluck('intersects', '0', 'intersects', '0', 'point')
-	// 	// .do(log)
-		.map(point => objects => {
-			return objects.map(obj => {
-				if (obj.selected === true) {
-					obj.cones = obj.cones.map(cone => {
-						if (cone.interactive === true) {
-							cone.lookAt = point;
-						}
-						return cone;
-					});
-					return obj;
-				}
-				return obj;
-			});
-		});
+// 	const move_interactive$ = panel_point$
+// 	// const move_interactive$ = editor_intersects$
+// 	// 	.pluck('intersects', '0', 'intersects', '0', 'point')
+// 	// 	// .do(log)
+// 		.map(point => objects => {
+// 			return objects.map(obj => {
+// 				if (obj.selected === true) {
+// 					obj.cones = obj.cones.map(cone => {
+// 						if (cone.interactive === true) {
+// 							cone.lookAt = point;
+// 						}
+// 						return cone;
+// 					});
+// 					return obj;
+// 				}
+// 				return obj;
+// 			});
+// 		});
 	
-	const clicked_key$ = clicked_2$
-		.pluck('intersect_groups')
-		.flatMap(arr => stream.from(arr))
-		.filter(d => d.key === 'children')
-		.pluck('intersects', '0', 'object')
-		.map(obj => {
-			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
-			/** TODO: Better way of selecting parent when child cone is clicked? */
-			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
-			return undefined;
-		})
-		.distinctUntilChanged()
-		.shareReplay();
+// 	const clicked_key$ = clicked_2$
+// 		.pluck('intersect_groups')
+// 		.flatMap(arr => stream.from(arr))
+// 		.filter(d => d.key === 'children')
+// 		.pluck('intersects', '0', 'object')
+// 		.map(obj => {
+// 			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
+// 			/** TODO: Better way of selecting parent when child cone is clicked? */
+// 			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
+// 			return undefined;
+// 		})
+// 		.distinctUntilChanged()
+// 		.shareReplay();
 		
-	const select_object$ = clicked_key$
-		.filter(key => typeof key !== 'undefined')
-		.map(key => objects => {
-			return objects.map(obj => {
-				if (obj.key === key) {
-					obj.selected = true;
-					obj.material.color = '66c2ff';
-					return obj;
-				}
-				return obj;
-			});
-		});
+// 	const select_object$ = clicked_key$
+// 		.filter(key => typeof key !== 'undefined')
+// 		.map(key => objects => {
+// 			return objects.map(obj => {
+// 				if (obj.key === key) {
+// 					obj.selected = true;
+// 					obj.material.color = '66c2ff';
+// 					return obj;
+// 				}
+// 				return obj;
+// 			});
+// 		});
  		
-	const unselect_object$ = clicked_key$
-		.pairwise()
-		.pluck('0')
-		.filter(key => typeof key !== 'undefined')
-		.map(key => objects => {
-			return objects.map(obj => {
-				if (obj.key === key) {
-					obj.selected = false;
-					obj.material.color = 'ffffff';
-					return obj;
-				}
-				return obj;
-			});
-		});
+// 	const unselect_object$ = clicked_key$
+// 		.pairwise()
+// 		.pluck('0')
+// 		.filter(key => typeof key !== 'undefined')
+// 		.map(key => objects => {
+// 			return objects.map(obj => {
+// 				if (obj.key === key) {
+// 					obj.selected = false;
+// 					obj.material.color = 'ffffff';
+// 					return obj;
+// 				}
+// 				return obj;
+// 			});
+// 		});
 		
-	const add_object$ = dom
-		.select('#add-object')
-		.events('click')
-		.map((ev, i) => ({
-			count: i,
-			key: i,
-			class: 'sound_object',
-			type: 'sound_object',
-			name: 'sound_object',
-			position: {
-				x: Math.random() * 2 - 1,
-				y: Math.random() * 2 - 1,
-				z: Math.random() * 2 - 1,
-			},
-			volume: Math.random() + 0.4,
-			material: {
-				color: 'ffffff'
-			},
-			cones: [
-				{
-					volume: 2,
-					spread: 0.5,
-					rotation: {
-						x: 0.5,
-						y: 0.1,
-						z: 0.1
-					},
-					lookAt: {
-						x: 2,
-						y: 1,
-						z: 1
-					}
-				}
-			],
-		}))
-		.map(obj => objects => {
-			return objects.concat(obj);
-		});
+// 	const add_object$ = dom
+// 		.select('#add-object')
+// 		.events('click')
+// 		.map((ev, i) => ({
+// 			count: i,
+// 			key: i,
+// 			class: 'sound_object',
+// 			type: 'sound_object',
+// 			name: 'sound_object',
+// 			position: {
+// 				x: Math.random() * 2 - 1,
+// 				y: Math.random() * 2 - 1,
+// 				z: Math.random() * 2 - 1,
+// 			},
+// 			volume: Math.random() + 0.4,
+// 			material: {
+// 				color: 'ffffff'
+// 			},
+// 			cones: [
+// 				{
+// 					volume: 2,
+// 					spread: 0.5,
+// 					rotation: {
+// 						x: 0.5,
+// 						y: 0.1,
+// 						z: 0.1
+// 					},
+// 					lookAt: {
+// 						x: 2,
+// 						y: 1,
+// 						z: 1
+// 					}
+// 				}
+// 			],
+// 		}))
+// 		.map(obj => objects => {
+// 			return objects.concat(obj);
+// 		});
 		
-	const add_cone_click$ = dom
-		.select('#add-cone')
-		.events('click')
-		.shareReplay()
-		// .subscribe(log)
+// 	const add_cone_click$ = dom
+// 		.select('#add-cone')
+// 		.events('click')
+// 		.shareReplay()
+// 		// .subscribe(log)
 		
-	const add_cone_random$ = add_cone_click$
-		.map(ev => {
-			let DEFAULT_CONE_VOLUME = 1;
-			let DEFAULT_CONE_SPREAD = 0.5;
-			return {
-				volume: DEFAULT_CONE_VOLUME,
-				spread: DEFAULT_CONE_SPREAD,
-				lookAt: {
-					x: Math.random(),
-					y: Math.random(),
-					z: Math.random()
-				},
-				interactive: true
-			};
-		})
-		.map(cone => objects => {
-			return objects.map(obj => {
-				if (obj.selected === true) obj.cones.push(cone);
-				return obj;
-			});
-		});
+// 	const add_cone_random$ = add_cone_click$
+// 		.map(ev => {
+// 			let DEFAULT_CONE_VOLUME = 1;
+// 			let DEFAULT_CONE_SPREAD = 0.5;
+// 			return {
+// 				volume: DEFAULT_CONE_VOLUME,
+// 				spread: DEFAULT_CONE_SPREAD,
+// 				lookAt: {
+// 					x: Math.random(),
+// 					y: Math.random(),
+// 					z: Math.random()
+// 				},
+// 				interactive: true
+// 			};
+// 		})
+// 		.map(cone => objects => {
+// 			return objects.map(obj => {
+// 				if (obj.selected === true) obj.cones.push(cone);
+// 				return obj;
+// 			});
+// 		});
 		
-	const sound_objects_update$ = stream
-		.merge(
-			add_object$,
-			select_object$,
-			unselect_object$,
-			add_cone_random$,
-			move_interactive$
-		);
+// 	const sound_objects_update$ = stream
+// 		.merge(
+// 			add_object$,
+// 			select_object$,
+// 			unselect_object$,
+// 			add_cone_random$,
+// 			move_interactive$
+// 		);
 		
-	const sound_objects$ = sound_objects_update$	
-		.startWith([])
-		.scan(apply)
-		.shareReplay();
+// 	const sound_objects$ = sound_objects_update$	
+// 		.startWith([])
+// 		.scan(apply)
+// 		.shareReplay();
 	
-	const main_scene_model$ = sound_objects$
-		.map(sound_objects => {
-			return {
-				name: 'main',
-				floors: [
-					{
-						name: 'floor'
-					}
-				],
-				sound_objects
-			};
-		});
+// 	const main_scene_model$ = sound_objects$
+// 		.map(sound_objects => {
+// 			return {
+// 				name: 'main',
+// 				floors: [
+// 					{
+// 						name: 'floor'
+// 					}
+// 				],
+// 				sound_objects
+// 			};
+// 		});
 		
-	return main_scene_model$;
-}
+// 	return main_scene_model$;
+// }
 
 export function view(model$) {
 	return model$
@@ -473,7 +465,7 @@ export function state_reducer(model) {
 		const screens = screens_join
 			.enter()
 			.append(d => {
-				return getScreen()
+				return getScreen();
 			})
 			.merge(screens_join);
 					

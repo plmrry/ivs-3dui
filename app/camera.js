@@ -19,20 +19,46 @@ export function view(cameras_model$) {
 		.map(cameras => state_reducer(cameras));
 }
 
-export function model({ dom, size$, editor_size$, camera_action$ }) {
+export function intent({ add_object_click$, camera_is_birds_eye$, dom, size$ }) {
+	const auto_birds_eye$ = add_object_click$
+		.withLatestFrom(
+			camera_is_birds_eye$,
+			(ev, birds) => birds
+		)
+		.filter(d => !d);
+		
+	const birds_eye_button$ = dom
+		.select('#camera-to-birds-eye')
+		.events('click');
+		
+	const move_to_birds_eye$ = stream
+		.merge(
+			auto_birds_eye$,
+			birds_eye_button$
+		);
+		
 	const orbit$ = dom
 		.select('#orbit-camera')
 		.d3dragHandler()
 		.events('drag')
 		.pluck('event')
 		.shareReplay();
+		
+	return {
+		move_to_birds_eye$,
+		orbit$,
+		size$
+	};
+}
+
+export function model({ actions }) {
+	
+	const orbit$ = actions.orbit$;
     
 	const MAX_LATITUDE = 89.99;
 	const MIN_LATITUDE = 5;
 	
-	const to_birds_eye$ = camera_action$
-		.pluck('event')
-		.filter(ev => ev === 'move-to-birds-eye')
+	const to_birds_eye$ = actions.move_to_birds_eye$
 		.flatMap(ev => {
 			let destination = MAX_LATITUDE;
       return d3TweenStream(500)
@@ -125,7 +151,7 @@ export function model({ dom, size$, editor_size$, camera_action$ }) {
 	const main_camera$ = combineLatestObj({
 			position$,
 			lookAt$,
-			size$,
+			size$: actions.size$,
 			lat_lng$
 		})
 		.map(({ position, lookAt, size, lat_lng }) => {
