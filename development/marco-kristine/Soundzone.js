@@ -90,14 +90,16 @@ Soundzone.prototype = {
 	},
 
 	addToScene: function(scene) {
-	    scene.add(this.objects, this.cursor);
+		this.objects.forEach(obj => scene.add(obj));
+	    scene.add(this.cursor);
 	},
 	removeFromScene: function(scene) {
-		scene.remove(this.objects, this.cursor);
+		this.objects.forEach(obj => scene.remove(obj));
+		scene.remove(this.cursor);
 	},
 
 	// raycast to this soundzone
-	isUnderMouse: function(raycaster, mouse, camera) {
+	isUnderMouse: function(raycaster) {
 		if (this.isActive) {
 			return raycaster.intersectObjects( this.objects ).length > 0;
 		}
@@ -138,7 +140,7 @@ drawing = {                   // live drawing by mouse
 	setScene: function(scene) {
 		this.scene = scene;
 	},
-	beginAt: function(point) {
+	beginAt: function(point, scene) {
 		this.lastPoint = point;
 		this.points = [point];
 	},
@@ -166,7 +168,6 @@ drawing = {                   // live drawing by mouse
 		var points = simplify(this.points, 10, true);
 		var object;
 		if (points.length >= 3) {
-			clear();
 			object = new Soundzone(points);
 		}
 		// else {}                       // not enough points = a sound OBJECT
