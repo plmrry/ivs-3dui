@@ -58,16 +58,6 @@ function mouse({ dom$ }) {
 
 function main({ renderers, dom, scenes, cameras, raycasters }) {
 	
-	// raycasters
-	// 	.select({ name: 'main' })
-	// 	.pluck('event$')
-	// 	.flatMapLatest(obs => obs)
-	// 	.pluck('intersect_groups')
-	// 	.flatMap(arr => stream.from(arr))
-	// 	.filter(d => d.key === 'children')
-	// 	.pluck('intersects', '0', 'point')
-	// 	.subscribe(log);
-	
 	const cameras_model_proxy$ = new Rx.Subject();
 	
 	const camera_is_birds_eye$ = cameras_model_proxy$
@@ -76,11 +66,94 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.pluck('lat_lng', 'is_max_lat')
 		.distinctUntilChanged()
 		.do(debug('event:camera-is-top'))
-		// .subscribe();
+		.shareReplay(1);
 		
 	const add_object_click$ = dom
 		.select('#add-object')
-		.events('click');
+		.events('click')
+		.shareReplay(1);
+		
+	const main_raycaster$ = raycasters
+		.select({ name: 'main' })
+		.pluck('event$')
+		.flatMapLatest(obs => obs)
+		.distinctUntilChanged()
+		.shareReplay();
+		
+	const main_dragstart$ = main_raycaster$
+		.filter(({ event }) => event.type === 'dragstart');
+		
+	const add_button_update$ = add_object_click$
+		.map(ev => state => {
+			state.ready = true;
+			return state;
+		});
+		
+	const birds_eye_update$ = camera_is_birds_eye$
+		.map(value => state => {
+			state.camera_is_top = value;
+			return state;
+		});
+		
+	const main_dragstart_update$ = main_dragstart$
+		.map(ev => state => {
+			if (state.ready === true && state.camera_is_top === true) {
+				state.adding = true;
+			}
+			state.ready = false;
+			return state;
+		});
+		
+	const add_object_proxy$ = new Rx.Subject();
+	
+	const cancel_add$ = add_object_proxy$
+		.map(ev => state => {
+			if (state.adding === true) {
+				state.adding = false;
+			}
+			state.ready = false;
+			return state;
+		});
+		
+	const add_state$ = stream
+		.merge(
+			add_button_update$,
+			birds_eye_update$,
+			main_dragstart_update$,
+			cancel_add$
+		)
+		.startWith({
+			ready: false,
+			camera_is_top: false,
+			adding: false
+		})
+		.scan(apply);
+		
+	const floor_click_point$ = main_raycaster$
+		.pairwise()
+		.filter(arr => arr[0].event.type === 'dragstart')
+		.filter(arr => arr[1].event.type === 'dragend')
+		.pluck('1')
+		.pluck('intersect_groups')
+		.flatMapLatest(arr => stream.from(arr))
+		.pluck('intersects')
+		.flatMapLatest(arr => stream.from(arr))
+		.filter(({ object }) => object.name === 'floor')
+		.pluck('point');
+		
+	const add_object$ = floor_click_point$
+		.withLatestFrom(
+			add_state$.pluck('adding'),
+			(floor, add) => ({ floor, add })
+		)
+		.filter(({ floor, add }) => add)
+		.map(position => ({
+			event: 'add-object',
+			position
+		}))
+		.do(debug('event:add-object'));
+		
+	add_object$.subscribe(add_object_proxy$);
 		
 	const auto_birds_eye$ = add_object_click$
 		.withLatestFrom(
@@ -102,22 +175,7 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 			scope: 'camera',
 			event: 'move-to-birds-eye'
 		}))
-		.do(debug('event:move-camera'));
-		
-	// const await_ready_add$ = add_object_click$
-	// 	.startWith(false)
-	// 	.scan(d => !d)
-	// 	.do(d => debug('event:await-ready-add')(d));
-	// 	// .subscribe();
-		
-	// const ready_add$ = stream
-	// 	.combineLatest(
-	// 		await_ready_add$,
-	// 		camera_is_birds_eye$
-	// 	)
-	// 	.map(arr => arr.every(d => d))
-	// 	.do(debug('event:ready-add'))
-	// 	.subscribe();
+		.do(d => debug('event:move-camera')(d.event));
 
 	const size$ = windowSize(dom);
 	const editor_size$ = stream
