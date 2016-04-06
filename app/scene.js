@@ -13,7 +13,7 @@ const room_size = {
 	height: 3
 };
 
-export function component2({ dom }) {
+export function component2({ dom, raycasters }) {
 	const main_scene_model$ = stream
 		.of({
 			name: 'main',
