@@ -155,10 +155,34 @@ export function component({ renderers, selected$, size$ }) {
 		.select({ name: 'main' })
 		.map(renderer => renderer.domElement);
 		
+	// const editor_dom$ = selected$
+	// 	.map(s => {
+	// 		if (typeof s === 'undefined' || s === null) return [];
+	// 		return [s];
+	// 	});
+	
 	const editor_dom$ = selected$
-		.map(s => {
-			if (typeof s === 'undefined' || s === null) return [];
-			return [s];
+		.withLatestFrom(
+			renderers.select({ name: 'editor' }),
+			(s, r) => ({ selected: s, renderer: r })
+		)
+		.map(({ selected, renderer }) => {
+			if (typeof selected === 'undefined') return [];
+			const cards = [
+				{ 
+					canvases: [ { node: renderer.domElement } ],
+					style: {
+						position: 'relative'
+					},
+					buttons: [
+						{
+							id: 'add-cone',
+							text: 'add cone'
+						}
+					]
+				}
+			];
+			return cards;
 		});
 		
 	const dom_model$ = model({ main_canvas$, editor_dom$, size$ });

@@ -53,31 +53,7 @@ function scoped_sound_object(id, position) {
 				cones: [],
 			})
 			.scan(apply)
-			.do(log)
 			.shareReplay(1);
-			
-		// const update$ = stream
-		// 	.merge(
-		// 		actions.select_object$
-		// 	)
-		// const model$ = stream
-		// 	.of({
-		// 		key: id,
-		// 		class: 'sound_object',
-		// 		type: 'sound_object',
-		// 		name: 'sound_object',
-		// 		position: {
-		// 			x: position.x,
-		// 			y: position.y,
-		// 			z: position.z
-		// 		},
-		// 		volume: Math.random() + 0.4,
-		// 		material: {
-		// 			color: 'ffffff'
-		// 		},
-		// 		cones: [],
-		// 	})
-		// 	.shareReplay(1);
 			
 		return {
 			id,
@@ -86,21 +62,34 @@ function scoped_sound_object(id, position) {
 	};
 }
 
-export function component2({ scene_actions }) {
-	
+export function model({ scene_actions, renderers }) {
 	const new_object$ = scene_actions.add_object$
 		.pluck('position')
-		.map((position, index) => array => {
-			const new_obj = scoped_sound_object(index, position)({ actions: scene_actions });
-			return array.concat(new_obj);
+		.map((position, index) => {
+			return scoped_sound_object(index, position)({ actions: scene_actions });
 		})
+		.shareReplay(1);
 		
-	const sound_objects$ = new_object$
+	const added_object$ = new Rx.Subject();
+		
+	const add_new_object$ = new_object$ 
+		.map(new_obj => array => {
+			return array.concat(new_obj);
+		});
+		
+	const sound_object_obs$ = add_new_object$
 		.startWith([])
 		.scan(apply)
-		.map(arr => arr.map(d => d.model$))
+		.map(arr => arr.map(d => d.model$));
+		
+	const sound_objects$ = sound_object_obs$
 		.flatMapLatest(stream.combineLatest)
-		.startWith([]);
+		.startWith([])
+		.shareReplay()
+		
+	const selected$ = sound_objects$
+		.map(arr => arr.filter(d => d.selected)[0])
+		.shareReplay()
 		
 	const main_scene_model$ = sound_objects$
 		.map(sound_objects => {
@@ -115,12 +104,24 @@ export function component2({ scene_actions }) {
 			};
 		});
 		
-	const editor_scene_model$ = stream
-		.of({
-			name: 'editor',
-			screens: [
-				{}
-			]
+	const editor_sound_objects_model$ = selected$
+		.map(obj => {
+			if (typeof obj !== 'undefined') {
+				obj.position = undefined;
+				return [obj];
+			}
+			else return [];
+		});
+		
+	const editor_scene_model$ = editor_sound_objects_model$
+		.map(sound_objects => {
+			return {
+				name: 'editor',
+				sound_objects,
+				screens: [
+					{}
+				]
+			};
 		});
 		
 	const scenes_model$ = stream
@@ -129,10 +130,67 @@ export function component2({ scene_actions }) {
 			editor_scene_model$
 		);
 		
-	const scenes_state_reducer$ = view(scenes_model$);
-	
-	return scenes_state_reducer$;
+	return {
+		scenes_model$,
+		new_object$,
+		selected$
+	};
 }
+
+// export function component2({ scene_actions }) {
+	
+// 	// const new_object$ = scene_actions.add_object$
+// 	// 	.pluck('position')
+// 	// 	.map((position, index) => {
+// 	// 		return scoped_sound_object(index, position)({ actions: scene_actions });
+// 	// 	})
+// 	// 	.shareReplay(1);
+		
+// 	// const add_new_object$ = new_object$ 
+// 	// 	.map(new_obj => array => {
+// 	// 		return array.concat(new_obj);
+// 	// 	});
+		
+// 	// const sound_objects$ = add_new_object$
+// 	// 	.startWith([])
+// 	// 	.scan(apply)
+// 	// 	.map(arr => arr.map(d => d.model$))
+// 	// 	.flatMapLatest(stream.combineLatest)
+// 	// 	.startWith([]);
+		
+// 	// const main_scene_model$ = sound_objects$
+// 	// 	.map(sound_objects => {
+// 	// 		return {
+// 	// 			name: 'main',
+// 	// 			floors: [
+// 	// 				{
+// 	// 					name: 'floor'
+// 	// 				}
+// 	// 			],
+// 	// 			sound_objects
+// 	// 		};
+// 	// 	});
+		
+// 	// const editor_scene_model$ = stream
+// 	// 	.of({
+// 	// 		name: 'editor',
+// 	// 		screens: [
+// 	// 			{}
+// 	// 		]
+// 	// 	});
+		
+// 	// const scenes_model$ = stream
+// 	// 	.combineLatest(
+// 	// 		main_scene_model$,
+// 	// 		editor_scene_model$
+// 	// 	);
+		
+// 	const { scenes_model$ } = model({ scene_actions });
+		
+// 	const scenes_state_reducer$ = view(scenes_model$);
+	
+// 	return scenes_state_reducer$;
+// }
 
 export function component({ dom, main_intersects$, editor_intersects$ }) {
 		

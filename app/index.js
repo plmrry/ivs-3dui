@@ -24,6 +24,14 @@ Rx.config.longStackSupport = true;
 function main({ renderers, dom, scenes, cameras, raycasters }) {
 	
 	const cameras_model_proxy$ = new Rx.Subject();
+	const add_object_proxy$ = new Rx.Subject();
+	const new_object_proxy$ = new Rx.ReplaySubject();
+	
+	const new_object_id$ = new_object_proxy$
+		.pluck('id')
+		.shareReplay(1);
+		
+	new_object_id$.subscribe();
 	
 	const camera_is_birds_eye$ = cameras_model_proxy$
 		.flatMap(arr => stream.from(arr))
@@ -58,9 +66,13 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 			/** TODO: Better way of selecting parent when child cone is clicked? */
 			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
 			return undefined;
-		})
+		});
 		
-	const select_object$ = dragstart_key$
+	const select_object$ = stream
+		.merge(
+			dragstart_key$
+		  // new_object_id$.do(d => console.log('cccc'))
+		)
 		.map(key => {
 			return {
 				event: 'select-object',
@@ -69,17 +81,17 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		})
 		.shareReplay(1);
 		
-	const unselect_object$ = dragstart_key$
-		.pairwise()
-		.pluck('0')
-		.filter(key => typeof key !== 'undefined')
-		.map(key => {
-			return {
-				event: 'unselect-object',
-				key
-			};
-		})
-		.shareReplay(1);
+	// const unselect_object$ = dragstart_key$
+	// 	.pairwise()
+	// 	.pluck('0')
+	// 	.filter(key => typeof key !== 'undefined')
+	// 	.map(key => {
+	// 		return {
+	// 			event: 'unselect-object',
+	// 			key
+	// 		};
+	// 	})
+	// 	.shareReplay(1);
 		// .flatMapLatest(arr => stream.from(arr))
 		// .subscribe(log)
 		
@@ -103,9 +115,7 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 			state.ready = false;
 			return state;
 		});
-		
-	const add_object_proxy$ = new Rx.Subject();
-	
+
 	const cancel_add$ = add_object_proxy$
 		.map(ev => state => {
 			if (state.adding === true) {
@@ -193,19 +203,18 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		});
 	const renderers_state_reducer$ = renderer
 		.component({ size$ });
+
+	const { scenes_model$, new_object$, selected$ } = scene.model({ scene_actions, renderers });
+	new_object$.subscribe(new_object_proxy$);
+	const scenes_state_reducer$ = scene.view(scenes_model$);
+	
 	const dom_state_reducer$ = dom_component
 		.component({ 
 			renderers, 
-			selected$: stream.of(undefined),
+			selected$,
 			size$
 		});
-	const scenes_state_reducer$ = scene
-		/** TODO: Rename to component */
-		.component2({ 
-			dom, 
-			raycasters,
-			scene_actions
-		});
+	
 	const cameras_model$ = camera
 		.model({ 
 			dom, 
@@ -215,10 +224,12 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		});
 	cameras_model$.subscribe(cameras_model_proxy$);
 	const cameras_state_reducer$ = camera.view(cameras_model$);
+	
 	const raycasters_state_reducer$ = raycaster
 		.component({
 			dom, cameras, scenes
 		});
+		
 	const render_sets$ = getRenderSets();
 	const render_function$ = renderFunction({
 		renderers,
@@ -226,6 +237,7 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		cameras,
 		render_sets$
 	});
+	
 	return {
 		renderers: renderers_state_reducer$,
 		scenes: scenes_state_reducer$,
