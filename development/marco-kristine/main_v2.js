@@ -149,8 +149,10 @@ function Main() {
             if (activeObject && activeObject.isUnderMouse(ray)) {
                 // click inside active object
                 var intersect = activeObject.objectUnderMouse(ray);
-                if (intersect)
+                if (intersect) {
                     setSelectedObject(intersect.object);
+                    activeObject.setMouseOffset(intersect.point);
+                }
             }
             else {
                 // click outside active object
@@ -195,10 +197,18 @@ function Main() {
                 drawing.addPoint(pointer);
             }
         }
-        else {
+        else if (activeObject) {
             ray.setFromCamera(mouse, camera);
-            if (activeObject) {
-                var intersection = activeObject.objectUnderMouse(ray);
+            var intersection = activeObject.objectUnderMouse(ray);
+
+            if (isMouseDown === true && selectedObject === activeObject.shape) {
+                // click+drag
+                // FIX intersection.point should be raycast to FLOOR (which does not exist), not to object
+                if (intersection)
+                    activeObject.move(intersection.point);
+            }
+            else {
+                // hover cursor
 
                 if (intersection && intersection.object.type === 'Line') {
                     activeObject.showCursor();
@@ -207,12 +217,7 @@ function Main() {
                 else {
                     activeObject.showCursor(false);
                 }
-
             }
-
-
-
-
 
         }
     }
