@@ -200,9 +200,9 @@ function Main() {
         else if (activeObject) {
             var intersection = activeObject.objectUnderMouse(ray);
 
-            if (isMouseDown === true && selectedObject === activeObject.shape) {
+            if (isMouseDown === true) {
                 // click+drag
-                activeObject.move(mouse);
+                activeObject.move(mouse, selectedObject);
             }
             else {
                 // hover cursor over line

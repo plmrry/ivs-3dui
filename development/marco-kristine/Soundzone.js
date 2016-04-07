@@ -132,20 +132,34 @@ Soundzone.prototype = {
 		this.mouseOffsetX = point.x,
 		this.mouseOffsetY = point.y;
 	},
-	move: function(point) {
-		this.deselectPoint();
-		var dx = point.x - this.mouseOffsetX;
-		var dy = point.y - this.mouseOffsetY;
-		this.mouseOffsetX = point.x, this.mouseOffsetY = point.y;
+	move: function(point, obj) {
+		if (obj === this.shape) {
+			// move entire shape
+			this.deselectPoint();
+			var dx = point.x - this.mouseOffsetX;
+			var dy = point.y - this.mouseOffsetY;
+			this.mouseOffsetX = point.x, this.mouseOffsetY = point.y;
 
-		this.objects.forEach(function(obj) {
-			obj.position.x += dx;
-			obj.position.y += dy;
-		});
-		this.splinePoints.forEach(function(pt) {
-			pt.x += dx;
-			pt.y += dy;
-		})
+			this.objects.forEach(function(obj) {
+				obj.position.x += dx;
+				obj.position.y += dy;
+			});
+			this.splinePoints.forEach(function(pt) {
+				pt.x += dx;
+				pt.y += dy;
+			});
+
+		} else {
+			// move selected point
+			console.log(this.selectedPoint);
+			var i = this.pointObjects.indexOf(this.selectedPoint);
+			if (i > -1) {
+				this.showCursor(false);
+				this.splinePoints[i].copy(point);
+				this.updateShape();
+				this.selectPoint(this.pointObjects[i]);
+			}
+		}
 	},
 
 	setCursor: function(point) {
