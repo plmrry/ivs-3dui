@@ -125,20 +125,104 @@ function scoped_sound_object(id, position) {
 	};
 }
 
-export function model(actions) {
+export function intent({ dom, raycasters, main_raycaster$, camera_is_birds_eye$, new_object_proxy$, add_object_click$ }) {
 	
-	// const _selected$ = actions.selected$
-	// 	.map()
-	// 	.subscribe(log);
+	const add_object_mode$ = stream
+		.merge(
+			add_object_click$.map(ev => true),
+			new_object_proxy$.map(ev => false)
+		)
+		.startWith(false)
+		.shareReplay(1);
+	
+	// const camera_is_birds_eye$ = cameras_model_proxy$
+	// 	.flatMap(arr => stream.from(arr))
+	// 	.filter(d => d.name === 'main')
+	// 	.pluck('lat_lng', 'is_max_lat')
+	// 	.distinctUntilChanged()
+	// 	.do(debug('event:camera-is-top'))
+	// 	.shareReplay(1);
+	
+	const add_object$ = main_raycaster$
+		.pairwise()
+		.filter(arr => arr[0].event.type === 'dragstart')
+		.filter(arr => arr[1].event.type === 'dragend')
+		.pluck('1')
+		.pluck('intersect_groups')
+		.flatMapLatest(arr => stream.from(arr))
+		.pluck('intersects')
+		.flatMapLatest(arr => stream.from(arr))
+		.filter(({ object }) => object.name === 'floor')
+		.pluck('point')
+		.withLatestFrom(
+			add_object_mode$,
+			camera_is_birds_eye$,
+			(point, mode, birds) => ({ point, mode, birds })
+		)
+		.filter(({ point, mode, birds}) => mode === true && birds === true)
+		.pluck('point');
+		
+	const new_object_key$ = new_object_proxy$
+		.pluck('id');
+		
+	const select_object$ = main_raycaster$
+		.filter(({ event }) => event.type === 'dragstart')
+		.withLatestFrom(
+			add_object_mode$,
+			(event, mode) => ({ event, mode })
+		)
+		.filter(({ event, mode }) => mode !== true)
+		.pluck('event', 'intersect_groups')
+		.flatMapLatest(arr => stream.from(arr))
+		.pluck('intersects', '0', 'object')
+		.map(obj => {
+			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
+			/** TODO: Better way of selecting parent when child cone is clicked? */
+			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
+			return undefined;
+		})
+		.merge(new_object_key$);
+		
+	const add_cone$ = dom
+		.select('#add-cone')
+		.events('click')
+		.withLatestFrom(
+			select_object$,
+			(ev, selected) => selected
+		)
+		.shareReplay(1);
+		
+	const editor_raycaster$ = raycasters
+		.select({ name: 'editor' })
+		.pluck('event$')
+		.flatMapLatest(obs => obs)
+		.distinctUntilChanged();
+		
+	const editor_mousemove_panel$ = editor_raycaster$
+		.pluck('intersect_groups')
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.key === 'children')
+		.pluck('intersects', '0', 'point');
+		
+	const interactive_cone_lookat$ = editor_mousemove_panel$
+		.withLatestFrom(
+			// selected_proxy$,
+			select_object$,
+			(point, selected) => ({ object_key: selected, point })
+		);
+	
+	return {
+		add_object$,
+		add_cone$,
+		select_object$,
+		interactive_cone_lookat$
+	};
+}
+
+export function model(actions) {
 	
 	const new_object$ = actions.add_object$
 		.map((position, id) => {
-			// const id = index;
-			// const actions$ = actions.selected$
-			// 	.filter(key => key === id)
-			// 	.map(key => ({
-			// 		add_cone$: actions.add_cone$
-			// 	}));
 			return scoped_sound_object(id, position)(actions);
 		})
 		.shareReplay(1);
