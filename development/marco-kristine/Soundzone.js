@@ -9,6 +9,7 @@ var Soundzone = function(points) {
 	this.shape;
 
 	this.cursor;
+	this.selectedPoint;
 	this.mouseOffsetX = 0, this.mouseOffsetY = 0;
 
 	var geometry, material;
@@ -18,22 +19,22 @@ var Soundzone = function(points) {
 		// setup
 		var cube = new THREE.BoxGeometry( 5, 5, 5 );		
 		var cubeMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
-		var cubeMesh = new THREE.Mesh( cube, cubeMat );
 		
-		var collider = new THREE.SphereGeometry(10);
+		var collider = new THREE.SphereGeometry(15);
 		var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
 		var colliderMesh = new THREE.Mesh( collider, colliderMat );
-
-		var group = new THREE.Object3D();
-		group.add(cubeMesh, colliderMesh);
 
 		// place a meshgroup at each point in array
 		var pointObjects = [];
 		points.forEach(function(point) {
+			var cubeMesh = new THREE.Mesh( cube, cubeMat.clone() );
+			var group = new THREE.Object3D();
+
+			group.add(cubeMesh, colliderMesh.clone());
 			group.position.x = point.x,
 			group.position.y = point.y;
 
-			pointObjects.push(group.clone());
+			pointObjects.push(group);
 		})
 
 
@@ -121,10 +122,7 @@ Soundzone.prototype = {
 			if (intersects[0].object.type === 'Line') {
 				return intersects[Math.floor(intersects.length/2)];
 			}
-/*			else if (intersects[0].object.parent.type === 'Object3D') {
-				return intersects[0];
-			}
-*/			else
+			else
 				return intersects[0];
 		}
 		return null;
@@ -165,6 +163,7 @@ Soundzone.prototype = {
 	},
 
 	setInactive: function() {
+		this.deselectPoint();
 		this.isActive = false;
 		this.pointObjects.forEach(function(obj) {
 			obj.visible = false;
@@ -172,11 +171,17 @@ Soundzone.prototype = {
 		this.spline.mesh.visible = false;
 	},
 
-	setSelected: function(obj) {
-
+	selectPoint: function(obj) {
+		this.deselectPoint();
+		this.selectedPoint = obj;
+		console.log('selected ',obj);
+		obj.children[0].material.color.set('blue');
 	},
-	setDeselected: function(obj) {
-
+	deselectPoint: function() {
+		if (this.selectedPoint) {
+			this.selectedPoint.children[0].material.color.set('red');
+			this.selectedPoint = null;
+		}
 	},
 	addPoint: function(position) {
 
@@ -205,6 +210,16 @@ Soundzone.prototype = {
 //		console.log(minPoint);
 
 		this.splinePoints.splice(minPoint, 0, position);
+		var obj = new Soundzone(this.splinePoints);
+		obj.selectPoint(obj.pointObjects[minPoint]);
+		return obj;
+	},
+	removePoint: function() {
+		var obj = this.selectedPoint;
+		this.deselectPoint();
+		// find point in array
+		var i = this.pointObjects.indexOf(obj);
+		this.splinePoints.splice(i,1);
 		return new Soundzone(this.splinePoints);
 	}
 }

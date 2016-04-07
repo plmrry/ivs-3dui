@@ -101,7 +101,9 @@ function Main() {
         if (obj && obj.material && obj.material.color) {
             obj.material.color.set(0x0000ff);
         }
-
+        
+        if (activeObject)
+            activeObject.setMouseOffset(mouse);
         selectedObject = obj;
     }
     var setActiveObject = function(obj) {
@@ -139,7 +141,6 @@ function Main() {
                 var intersect = activeObject.objectUnderMouse(ray);
                 if (intersect) {
                     setSelectedObject(intersect.object);
-                    activeObject.setMouseOffset(mouse);
 
                     if (selectedObject.type === 'Line') {
                         // add a point to the line
@@ -151,14 +152,20 @@ function Main() {
                         setActiveObject(updatedSoundzone);
                         soundzones.push(updatedSoundzone);
                     }
+                    else if (selectedObject.parent.type === 'Object3D') {
+                        // select an existing point on the line
+                        activeObject.selectPoint(selectedObject.parent);
+                    }
                 }
             }
             else {
                 // click outside active object
                 setSelectedObject(null);
                 var intersects = soundzones.filter(obj => obj.isUnderMouse(ray));
-                if (intersects.length > 0)
+                if (intersects.length > 0) {
                     setActiveObject(intersects[0]);
+                    setSelectedObject(intersects[0].shape);
+                }
                 else
                     setActiveObject(null);
             }
@@ -210,6 +217,11 @@ function Main() {
                     activeObject.showCursor();
                     activeObject.setCursor(intersection.point);
                 }
+                else if (intersection && intersection.object.parent.type === 'Object3D') {
+                    activeObject.showCursor();
+                    activeObject.setCursor(intersection.object.parent.position);
+
+                }
                 else {
                     activeObject.showCursor(false);
                 }
@@ -222,15 +234,35 @@ function Main() {
     var onKeyDown = function(e) {
         var key = e.keyCode || e.which;
         switch(key) {
-            case 8:         // backspace
-            case 46:        // delete
+            case 8: case 46:    // backspace, delete
                 e.preventDefault();
                 if (activeObject && activeObject.type === 'Soundzone') {
-                    if (confirm('Delete object?')) {
+                    // delete a spline point in the object
+                    if (activeObject.selectedPoint) {
+
+                        // FIX | should update spline mesh in Soundzone.js 
+                        //       instead of creating new zone :\\\\
+                        var updatedSoundzone = activeObject.removePoint();
+                        removeSoundzone(activeObject);
+                        updatedSoundzone.addToScene(scene);
+                        soundzones.push(updatedSoundzone);
+                        activeObject = updatedSoundzone;
+                    }
+                    else if (confirm('Delete object?')) {
                         removeSoundzone(activeObject);
                         activeObject = null;
                     }
                 }
+                break;
+            case 27: case 81:   // esc, 'Q': cancel add
+                if (isAdding && !isMouseDown)
+                    toggleAdd();
+                break;
+
+            case 65:            // 'A': add shortcut
+                if (!isAdding)
+                    toggleAdd();
+                break;
             default:
 //                console.log(key);
         }
