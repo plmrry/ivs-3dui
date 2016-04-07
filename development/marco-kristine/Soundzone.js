@@ -48,32 +48,37 @@ var Soundzone = function(points) {
 	);
 	this.cursor.visible = false;
 
-	// a soundzone is a closed, filled path
-	// trajectory may need to be modified for this
-	this.spline = new THREE.CatmullRomCurve3(points);
-	this.spline.type = 'centripetal';
-	this.spline.closed = true;
-	geometry = new THREE.Geometry();
-	geometry.vertices = this.spline.getPoints(200);
-	material = new THREE.LineBasicMaterial({
-		color: 0xff0000,
-		linewidth:1,
-		transparent:true,
-		opacity:0.4
-	});
-	this.spline.mesh = new THREE.Line( geometry, material );
 
-	var shape = new THREE.Shape(); /////// the algorithm used by three.js is not very robust, consider replacing with earcut
-	shape.fromPoints(geometry.vertices);
-	geometry = new THREE.ShapeGeometry(shape);
-	material = new THREE.MeshPhongMaterial({
-		color: 0xff0000,
-		transparent: true,
-		opacity: 0.2,
-		side: THREE.DoubleSide,
-		depthWrite: false
-	});
-	this.shape = new THREE.Mesh(geometry,material);
+	this.renderPath = function() {
+		// a soundzone is a closed, filled path
+		// trajectory may need to be modified for this
+		this.spline = new THREE.CatmullRomCurve3(this.splinePoints);
+		this.spline.type = 'centripetal';
+		this.spline.closed = true;
+		geometry = new THREE.Geometry();
+		geometry.vertices = this.spline.getPoints(200);
+		material = new THREE.LineBasicMaterial({
+			color: 0xff0000,
+			linewidth:1,
+			transparent:true,
+			opacity:0.4
+		});
+		this.spline.mesh = new THREE.Line( geometry, material );
+
+		// fill the path
+		var shape = new THREE.Shape();
+		shape.fromPoints(geometry.vertices);
+		geometry = new THREE.ShapeGeometry(shape);
+		material = new THREE.MeshPhongMaterial({
+			color: 0xff0000,
+			transparent: true,
+			opacity: 0.2,
+			side: THREE.DoubleSide,
+			depthWrite: false
+		});
+		this.shape = new THREE.Mesh(geometry,material);
+	}
+	this.renderPath();
 }
 
 
@@ -96,7 +101,6 @@ Soundzone.prototype = {
 	    scene.add(this.cursor);
 	},
 	removeFromScene: function(scene) {
-		this.setInactive();
 		this.objects.forEach(obj => scene.remove(obj, true));
 		scene.remove(this.cursor);
 	},
@@ -174,9 +178,6 @@ Soundzone.prototype = {
 	setDeselected: function(obj) {
 
 	},
-/*		for (var i=0; i < 1; i+= 0.05) {
-			var dist = this.spline.getPoint(i).distanceToSquared(position);
-*/
 	addPoint: function(position) {
 
 		var closestSplinePoint = 0;
@@ -185,7 +186,7 @@ Soundzone.prototype = {
 		var minPoint = 1;
 
 		// search for point on spline
-		for (var t=0; t < 1; t+=0.01) {
+		for (var t=0; t < 1; t+=1/200.0) {
 			var pt = this.spline.getPoint(t);
 
 			var distToSplinePoint = this.splinePoints[closestSplinePoint].distanceToSquared(pt);
@@ -201,7 +202,7 @@ Soundzone.prototype = {
 				minPoint = closestSplinePoint;
 			}
 		}
-		console.log(minPoint);
+//		console.log(minPoint);
 
 		this.splinePoints.splice(minPoint, 0, position);
 		return new Soundzone(this.splinePoints);

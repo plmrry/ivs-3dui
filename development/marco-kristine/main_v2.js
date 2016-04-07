@@ -106,17 +106,6 @@ function Main() {
         }
         if (obj && obj.material && obj.material.color) {
             obj.material.color.set(0x0000ff);
-
-            if(activeObject.type == 'Soundzone' && obj.type == 'Line') {
-                //console.log(activeObject);
-                var updatedSoundzone = activeObject.addPoint(pointer);
-                activeObject.removeFromScene(scene);
-
-                updatedSoundzone.addToScene(scene);
-                setActiveObject(updatedSoundzone);
-                console.log('added object: ', updatedSoundzone);
-                soundzones.push(updatedSoundzone);
-            }
         }
 
         selectedObject = obj;
@@ -130,6 +119,12 @@ function Main() {
         if (obj && obj.type === 'Soundzone') {
             obj.setActive();
         }
+    }
+
+    var removeSoundzone = function(soundzone) {
+        soundzone.removeFromScene(scene);
+        var i = soundzones.indexOf(soundzone);
+        soundzones.splice(i,1);
     }
 
     //////////////
@@ -152,6 +147,17 @@ function Main() {
                 if (intersect) {
                     setSelectedObject(intersect.object);
                     activeObject.setMouseOffset(pointer);
+
+                    if (selectedObject.type === 'Line') {
+                        // add a point to the line
+                        // currently replaces entire soundzone with new object
+                        var updatedSoundzone = activeObject.addPoint(intersect.point);
+                        removeSoundzone(activeObject);
+
+                        updatedSoundzone.addToScene(scene);
+                        setActiveObject(updatedSoundzone);
+                        soundzones.push(updatedSoundzone);
+                    }
                 }
             }
             else {
@@ -206,7 +212,7 @@ function Main() {
                 activeObject.move(pointer);
             }
             else {
-                // hover cursor
+                // hover cursor over line
 
                 if (intersection && intersection.object.type === 'Line') {
                     activeObject.showCursor();
@@ -229,9 +235,7 @@ function Main() {
                 e.preventDefault();
                 if (activeObject && activeObject.type === 'Soundzone') {
                     if (confirm('Delete object?')) {
-                        activeObject.removeFromScene(scene);
-                        var i = soundzones.indexOf(activeObject);
-                        soundzones.splice(i,1);
+                        removeSoundzone(activeObject);
                         activeObject = null;
                     }
                 }
