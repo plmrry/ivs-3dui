@@ -146,7 +146,6 @@ function Main() {
             if (isAdding) {
                 var obj = drawing.createObject();
                 if (obj && obj.type === 'Soundzone') {
-                    console.log('added object: ',obj);
                     soundzones.push(obj);
                     setActiveObject(obj);
                 }

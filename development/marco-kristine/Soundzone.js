@@ -163,7 +163,9 @@ Soundzone.prototype = {
 	setCursor: function(point) {
 		this.cursor.position.copy(point);
 	},
-	showCursor: function(bool=true) {
+	showCursor: function(bool) {
+		if (bool === undefined)
+			this.cursor.visible = true;
 		this.cursor.visible = bool;
 	},
 
