@@ -8,8 +8,8 @@ function Main() {
     var isAdding = false;
 
     var activeObject = null;       // object to edit/inspect
-                            //     (i.e., last clicked 'parent' object)
-    var selectedObject;     // object being clicked
+                                   //   (i.e., last clicked 'parent' object)
+    var selectedObject;            // object being clicked
 
 
     var floor;
@@ -36,7 +36,7 @@ function Main() {
         drawing.setScene(scene);
 
         //Adding floor
-        var geometry = new THREE.PlaneGeometry(width, height, 1 );
+        var geometry = new THREE.PlaneGeometry(width, height);
         var material = new THREE.MeshBasicMaterial( {color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide} );
         floor = new THREE.Mesh( geometry, material );
         scene.add( floor );
@@ -144,13 +144,7 @@ function Main() {
 
                     if (selectedObject.type === 'Line') {
                         // add a point to the line
-                        // currently replaces entire soundzone with new object
-                        var updatedSoundzone = activeObject.addPoint(intersect.point);
-                        removeSoundzone(activeObject);
-
-                        updatedSoundzone.addToScene(scene);
-                        setActiveObject(updatedSoundzone);
-                        soundzones.push(updatedSoundzone);
+                        activeObject.addPoint(intersect.point);
                     }
                     else if (selectedObject.parent.type === 'Object3D') {
                         // select an existing point on the line
@@ -238,15 +232,9 @@ function Main() {
                 e.preventDefault();
                 if (activeObject && activeObject.type === 'Soundzone') {
                     // delete a spline point in the object
-                    if (activeObject.selectedPoint) {
+                    if (activeObject.selectedPoint && activeObject.splinePoints.length > 3) {
 
-                        // FIX | should update spline mesh in Soundzone.js 
-                        //       instead of creating new zone :\\\\
-                        var updatedSoundzone = activeObject.removePoint();
-                        removeSoundzone(activeObject);
-                        updatedSoundzone.addToScene(scene);
-                        soundzones.push(updatedSoundzone);
-                        activeObject = updatedSoundzone;
+                        activeObject.removePoint();
                     }
                     else if (confirm('Delete object?')) {
                         removeSoundzone(activeObject);
@@ -254,7 +242,9 @@ function Main() {
                     }
                 }
                 break;
-            case 27: case 81:   // esc, 'Q': cancel add
+            case 27:            // esc: cancel selection/add
+                setActiveObject(null);
+            case 81:            // 'Q': cancel add
                 if (isAdding && !isMouseDown)
                     toggleAdd();
                 break;

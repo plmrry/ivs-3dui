@@ -8,39 +8,10 @@ var Soundzone = function(points) {
 	this.spline;
 	this.shape;
 
-	this.cursor;
 	this.selectedPoint;
 	this.mouseOffsetX = 0, this.mouseOffsetY = 0;
 
 	var geometry, material;
-
-	// splinePoints control the curve of the path
-	this.pointObjects = (function() {
-		// setup
-		var cube = new THREE.BoxGeometry( 5, 5, 5 );		
-		var cubeMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
-		
-		var collider = new THREE.SphereGeometry(15);
-		var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
-		var colliderMesh = new THREE.Mesh( collider, colliderMat );
-
-		// place a meshgroup at each point in array
-		var pointObjects = [];
-		points.forEach(function(point) {
-			var cubeMesh = new THREE.Mesh( cube, cubeMat.clone() );
-			var group = new THREE.Object3D();
-
-			group.add(cubeMesh, colliderMesh.clone());
-			group.position.x = point.x,
-			group.position.y = point.y;
-
-			pointObjects.push(group);
-		})
-
-
-		return pointObjects;
-	
-	})();
 
 	// cursor indicates which location/obj the mouse is pointed at
 	this.cursor = new THREE.Mesh(
@@ -51,6 +22,35 @@ var Soundzone = function(points) {
 
 
 	this.renderPath = function() {
+		// splinePoints control the curve of the path
+		var points = this.splinePoints;
+		this.pointObjects = (function() {
+			// setup
+			var cube = new THREE.BoxGeometry( 5, 5, 5 );		
+			var cubeMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
+			
+			var collider = new THREE.SphereGeometry(15);
+			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
+			var colliderMesh = new THREE.Mesh( collider, colliderMat );
+
+			// place a meshgroup at each point in array
+			var pointObjects = [];
+			points.forEach(function(point) {
+				var cubeMesh = new THREE.Mesh( cube, cubeMat.clone() );
+				var group = new THREE.Object3D();
+
+				group.add(cubeMesh, colliderMesh.clone());
+				group.position.x = point.x,
+				group.position.y = point.y;
+
+				pointObjects.push(group);
+			})
+
+
+			return pointObjects;
+		
+		})();
+
 		// a soundzone is a closed, filled path
 		// trajectory may need to be modified for this
 		this.spline = new THREE.CatmullRomCurve3(this.splinePoints);
@@ -133,6 +133,7 @@ Soundzone.prototype = {
 		this.mouseOffsetY = point.y;
 	},
 	move: function(point) {
+		this.deselectPoint();
 		var dx = point.x - this.mouseOffsetX;
 		var dy = point.y - this.mouseOffsetY;
 		this.mouseOffsetX = point.x, this.mouseOffsetY = point.y;
@@ -164,6 +165,7 @@ Soundzone.prototype = {
 
 	setInactive: function() {
 		this.deselectPoint();
+		this.showCursor(false);
 		this.isActive = false;
 		this.pointObjects.forEach(function(obj) {
 			obj.visible = false;
@@ -174,7 +176,6 @@ Soundzone.prototype = {
 	selectPoint: function(obj) {
 		this.deselectPoint();
 		this.selectedPoint = obj;
-		console.log('selected ',obj);
 		obj.children[0].material.color.set('blue');
 	},
 	deselectPoint: function() {
@@ -210,17 +211,22 @@ Soundzone.prototype = {
 //		console.log(minPoint);
 
 		this.splinePoints.splice(minPoint, 0, position);
-		var obj = new Soundzone(this.splinePoints);
-		obj.selectPoint(obj.pointObjects[minPoint]);
-		return obj;
+		this.updateShape();
+		this.selectPoint(this.pointObjects[minPoint]);
+
 	},
 	removePoint: function() {
-		var obj = this.selectedPoint;
-		this.deselectPoint();
 		// find point in array
-		var i = this.pointObjects.indexOf(obj);
+		var i = this.pointObjects.indexOf(this.selectedPoint);
 		this.splinePoints.splice(i,1);
-		return new Soundzone(this.splinePoints);
+		this.deselectPoint();
+		this.updateShape();
+	},
+	updateShape: function() {
+		var scene = this.spline.mesh.parent;
+		this.removeFromScene(scene);
+		this.renderPath();
+		this.addToScene(scene);
 	}
 }
 
