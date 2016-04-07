@@ -2,7 +2,6 @@ function Main() {
     var scene, camera, renderer;
 
     var mouse = new THREE.Vector3();
-    var pointer = new THREE.Vector3();
     var ray = new THREE.Raycaster();
 
     var isMouseDown = false;
@@ -77,24 +76,19 @@ function Main() {
     }
 
     var setMousePosition = function(e) {
-               
-        /*
-        if (isAdding === true) {
-            mouse.x = e.clientX - renderer.domElement.offsetLeft +camera.left;
-            mouse.y = e.clientY - renderer.domElement.offsetTop +camera.top;
-        }
-        */
+
         // Mouse is normalized
         var rect = renderer.domElement.getBoundingClientRect();
-        mouse.x = 2 * (e.clientX - rect.left) / rect.width - 1;
-        mouse.y = 1 - 2 * (e.clientY - rect.top) / rect.height;
+        var pointer = new THREE.Vector3();
+        pointer.x = 2 * (e.clientX - rect.left) / rect.width - 1;
+        pointer.y = 1 - 2 * (e.clientY - rect.top) / rect.height;
         
-        ray.setFromCamera( mouse, camera );   
+        ray.setFromCamera( pointer, camera );   
 
         // calculate objects intersecting the picking ray
-        var intersects = ray.intersectObject( floor );
+        var intersects = ray.intersectObjects( scene.children );
         if(intersects.length > 0) {
-            pointer = intersects[0].point;
+            mouse = intersects[0].point;
         }
     
 
@@ -135,18 +129,17 @@ function Main() {
         setMousePosition(e);
 
         if (isAdding) {
-            drawing.beginAt(pointer);
+            drawing.beginAt(mouse);
         }
         else {
             // make or cancel a selection
-            ray.setFromCamera(mouse, camera);
 
             if (activeObject && activeObject.isUnderMouse(ray)) {
                 // click inside active object
                 var intersect = activeObject.objectUnderMouse(ray);
                 if (intersect) {
                     setSelectedObject(intersect.object);
-                    activeObject.setMouseOffset(pointer);
+                    activeObject.setMouseOffset(mouse);
 
                     if (selectedObject.type === 'Line') {
                         // add a point to the line
@@ -200,16 +193,15 @@ function Main() {
 
         if (isAdding === true) {
             if (isMouseDown === true) {
-                drawing.addPoint(pointer);
+                drawing.addPoint(mouse);
             }
         }
         else if (activeObject) {
-            ray.setFromCamera(mouse, camera);
             var intersection = activeObject.objectUnderMouse(ray);
 
             if (isMouseDown === true && selectedObject === activeObject.shape) {
                 // click+drag
-                activeObject.move(pointer);
+                activeObject.move(mouse);
             }
             else {
                 // hover cursor over line
