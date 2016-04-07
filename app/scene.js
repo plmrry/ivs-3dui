@@ -8,122 +8,13 @@ import combineLatestObj from 'rx-combine-latest-obj';
 
 const stream = Rx.Observable;
 
+import { scoped_sound_object } from './soundObject.js';
+
 const room_size = {
 	width: 20,
 	length: 18,
 	height: 3
 };
-
-function scoped_cone(id) {
-	return function cone(actions) {
-		const DEFAULT_CONE_VOLUME = 1;
-		const DEFAULT_CONE_SPREAD = 0.5;
-		
-		const move_interactive_update$ = actions.move_interactive_cone$
-			.map(point => cone => {
-				if (cone.interactive === true) cone.lookAt = point;
-				return cone;
-			});
-			
-		const model_update$ = stream
-			.merge(
-				move_interactive_update$
-			);
-			
-		const model$ = model_update$
-			.startWith({
-				volume: DEFAULT_CONE_VOLUME,
-				spread: DEFAULT_CONE_SPREAD,
-				lookAt: {
-					x: Math.random(),
-					y: Math.random(),
-					z: Math.random()
-				},
-				interactive: true
-			})
-			.scan(apply)
-			.shareReplay(1);
-			
-		return {
-			id,
-			model$
-		};
-	};
-}
-
-function scoped_sound_object(id, position) {
-	return function soundObject(actions) {
-		
-		const selected$ = actions.select_object$
-			.map(key => key === id)
-			.startWith(true)
-			.shareReplay();
-			
-		const position$ = stream.of(position);
-		
-		const volume$ = stream.of(Math.random() + 0.4);
-		
-		const move_interactive_cone$ = actions.interactive_cone_lookat$
-			.withLatestFrom(
-				selected$,
-				(event, selected) => ({ event, selected })
-			)
-			.filter(({ selected }) => selected)
-			.pluck('event', 'point');
-			
-		const cone_actions = {
-			move_interactive_cone$
-		};
-		
-		const new_cone$ = actions.add_cone$
-			.filter(key => key === id)
-			.map((ev, index) => {
-				return scoped_cone(index)(cone_actions);
-			});
-			
-		const cones$ = new_cone$
-			.map(new_cone => cones => {
-				return cones.concat(new_cone);
-			})
-			.startWith([])
-			.scan(apply)
-			.map(arr => arr.map(d => d.model$))
-			.flatMapLatest(stream.combineLatest)
-			.startWith([]);
-			
-		const color$ = selected$
-			.map(selected => selected ? '66c2ff' : 'ffffff');
-			
-		const model$ = combineLatestObj
-			({
-				cones$,
-				selected$,
-				position$,
-				volume$,
-				color$
-			})
-			.map(({ cones, selected, position, volume, color }) => ({
-				key: id,
-				name: 'sound_object',
-				position: {
-					x: position.x,
-					y: position.y,
-					z: position.z
-				},
-				volume,
-				material: {
-					color
-				},
-				cones,
-				selected
-			}));
-			
-		return {
-			id,
-			model$
-		};
-	};
-}
 
 export function intent({ dom, raycasters, main_raycaster$, camera_is_birds_eye$, new_object_proxy$, add_object_click$ }) {
 	
@@ -134,14 +25,6 @@ export function intent({ dom, raycasters, main_raycaster$, camera_is_birds_eye$,
 		)
 		.startWith(false)
 		.shareReplay(1);
-	
-	// const camera_is_birds_eye$ = cameras_model_proxy$
-	// 	.flatMap(arr => stream.from(arr))
-	// 	.filter(d => d.name === 'main')
-	// 	.pluck('lat_lng', 'is_max_lat')
-	// 	.distinctUntilChanged()
-	// 	.do(debug('event:camera-is-top'))
-	// 	.shareReplay(1);
 	
 	const add_object$ = main_raycaster$
 		.pairwise()

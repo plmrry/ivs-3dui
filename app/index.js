@@ -21,8 +21,7 @@ debug.enable('event:*');
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
-function intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ }) {
-	
+function intent({ dom, raycasters, cameras_model_proxy$ }) {
 	const main_raycaster$ = raycasters
 		.select({ name: 'main' })
 		.pluck('event$')
@@ -60,13 +59,11 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	 */ 
 	 
 	const cameras_model_proxy$ = new Rx.Subject();
-	const new_object_proxy$ = new Rx.ReplaySubject(1);
 	
 	const event_sources = {
 		dom, 
 		raycasters,
-		cameras_model_proxy$, 
-		new_object_proxy$,
+		cameras_model_proxy$
 	};
 	
 	const { 
@@ -87,6 +84,8 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	 *	SCENES
 	 */
 	 
+	const new_object_proxy$ = new Rx.ReplaySubject(1);
+	 
 	const scene_sources = {
 		dom,
 		raycasters,
@@ -95,20 +94,8 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		new_object_proxy$,
 		add_object_click$
 	};
-	 
-	const { add_object$, add_cone$, select_object$, interactive_cone_lookat$ } = scene.intent(scene_sources);
-	 
-	const scene_actions = {
-		add_object$,
-		select_object$,
-		add_cone$,
-		interactive_cone_lookat$,
-		// dom,
-		// raycasters,
-		// selected$: select_object$
-		// editor_mousemove_panel$
-		// unselect_object$
-	};
+	
+	const scene_actions = scene.intent(scene_sources);
 
 	const { scenes_model$, new_object$, selected$ } = scene.model(scene_actions);
 	
