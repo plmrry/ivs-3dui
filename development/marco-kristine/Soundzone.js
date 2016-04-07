@@ -187,7 +187,6 @@ Soundzone.prototype = {
 
 	select: function(intersect) {
 		if (!intersect) return;
-		console.log(intersect);
 
 		// obj can be the curve, a spline point, or the shape mesh
 		var obj = intersect.object;

@@ -131,8 +131,8 @@ function Main() {
                 // click outside active object
                 var intersects = soundzones.filter(obj => obj.isUnderMouse(ray));
                 if (intersects.length > 0) {
+                    intersects[0].select(intersects[0].objectUnderMouse(ray));
                     setActiveObject(intersects[0]);
-                    activeObject.select(activeObject.objectUnderMouse(ray));
                 }
                 else
                     setActiveObject(null);
