@@ -9,8 +9,6 @@ function Main() {
 
     var activeObject = null;       // object to edit/inspect
                                    //   (i.e., last clicked 'parent' object)
-    var selectedObject;            // object being clicked
-
 
     var floor;
 
@@ -86,7 +84,7 @@ function Main() {
         ray.setFromCamera( pointer, camera );   
 
         // calculate objects intersecting the picking ray
-        var intersects = ray.intersectObjects( scene.children );
+        var intersects = ray.intersectObject( floor );
         if(intersects.length > 0) {
             mouse = intersects[0].point;
         }
@@ -94,20 +92,8 @@ function Main() {
 
     }
 
-    var setSelectedObject = function(obj) {
-        if (selectedObject && selectedObject.material && selectedObject.material.color) {
-            selectedObject.material.color.set(0xff0000);
-        }
-        if (obj && obj.material && obj.material.color) {
-            obj.material.color.set(0x0000ff);
-        }
-        
-        if (activeObject)
-            activeObject.setMouseOffset(mouse);
-        selectedObject = obj;
-    }
     var setActiveObject = function(obj) {
-        if (activeObject) {
+        if (activeObject && activeObject.type === 'Soundzone') {
             activeObject.setInactive();
         }
         activeObject = obj;
@@ -139,26 +125,14 @@ function Main() {
             if (activeObject && activeObject.isUnderMouse(ray)) {
                 // click inside active object
                 var intersect = activeObject.objectUnderMouse(ray);
-                if (intersect) {
-                    setSelectedObject(intersect.object);
-
-                    if (selectedObject.type === 'Line') {
-                        // add a point to the line
-                        activeObject.addPoint(intersect.point);
-                    }
-                    else if (selectedObject.parent.type === 'Object3D') {
-                        // select an existing point on the line
-                        activeObject.selectPoint(selectedObject.parent);
-                    }
-                }
+                activeObject.select(intersect);
             }
             else {
                 // click outside active object
-                setSelectedObject(null);
                 var intersects = soundzones.filter(obj => obj.isUnderMouse(ray));
                 if (intersects.length > 0) {
                     setActiveObject(intersects[0]);
-                    setSelectedObject(intersects[0].shape);
+                    activeObject.select(activeObject.objectUnderMouse(ray));
                 }
                 else
                     setActiveObject(null);
@@ -184,8 +158,6 @@ function Main() {
 
             }
         }
-
-        setSelectedObject(null);
         isMouseDown = false;
         isAdding = false;
     }
@@ -202,7 +174,7 @@ function Main() {
 
             if (isMouseDown === true) {
                 // click+drag
-                activeObject.move(mouse, selectedObject);
+                activeObject.move(mouse);
             }
             else {
                 // hover cursor over line

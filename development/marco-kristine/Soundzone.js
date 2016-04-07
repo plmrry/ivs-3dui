@@ -133,9 +133,18 @@ Soundzone.prototype = {
 		this.mouseOffsetY = point.y;
 	},
 	move: function(point, obj) {
-		if (obj === this.shape) {
+		if (this.selectedPoint) {
+			// move selected point
+			var i = this.pointObjects.indexOf(this.selectedPoint);
+			if (i > -1) {
+				this.showCursor(false);
+				this.splinePoints[i].copy(point);
+				this.updateShape();
+				this.selectPoint(this.pointObjects[i]);
+			}
+		}
+		else {
 			// move entire shape
-			this.deselectPoint();
 			var dx = point.x - this.mouseOffsetX;
 			var dy = point.y - this.mouseOffsetY;
 			this.mouseOffsetX = point.x, this.mouseOffsetY = point.y;
@@ -148,17 +157,6 @@ Soundzone.prototype = {
 				pt.x += dx;
 				pt.y += dy;
 			});
-
-		} else {
-			// move selected point
-			console.log(this.selectedPoint);
-			var i = this.pointObjects.indexOf(this.selectedPoint);
-			if (i > -1) {
-				this.showCursor(false);
-				this.splinePoints[i].copy(point);
-				this.updateShape();
-				this.selectPoint(this.pointObjects[i]);
-			}
 		}
 	},
 
@@ -185,6 +183,27 @@ Soundzone.prototype = {
 			obj.visible = false;
 		});
 		this.spline.mesh.visible = false;
+	},
+
+	select: function(intersect) {
+		if (!intersect) return;
+		console.log(intersect);
+
+		// obj can be the curve, a spline point, or the shape mesh
+		var obj = intersect.object;
+
+		if (obj.type === 'Line') {
+			//add a point to the line
+			this.addPoint(intersect.point);
+		}
+		else if (obj.parent.type === 'Object3D') {
+			// select an existing point on line
+			this.selectPoint(obj.parent);
+		}
+		else {
+			this.deselectPoint();
+			this.setMouseOffset(intersect.point);
+		}
 	},
 
 	selectPoint: function(obj) {
