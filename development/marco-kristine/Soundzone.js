@@ -5,9 +5,11 @@ var Soundzone = function(points) {
 
 	this.splinePoints = points;
 	this.pointObjects;
-	this.cursor;
 	this.spline;
 	this.shape;
+
+	this.cursor;
+	this.mouseOffsetX = 0, this.mouseOffsetY = 0;
 
 	var geometry, material;
 
@@ -19,7 +21,7 @@ var Soundzone = function(points) {
 		var cubeMesh = new THREE.Mesh( cube, cubeMat );
 		
 		var collider = new THREE.SphereGeometry(10);
-		var colliderMat = new THREE.MeshBasicMaterial( {transparent:true, opacity:0});
+		var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
 		var colliderMesh = new THREE.Mesh( collider, colliderMat );
 
 		var group = new THREE.Object3D();
@@ -46,32 +48,37 @@ var Soundzone = function(points) {
 	);
 	this.cursor.visible = false;
 
-	// a soundzone is a closed, filled path
-	// trajectory may need to be modified for this
-	this.spline = new THREE.CatmullRomCurve3(points);
-	this.spline.type = 'centripetal';
-	this.spline.closed = true;
-	geometry = new THREE.Geometry();
-	geometry.vertices = this.spline.getPoints(200);
-	material = new THREE.LineBasicMaterial({
-		color: 0xff0000,
-		linewidth:1,
-		transparent:true,
-		opacity:0.4
-	});
-	this.spline.mesh = new THREE.Line( geometry, material );
 
-	var shape = new THREE.Shape(); /////// the algorithm used by three.js is not very robust, consider replacing with earcut
-	shape.fromPoints(geometry.vertices);
-	geometry = new THREE.ShapeGeometry(shape);
-	material = new THREE.MeshPhongMaterial({
-		color: 0xff0000,
-		transparent: true,
-		opacity: 0.2,
-		side: THREE.DoubleSide,
-		depthWrite: false
-	});
-	this.shape = new THREE.Mesh(geometry,material);
+	this.renderPath = function() {
+		// a soundzone is a closed, filled path
+		// trajectory may need to be modified for this
+		this.spline = new THREE.CatmullRomCurve3(this.splinePoints);
+		this.spline.type = 'centripetal';
+		this.spline.closed = true;
+		geometry = new THREE.Geometry();
+		geometry.vertices = this.spline.getPoints(200);
+		material = new THREE.LineBasicMaterial({
+			color: 0xff0000,
+			linewidth:1,
+			transparent:true,
+			opacity:0.4
+		});
+		this.spline.mesh = new THREE.Line( geometry, material );
+
+		// fill the path
+		var shape = new THREE.Shape();
+		shape.fromPoints(geometry.vertices);
+		geometry = new THREE.ShapeGeometry(shape);
+		material = new THREE.MeshPhongMaterial({
+			color: 0xff0000,
+			transparent: true,
+			opacity: 0.2,
+			side: THREE.DoubleSide,
+			depthWrite: false
+		});
+		this.shape = new THREE.Mesh(geometry,material);
+	}
+	this.renderPath();
 }
 
 
@@ -94,7 +101,7 @@ Soundzone.prototype = {
 	    scene.add(this.cursor);
 	},
 	removeFromScene: function(scene) {
-		this.objects.forEach(obj => scene.remove(obj));
+		this.objects.forEach(obj => scene.remove(obj, true));
 		scene.remove(this.cursor);
 	},
 
@@ -107,11 +114,47 @@ Soundzone.prototype = {
 			return raycaster.intersectObject( this.shape ).length > 0;
 		}
 	},
-	objectUnderMouse: function(raycaster, mouse, camera) {
-		// todo
+	objectUnderMouse: function(raycaster) {
+		var intersects = raycaster.intersectObjects( this.objects, true );
+
+		if (intersects.length > 0) {
+			if (intersects[0].object.type === 'Line') {
+				return intersects[Math.floor(intersects.length/2)];
+			}
+/*			else if (intersects[0].object.parent.type === 'Object3D') {
+				return intersects[0];
+			}
+*/			else
+				return intersects[0];
+		}
+		return null;
 	},
 
-	move: function(x, y, offsetX = 0, offsetY = 0) {}, // todo
+	setMouseOffset: function(point) {
+		this.mouseOffsetX = point.x,
+		this.mouseOffsetY = point.y;
+	},
+	move: function(point) {
+		var dx = point.x - this.mouseOffsetX;
+		var dy = point.y - this.mouseOffsetY;
+		this.mouseOffsetX = point.x, this.mouseOffsetY = point.y;
+
+		this.objects.forEach(function(obj) {
+			obj.position.x += dx;
+			obj.position.y += dy;
+		});
+		this.splinePoints.forEach(function(pt) {
+			pt.x += dx;
+			pt.y += dy;
+		})
+	},
+
+	setCursor: function(point) {
+		this.cursor.position.copy(point);
+	},
+	showCursor: function(bool=true) {
+		this.cursor.visible = bool;
+	},
 
 	setActive: function() {
 		this.isActive = true;
@@ -127,6 +170,42 @@ Soundzone.prototype = {
 			obj.visible = false;
 		});
 		this.spline.mesh.visible = false;
+	},
+
+	setSelected: function(obj) {
+
+	},
+	setDeselected: function(obj) {
+
+	},
+	addPoint: function(position) {
+
+		var closestSplinePoint = 0;
+		var prevDistToSplinePoint = -1;
+		var minDistance = Number.MAX_VALUE;
+		var minPoint = 1;
+
+		// search for point on spline
+		for (var t=0; t < 1; t+=1/200.0) {
+			var pt = this.spline.getPoint(t);
+
+			var distToSplinePoint = this.splinePoints[closestSplinePoint].distanceToSquared(pt);
+			if (distToSplinePoint > prevDistToSplinePoint) {
+				++closestSplinePoint;
+				if (closestSplinePoint >= this.splinePoints.length)
+					closestSplinePoint = 0;
+			}
+			prevDistToSplinePoint = this.splinePoints[closestSplinePoint].distanceToSquared(pt);
+			var distToPoint = pt.distanceToSquared(position);
+			if (distToPoint < minDistance) {
+				minDistance = distToPoint;
+				minPoint = closestSplinePoint;
+			}
+		}
+//		console.log(minPoint);
+
+		this.splinePoints.splice(minPoint, 0, position);
+		return new Soundzone(this.splinePoints);
 	}
 }
 
