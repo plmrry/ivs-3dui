@@ -87,8 +87,6 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	const new_object_proxy$ = new Rx.ReplaySubject(1);
 	 
 	const scene_sources = {
-		dom,
-		raycasters,
 		main_raycaster$,
 		camera_is_birds_eye$,
 		new_object_proxy$,
@@ -96,8 +94,12 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	};
 	
 	const scene_actions = scene.intent(scene_sources);
+	
+	const object_sources = {
+		main_raycaster$, new_object_proxy$, add_object_click$, raycasters, dom
+	};
 
-	const { scenes_model$, new_object$, selected$ } = scene.model(scene_actions);
+	const { scenes_model$, new_object$, selected$ } = scene.model(scene_actions, object_sources);
 	
 	new_object$.subscribe(new_object_proxy$);
 	

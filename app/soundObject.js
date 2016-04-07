@@ -8,47 +8,61 @@ import combineLatestObj from 'rx-combine-latest-obj';
 
 const stream = Rx.Observable;
 
-function scoped_cone(id) {
-	return function cone(actions) {
-		const DEFAULT_CONE_VOLUME = 1;
-		const DEFAULT_CONE_SPREAD = 0.5;
+import { scoped_sound_cone } from './soundCone.js';
+
+function intent({ dom, main_raycaster$, new_object_proxy$, add_object_click$ }) {
+  const add_object_mode$ = stream
+		.merge(
+			add_object_click$.map(ev => true),
+			new_object_proxy$.map(ev => false)
+		)
+		.startWith(false)
+		.shareReplay(1);
+  
+  const new_object_key$ = new_object_proxy$
+		.pluck('id');
+  
+  const select_object$ = main_raycaster$
+		.filter(({ event }) => event.type === 'dragstart')
+		.withLatestFrom(
+			add_object_mode$,
+			(event, mode) => ({ event, mode })
+		)
+		.filter(({ mode }) => mode !== true)
+		.pluck('event', 'intersect_groups')
+		.flatMapLatest(arr => stream.from(arr))
+		.pluck('intersects', '0', 'object')
+		.map(obj => {
+			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
+			/** TODO: Better way of selecting parent when child cone is clicked? */
+			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
+			return undefined;
+		})
+		.merge(new_object_key$);
 		
-		const move_interactive_update$ = actions.move_interactive_cone$
-			.map(point => cone => {
-				if (cone.interactive === true) cone.lookAt = point;
-				return cone;
-			});
-			
-		const model_update$ = stream
-			.merge(
-				move_interactive_update$
-			);
-			
-		const model$ = model_update$
-			.startWith({
-				volume: DEFAULT_CONE_VOLUME,
-				spread: DEFAULT_CONE_SPREAD,
-				lookAt: {
-					x: Math.random(),
-					y: Math.random(),
-					z: Math.random()
-				},
-				interactive: true
-			})
-			.scan(apply)
-			.shareReplay(1);
-			
-		return {
-			id,
-			model$
-		};
-	};
+	const add_cone$ = dom
+		.select('#add-cone')
+		.events('click')
+		.withLatestFrom(
+			select_object$,
+			(ev, selected) => selected
+		)
+		.shareReplay(1);
+		
+  return {
+    select_object$,
+    add_cone$
+  };
 }
 
 export function scoped_sound_object(id, position) {
-	return function soundObject(actions) {
+  return function soundObject(sources) {
+    
+    const { raycasters } = sources;
+	 
+	  const { select_object$, add_cone$ } = intent(sources);
 		
-		const selected$ = actions.select_object$
+		const selected$ = select_object$
 			.map(key => key === id)
 			.startWith(true)
 			.shareReplay();
@@ -57,22 +71,22 @@ export function scoped_sound_object(id, position) {
 		
 		const volume$ = stream.of(Math.random() + 0.4);
 		
-		const move_interactive_cone$ = actions.interactive_cone_lookat$
-			.withLatestFrom(
-				selected$,
-				(event, selected) => ({ event, selected })
-			)
-			.filter(({ selected }) => selected)
-			.pluck('event', 'point');
-			
-		const cone_actions = {
-			move_interactive_cone$
-		};
+		const isolated_raycaster = raycasters
+  		.select({ name: 'editor' })
+  		.pluck('event$')
+  		.flatMapLatest(obs => obs)
+		  .distinctUntilChanged()
+		  .withLatestFrom(
+		    selected$,
+		    (event, selected) => ({ event, selected })
+		  )
+		  .filter(({ selected }) => selected)
+		  .pluck('event');
 		
-		const new_cone$ = actions.add_cone$
+		const new_cone$ = add_cone$
 			.filter(key => key === id)
 			.map((ev, index) => {
-				return scoped_cone(index)(cone_actions);
+				return scoped_sound_cone(index)({ editor_raycaster$: isolated_raycaster });
 			});
 			
 		const cones$ = new_cone$
