@@ -174,22 +174,36 @@ Soundzone.prototype = {
 	setDeselected: function(obj) {
 
 	},
-
+/*		for (var i=0; i < 1; i+= 0.05) {
+			var dist = this.spline.getPoint(i).distanceToSquared(position);
+*/
 	addPoint: function(position) {
-		var minPoint = 0;
+
+		var closestSplinePoint = 0;
+		var prevDistToSplinePoint = -1;
 		var minDistance = Number.MAX_VALUE;
-		console.log(minDistance);
-		for(i=0; i<this.splinePoints.length; i++) {
-			var dist = this.splinePoints[i].distanceTo(position);
-			console.log(dist);
-			if(dist < minDistance) {
-				minDistance = dist;
-				minPoint = i;
+		var minPoint = 1;
+
+		// search for point on spline
+		for (var t=0; t < 1; t+=0.01) {
+			var pt = this.spline.getPoint(t);
+
+			var distToSplinePoint = this.splinePoints[closestSplinePoint].distanceToSquared(pt);
+			if (distToSplinePoint > prevDistToSplinePoint) {
+				++closestSplinePoint;
+				if (closestSplinePoint >= this.splinePoints.length)
+					closestSplinePoint = 0;
+			}
+			prevDistToSplinePoint = this.splinePoints[closestSplinePoint].distanceToSquared(pt);
+			var distToPoint = pt.distanceToSquared(position);
+			if (distToPoint < minDistance) {
+				minDistance = distToPoint;
+				minPoint = closestSplinePoint;
 			}
 		}
-		console.log("Min point: " + minPoint);
+		console.log(minPoint);
+
 		this.splinePoints.splice(minPoint, 0, position);
-		//console.log(this.splinePoints);
 		return new Soundzone(this.splinePoints);
 	}
 }
