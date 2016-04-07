@@ -23,8 +23,24 @@ Rx.config.longStackSupport = true;
 
 function intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ }) {
 	
-	// new_object_proxy$
-	// 	.subscribe(log)
+	const main_raycaster$ = raycasters
+		.select({ name: 'main' })
+		.pluck('event$')
+		.flatMapLatest(obs => obs)
+		.distinctUntilChanged()
+		.shareReplay(1);
+		
+	const editor_raycaster$ = raycasters
+		.select({ name: 'editor' })
+		.pluck('event$')
+		.flatMapLatest(obs => obs)
+		.distinctUntilChanged();
+		
+	const editor_mousemove_panel$ = editor_raycaster$
+		.pluck('intersect_groups')
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.key === 'children')
+		.pluck('intersects', '0', 'point');
 	
 	const camera_is_birds_eye$ = cameras_model_proxy$
 		.flatMap(arr => stream.from(arr))
@@ -46,13 +62,6 @@ function intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ }) {
 		)
 		.startWith(false)
 		.shareReplay(1);
-	
-	const main_raycaster$ = raycasters
-		.select({ name: 'main' })
-		.pluck('event$')
-		.flatMapLatest(obs => obs)
-		.distinctUntilChanged()
-		.shareReplay(1);
 		
 	const new_object_key$ = new_object_proxy$
 		.pluck('id');
@@ -61,10 +70,9 @@ function intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ }) {
 		.filter(({ event }) => event.type === 'dragstart')
 		.withLatestFrom(
 			add_object_mode$,
-			camera_is_birds_eye$,
-			(event, mode, birds) => ({ event, mode, birds })
+			(event, mode) => ({ event, mode })
 		)
-		.filter(({ event, mode, birds}) => mode !== true)
+		.filter(({ event, mode }) => mode !== true)
 		.pluck('event', 'intersect_groups')
 		.flatMapLatest(arr => stream.from(arr))
 		.pluck('intersects', '0', 'object')
@@ -75,6 +83,22 @@ function intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ }) {
 			return undefined;
 		})
 		.merge(new_object_key$);
+		
+	const add_cone$ = dom
+		.select('#add-cone')
+		.events('click')
+		.withLatestFrom(
+			select_object$,
+			(ev, selected) => selected
+		)
+		.shareReplay(1);
+		
+	const interactive_cone_lookat$ = editor_mousemove_panel$
+		.withLatestFrom(
+			// selected_proxy$,
+			select_object$,
+			(point, selected) => ({ object_key: selected, point })
+		);
 		
 	const add_object$ = main_raycaster$
 		.pairwise()
@@ -101,6 +125,8 @@ function intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ }) {
 		add_object_click$,
 		camera_is_birds_eye$,
 		add_object$,
+		add_cone$,
+		interactive_cone_lookat$,
 		select_object$,
 		size$
 	};
@@ -115,13 +141,22 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	const cameras_model_proxy$ = new Rx.Subject();
 	const new_object_proxy$ = new Rx.ReplaySubject(1);
 	
+	const event_sources = {
+		dom, 
+		raycasters,
+		cameras_model_proxy$, 
+		new_object_proxy$
+	};
+	
 	const { 
 		add_object_click$,
 		add_object$,
+		add_cone$,
+		interactive_cone_lookat$,
 		select_object$,
 		camera_is_birds_eye$,
 		size$
-	} = intent({ dom, raycasters, cameras_model_proxy$, new_object_proxy$ });
+	} = intent(event_sources);
 	
 	/** 
 	 *	RENDERERS
@@ -137,7 +172,11 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	const scene_actions = {
 		add_object$,
 		select_object$,
-		// add_cone$,
+		add_cone$,
+		interactive_cone_lookat$,
+		dom,
+		raycasters,
+		selected$: select_object$
 		// editor_mousemove_panel$
 		// unselect_object$
 	};
@@ -145,6 +184,7 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	const { scenes_model$, new_object$, selected$ } = scene.model(scene_actions);
 	
 	new_object$.subscribe(new_object_proxy$);
+	// selected$.subscribe(selected_proxy$);
 	
 	const scenes_state_reducer$ = scene.view(scenes_model$);
 	

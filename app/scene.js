@@ -4,6 +4,7 @@ import _ from 'underscore';
 import d3_selection from 'd3-selection';
 import d3 from 'd3';
 import Rx from 'rx';
+import combineLatestObj from 'rx-combine-latest-obj';
 
 const stream = Rx.Observable;
 
@@ -14,11 +15,11 @@ const room_size = {
 };
 
 function scoped_cone(id) {
-	return function cone({ actions }) {
+	return function cone(actions) {
 		const DEFAULT_CONE_VOLUME = 1;
 		const DEFAULT_CONE_SPREAD = 0.5;
 		
-		const move_interactive_update$ = actions.editor_mousemove_panel$
+		const move_interactive_update$ = actions.move_interactive_cone$
 			.map(point => cone => {
 				if (cone.interactive === true) cone.lookAt = point;
 				return cone;
@@ -53,70 +54,69 @@ function scoped_cone(id) {
 function scoped_sound_object(id, position) {
 	return function soundObject(actions) {
 		
-		// const new_cone$ = actions.add_cone$
-		// 	.map((ev, index) => {
-		// 		return scoped_cone(index)({ actions });
-		// 	});
+		const selected$ = actions.select_object$
+			.map(key => key === id)
+			.startWith(true)
+			.shareReplay();
 			
-		// const add_cone_update$ = new_cone$
-		// 	.map(new_cone => cones => {
-		// 		return cones.concat(new_cone);
-		// 	});
+		const position$ = stream.of(position);
+		
+		const volume$ = stream.of(Math.random() + 0.4);
+		
+		const move_interactive_cone$ = actions.interactive_cone_lookat$
+			.withLatestFrom(
+				selected$,
+				(event, selected) => ({ event, selected })
+			)
+			.filter(({ selected }) => selected)
+			.pluck('event', 'point');
 			
-		// const cones$$ = add_cone_update$
-		// 	.startWith([])
-		// 	.scan(apply)
-		// 	.map(arr => arr.map(d => d.model$));
+		const cone_actions = {
+			move_interactive_cone$
+		};
 		
-		// const cones$ = cones$$
-		// 	.flatMapLatest(stream.combineLatest)
-		// 	.startWith([])
-		// 	.shareReplay();
-		
-		const select_update$ = actions.select_object$
-			.map(key => object => {
-				if (key === id) {
-					object.selected = true;
-					object.material.color = '66c2ff';
-				}
-				else {
-					object.selected = false;
-					object.material.color = 'ffffff';
-				};
-				return object;
+		const new_cone$ = actions.add_cone$
+			.filter(key => key === id)
+			.map((ev, index) => {
+				return scoped_cone(index)(cone_actions);
 			});
 			
-		const model_update$ = stream
-			.merge(
-				select_update$
-			);
-		
-		// const model_update$ = stream.empty()
+		const cones$ = new_cone$
+			.map(new_cone => cones => {
+				return cones.concat(new_cone);
+			})
+			.startWith([])
+			.scan(apply)
+			.map(arr => arr.map(d => d.model$))
+			.flatMapLatest(stream.combineLatest)
+			.startWith([]);
 			
-		const model$ = model_update$
-			.startWith({
+		const color$ = selected$
+			.map(selected => selected ? '66c2ff' : 'ffffff');
+			
+		const model$ = combineLatestObj
+			({
+				cones$,
+				selected$,
+				position$,
+				volume$,
+				color$
+			})
+			.map(({ cones, selected, position, volume, color }) => ({
 				key: id,
-				class: 'sound_object',
-				type: 'sound_object',
 				name: 'sound_object',
 				position: {
 					x: position.x,
 					y: position.y,
 					z: position.z
 				},
-				volume: Math.random() + 0.4,
+				volume,
 				material: {
-					color: 'ffffff'
+					color
 				},
-				cones: [],
-				// selected: true
-			})
-			.scan(apply)
-			// .combineLatest(
-			// 	cones$,
-			// 	(model, cones) => { model.cones = cones; return model; }
-			// )
-			.shareReplay(1);
+				cones,
+				selected
+			}));
 			
 		return {
 			id,
@@ -127,9 +127,19 @@ function scoped_sound_object(id, position) {
 
 export function model(actions) {
 	
+	// const _selected$ = actions.selected$
+	// 	.map()
+	// 	.subscribe(log);
+	
 	const new_object$ = actions.add_object$
-		.map((position, index) => {
-			return scoped_sound_object(index, position)(actions);
+		.map((position, id) => {
+			// const id = index;
+			// const actions$ = actions.selected$
+			// 	.filter(key => key === id)
+			// 	.map(key => ({
+			// 		add_cone$: actions.add_cone$
+			// 	}));
+			return scoped_sound_object(id, position)(actions);
 		})
 		.shareReplay(1);
 	
