@@ -28,7 +28,9 @@ const stream = Rx.Observable;
 // }
 
 export function scoped_sound_cone(id) {
-	return function cone({ editor_mousemove_panel$ }) {
+	return function cone({ 
+		editor_mousemove_panel$ 
+	}) {
 	  
 		const DEFAULT_CONE_VOLUME = 1;
 		const DEFAULT_CONE_SPREAD = 0.5;

@@ -16,56 +16,68 @@ const room_size = {
 	height: 3
 };
 
-export function component({ 
-		dom, raycasters, main_raycaster$, camera_is_birds_eye$, add_object_click$ 
-	}) {
-		const new_object_proxy$ = new Rx.ReplaySubject(1);
+export function component(
+		{ 
+			dom, raycasters, main_raycaster$, camera_is_birds_eye$, add_object_click$ 
+		}
+	) {
+	const new_object_proxy$ = new Rx.ReplaySubject(1);
+	
+	const editor_raycaster$ = raycasters
+		.select({ name: 'editor' })
+		.pluck('event$')
+		.flatMapLatest(obs => obs)
+	  .distinctUntilChanged();
+	  
+	const editor_mousemove_panel$ = editor_raycaster$
+		.pluck('intersect_groups')
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.key === 'children')
+		.pluck('intersects', '0', 'point');
+
+	const { 
+		add_object$, selected_object$, add_cone$ 
+	} = intent({
+			main_raycaster$,
+			camera_is_birds_eye$,
+			new_object_proxy$,
+			add_object_click$,
+			dom
+		});
 		
-		const editor_raycaster$ = raycasters
-			.select({ name: 'editor' })
-			.pluck('event$')
-			.flatMapLatest(obs => obs)
-		  .distinctUntilChanged();
-		  
-		const editor_mousemove_panel$ = editor_raycaster$
-			.pluck('intersect_groups')
-			.flatMap(arr => stream.from(arr))
-			.filter(d => d.key === 'children')
-			.pluck('intersects', '0', 'point');
-	
-		const { add_object$, selected_object$, add_cone$ } = intent({
-				main_raycaster$,
-				camera_is_birds_eye$,
-				new_object_proxy$,
-				add_object_click$,
-				dom
-			});
-	
-		const { scenes_model$, new_object$, selected$ } = model(
-				{ add_object$ }, 
+	function objectComponentCreator(position, index) {
+		const id = index;
+		return scoped_sound_object(id, position)
+			(
 				{ selected_object$, add_cone$ }, 
 				{ editor_raycaster$, editor_mousemove_panel$ }
 			);
-		
-		new_object$.subscribe(new_object_proxy$);
-		
-		const scenes_state_reducer$ = view(scenes_model$);
-		
-		return {
-			scenes_state_reducer$,
-			selected$
-		};
 	}
+	
+	const { scenes_model$, new_object$, selected$ } = model(
+			{ add_object$ }, 
+			{ selected_object$, add_cone$ }, 
+			{ editor_raycaster$, editor_mousemove_panel$ },
+			objectComponentCreator
+		);
+	
+	new_object$.subscribe(new_object_proxy$);
+	
+	const scenes_state_reducer$ = view(scenes_model$);
+	
+	return {
+		scenes_state_reducer$,
+		selected$
+	};
+}
 
-export function intent(sources) {
-	const { 
+export function intent({ 
 		main_raycaster$, 
 		camera_is_birds_eye$, 
 		new_object_proxy$, 
 		add_object_click$,
 		dom
-	} = sources;
-	
+	}) {
 	const new_object_key$ = new_object_proxy$
 		.pluck('id');
 		
@@ -129,16 +141,19 @@ export function intent(sources) {
 export function model(
 		{ add_object$ }, 
 		{ selected_object$, add_cone$ }, 
-		{ editor_raycaster$, editor_mousemove_panel$ }
+		{ editor_raycaster$, editor_mousemove_panel$ },
+		objectComponentCreator
 	) {
+		// function objectComponentCreator(position, index) {
+		// 	const id = index;
+		// 	return scoped_sound_object(id, position)
+		// 		(
+		// 			{ selected_object$, add_cone$ }, 
+		// 			{ editor_raycaster$, editor_mousemove_panel$ }
+		// 		);
+		// }
 	const new_object$ = add_object$
-		.map((position, id) => {
-			return scoped_sound_object(id, position)
-				(
-					{ selected_object$, add_cone$ }, 
-					{ editor_raycaster$, editor_mousemove_panel$ }
-				);
-		})
+		.map(objectComponentCreator)
 		.shareReplay(1);
 	
 	const sound_objects$ = new_object$
@@ -198,236 +213,6 @@ export function model(
 		selected$
 	};
 }
-
-// export function component2({ scene_actions }) {
-	
-// 	// const new_object$ = scene_actions.add_object$
-// 	// 	.pluck('position')
-// 	// 	.map((position, index) => {
-// 	// 		return scoped_sound_object(index, position)({ actions: scene_actions });
-// 	// 	})
-// 	// 	.shareReplay(1);
-		
-// 	// const add_new_object$ = new_object$ 
-// 	// 	.map(new_obj => array => {
-// 	// 		return array.concat(new_obj);
-// 	// 	});
-		
-// 	// const sound_objects$ = add_new_object$
-// 	// 	.startWith([])
-// 	// 	.scan(apply)
-// 	// 	.map(arr => arr.map(d => d.model$))
-// 	// 	.flatMapLatest(stream.combineLatest)
-// 	// 	.startWith([]);
-		
-// 	// const main_scene_model$ = sound_objects$
-// 	// 	.map(sound_objects => {
-// 	// 		return {
-// 	// 			name: 'main',
-// 	// 			floors: [
-// 	// 				{
-// 	// 					name: 'floor'
-// 	// 				}
-// 	// 			],
-// 	// 			sound_objects
-// 	// 		};
-// 	// 	});
-		
-// 	// const editor_scene_model$ = stream
-// 	// 	.of({
-// 	// 		name: 'editor',
-// 	// 		screens: [
-// 	// 			{}
-// 	// 		]
-// 	// 	});
-		
-// 	// const scenes_model$ = stream
-// 	// 	.combineLatest(
-// 	// 		main_scene_model$,
-// 	// 		editor_scene_model$
-// 	// 	);
-		
-// 	const { scenes_model$ } = model({ scene_actions });
-		
-// 	const scenes_state_reducer$ = view(scenes_model$);
-	
-// 	return scenes_state_reducer$;
-// }
-
-// export function component({ dom, main_intersects$, editor_intersects$ }) {
-		
-// 	const clicked_2$ = main_intersects$
-// 		.flatMapLatest(o => o.event$)
-// 		.pairwise()
-// 		.filter(arr => arr[0].event.type === 'dragstart')
-// 		.filter(arr => arr[1].event.type === 'dragend')
-// 		.pluck('1');
-		
-// 	const panel_point$ = editor_intersects$
-// 		.pluck('event$')
-// 		.flatMapLatest(obs => obs)
-// 		.pluck('intersect_groups')
-// 		.flatMap(arr => stream.from(arr))
-// 		.filter(d => d.key === 'children')
-// 		.pluck('intersects', '0', 'point');
-		
-// 	const move_interactive$ = panel_point$
-// 	// const move_interactive$ = editor_intersects$
-// 	// 	.pluck('intersects', '0', 'intersects', '0', 'point')
-// 	// 	// .do(log)
-// 		.map(point => objects => {
-// 			return objects.map(obj => {
-// 				if (obj.selected === true) {
-// 					obj.cones = obj.cones.map(cone => {
-// 						if (cone.interactive === true) {
-// 							cone.lookAt = point;
-// 						}
-// 						return cone;
-// 					});
-// 					return obj;
-// 				}
-// 				return obj;
-// 			});
-// 		});
-	
-// 	const clicked_key$ = clicked_2$
-// 		.pluck('intersect_groups')
-// 		.flatMap(arr => stream.from(arr))
-// 		.filter(d => d.key === 'children')
-// 		.pluck('intersects', '0', 'object')
-// 		.map(obj => {
-// 			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
-// 			/** TODO: Better way of selecting parent when child cone is clicked? */
-// 			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
-// 			return undefined;
-// 		})
-// 		.distinctUntilChanged()
-// 		.shareReplay();
-		
-// 	const select_object$ = clicked_key$
-// 		.filter(key => typeof key !== 'undefined')
-// 		.map(key => objects => {
-// 			return objects.map(obj => {
-// 				if (obj.key === key) {
-// 					obj.selected = true;
-// 					obj.material.color = '66c2ff';
-// 					return obj;
-// 				}
-// 				return obj;
-// 			});
-// 		});
- 		
-// 	const unselect_object$ = clicked_key$
-// 		.pairwise()
-// 		.pluck('0')
-// 		.filter(key => typeof key !== 'undefined')
-// 		.map(key => objects => {
-// 			return objects.map(obj => {
-// 				if (obj.key === key) {
-// 					obj.selected = false;
-// 					obj.material.color = 'ffffff';
-// 					return obj;
-// 				}
-// 				return obj;
-// 			});
-// 		});
-		
-// 	const add_object$ = dom
-// 		.select('#add-object')
-// 		.events('click')
-// 		.map((ev, i) => ({
-// 			count: i,
-// 			key: i,
-// 			class: 'sound_object',
-// 			type: 'sound_object',
-// 			name: 'sound_object',
-// 			position: {
-// 				x: Math.random() * 2 - 1,
-// 				y: Math.random() * 2 - 1,
-// 				z: Math.random() * 2 - 1,
-// 			},
-// 			volume: Math.random() + 0.4,
-// 			material: {
-// 				color: 'ffffff'
-// 			},
-// 			cones: [
-// 				{
-// 					volume: 2,
-// 					spread: 0.5,
-// 					rotation: {
-// 						x: 0.5,
-// 						y: 0.1,
-// 						z: 0.1
-// 					},
-// 					lookAt: {
-// 						x: 2,
-// 						y: 1,
-// 						z: 1
-// 					}
-// 				}
-// 			],
-// 		}))
-// 		.map(obj => objects => {
-// 			return objects.concat(obj);
-// 		});
-		
-// 	const add_cone_click$ = dom
-// 		.select('#add-cone')
-// 		.events('click')
-// 		.shareReplay()
-// 		// .subscribe(log)
-		
-// 	const add_cone_random$ = add_cone_click$
-// 		.map(ev => {
-// 			let DEFAULT_CONE_VOLUME = 1;
-// 			let DEFAULT_CONE_SPREAD = 0.5;
-// 			return {
-// 				volume: DEFAULT_CONE_VOLUME,
-// 				spread: DEFAULT_CONE_SPREAD,
-// 				lookAt: {
-// 					x: Math.random(),
-// 					y: Math.random(),
-// 					z: Math.random()
-// 				},
-// 				interactive: true
-// 			};
-// 		})
-// 		.map(cone => objects => {
-// 			return objects.map(obj => {
-// 				if (obj.selected === true) obj.cones.push(cone);
-// 				return obj;
-// 			});
-// 		});
-		
-// 	const sound_objects_update$ = stream
-// 		.merge(
-// 			add_object$,
-// 			select_object$,
-// 			unselect_object$,
-// 			add_cone_random$,
-// 			move_interactive$
-// 		);
-		
-// 	const sound_objects$ = sound_objects_update$	
-// 		.startWith([])
-// 		.scan(apply)
-// 		.shareReplay();
-	
-// 	const main_scene_model$ = sound_objects$
-// 		.map(sound_objects => {
-// 			return {
-// 				name: 'main',
-// 				floors: [
-// 					{
-// 						name: 'floor'
-// 					}
-// 				],
-// 				sound_objects
-// 			};
-// 		});
-		
-// 	return main_scene_model$;
-// }
 
 export function view(model$) {
 	return model$

@@ -13,6 +13,8 @@ import * as renderer from './renderer.js';
 import * as dom_component from './dom.js';
 import * as raycaster from './raycaster.js';
 
+import { scoped_sound_object } from './soundObject.js';
+
 // debug.enable('*');
 // debug.enable('*,-raycasters');
 debug.disable();
@@ -100,7 +102,7 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	 */ 
 	 
 	const { cameras_model$, cameras_state_reducer$ } = camera
-		.component3({
+		.component({
 			add_object_click$, camera_is_birds_eye$, dom, size$
 		});
 		

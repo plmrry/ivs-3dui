@@ -10,51 +10,6 @@ const stream = Rx.Observable;
 
 import { scoped_sound_cone } from './soundCone.js';
 
-// function intent({ dom, main_raycaster$, new_object_proxy$, add_object_click$ }) {
-//   // const add_object_mode$ = stream
-// 		// .merge(
-// 		// 	add_object_click$.map(ev => true),
-// 		// 	new_object_proxy$.map(ev => false)
-// 		// )
-// 		// .startWith(false)
-// 		// .shareReplay(1);
-  
-//   // const new_object_key$ = new_object_proxy$
-// 		// .pluck('id');
-  
-//   // const select_object$ = main_raycaster$
-// 		// .filter(({ event }) => event.type === 'dragstart')
-// 		// .withLatestFrom(
-// 		// 	add_object_mode$,
-// 		// 	(event, mode) => ({ event, mode })
-// 		// )
-// 		// .filter(({ mode }) => mode !== true)
-// 		// .pluck('event', 'intersect_groups')
-// 		// .flatMapLatest(arr => stream.from(arr))
-// 		// .pluck('intersects', '0', 'object')
-// 		// .map(obj => {
-// 		// 	if (obj.name === 'sound_object') return d3.select(obj).datum().key;
-// 		// 	/** TODO: Better way of selecting parent when child cone is clicked? */
-// 		// 	if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
-// 		// 	return undefined;
-// 		// })
-// 		// .merge(new_object_key$);
-		
-// 	const add_cone$ = dom
-// 		.select('#add-cone')
-// 		.events('click')
-// 		// .withLatestFrom(
-// 		// 	select_object$,
-// 		// 	(ev, selected) => selected
-// 		// )
-// 		.shareReplay(1);
-		
-//   return {
-//     // select_object$,
-//     add_cone$
-//   };
-// }
-
 export function scoped_sound_object(id, position) {
   return function soundObject(
   	{ selected_object$, add_cone$ }, 
