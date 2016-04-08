@@ -16,57 +16,17 @@ const room_size = {
 	height: 3
 };
 
-export function component(
-		{ 
-			dom, raycasters, main_raycaster$, camera_is_birds_eye$, add_object_click$ 
-		}
-	) {
-	const new_object_proxy$ = new Rx.ReplaySubject(1);
-	
-	const editor_raycaster$ = raycasters
-		.select({ name: 'editor' })
-		.pluck('event$')
-		.flatMapLatest(obs => obs)
-	  .distinctUntilChanged();
-	  
-	const editor_mousemove_panel$ = editor_raycaster$
-		.pluck('intersect_groups')
-		.flatMap(arr => stream.from(arr))
-		.filter(d => d.key === 'children')
-		.pluck('intersects', '0', 'point');
-
-	const { 
-		add_object$, selected_object$, add_cone$ 
-	} = intent({
-			main_raycaster$,
-			camera_is_birds_eye$,
-			new_object_proxy$,
-			add_object_click$,
-			dom
-		});
-		
-	function objectComponentCreator(position, index) {
-		const id = index;
-		return scoped_sound_object(id, position)
-			(
-				{ selected_object$, add_cone$ }, 
-				{ editor_raycaster$, editor_mousemove_panel$ }
-			);
-	}
-	
+export function component({ add_object$ }, objectComponentCreator) {
 	const { scenes_model$, new_object$, selected$ } = model(
 			{ add_object$ }, 
-			{ selected_object$, add_cone$ }, 
-			{ editor_raycaster$, editor_mousemove_panel$ },
 			objectComponentCreator
 		);
-	
-	new_object$.subscribe(new_object_proxy$);
 	
 	const scenes_state_reducer$ = view(scenes_model$);
 	
 	return {
 		scenes_state_reducer$,
+		new_object$,
 		selected$
 	};
 }
@@ -140,18 +100,8 @@ export function intent({
 
 export function model(
 		{ add_object$ }, 
-		{ selected_object$, add_cone$ }, 
-		{ editor_raycaster$, editor_mousemove_panel$ },
 		objectComponentCreator
 	) {
-		// function objectComponentCreator(position, index) {
-		// 	const id = index;
-		// 	return scoped_sound_object(id, position)
-		// 		(
-		// 			{ selected_object$, add_cone$ }, 
-		// 			{ editor_raycaster$, editor_mousemove_panel$ }
-		// 		);
-		// }
 	const new_object$ = add_object$
 		.map(objectComponentCreator)
 		.shareReplay(1);

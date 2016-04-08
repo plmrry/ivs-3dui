@@ -8,12 +8,10 @@ import combineLatestObj from 'rx-combine-latest-obj';
 
 const stream = Rx.Observable;
 
-import { scoped_sound_cone } from './soundCone.js';
-
 export function scoped_sound_object(id, position) {
   return function soundObject(
-  	{ selected_object$, add_cone$ }, 
-  	{ editor_raycaster$, editor_mousemove_panel$ }
+  	{ selected_object$, add_cone$ },
+  	createCone
   ) {
 		const selected$ = selected_object$
 			.map(key => key === id)
@@ -30,9 +28,7 @@ export function scoped_sound_object(id, position) {
 				(event, selected) => selected
 			)
 			.filter(selected => selected)
-			.map((ev, index) => {
-				return scoped_sound_cone(index)({ editor_raycaster$, editor_mousemove_panel$ });
-			});
+			.map(createCone);
 			
 		const cones$ = new_cone$
 			.map(new_cone => cones => {

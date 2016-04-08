@@ -14,6 +14,7 @@ import * as dom_component from './dom.js';
 import * as raycaster from './raycaster.js';
 
 import { scoped_sound_object } from './soundObject.js';
+import { scoped_sound_cone } from './soundCone.js';
 
 // debug.enable('*');
 // debug.enable('*,-raycasters');
@@ -79,12 +80,45 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	/** 
 	 *	SCENES
 	 */
+	 
+	const new_object_proxy$ = new Rx.ReplaySubject(1);
+	 
+	const { 
+		add_object$, selected_object$, add_cone$ 
+	} = scene.intent({
+		main_raycaster$,
+		camera_is_birds_eye$,
+		new_object_proxy$,
+		add_object_click$,
+		dom
+	});
 	
-	const { scenes_state_reducer$, selected$ } = scene
-		.component({ 
-			dom, raycasters, main_raycaster$, 
-			camera_is_birds_eye$, add_object_click$ 
-		});
+	const editor_raycaster$ = raycasters
+		.select({ name: 'editor' })
+		.pluck('event$')
+		.flatMapLatest(obs => obs)
+	  .distinctUntilChanged();
+	  
+	const editor_mousemove_panel$ = editor_raycaster$
+		.pluck('intersect_groups')
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.key === 'children')
+		.pluck('intersects', '0', 'point');
+		
+	function createCone(event, index) {
+		return scoped_sound_cone(index)({ editor_mousemove_panel$ });
+	}
+		
+	function createSoundObject(position, index) {
+		const id = index;
+		return scoped_sound_object(id, position)
+			({ selected_object$, add_cone$ }, createCone);
+	}
+	
+	const { scenes_state_reducer$, selected$, new_object$ } = scene
+		.component({ add_object$ }, createSoundObject);
+		
+	new_object$.subscribe(new_object_proxy$);
 	
 	/** 
 	 *	DOM
