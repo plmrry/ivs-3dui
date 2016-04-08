@@ -91,18 +91,16 @@ Soundzone.prototype = {
 		return [].concat(this.pointObjects, this.spline.mesh, this.shape);
 	},
 
-	contains: function (obj) {
-		return ( obj === this.shape || 
-			     obj === this.spline.mesh || 
-			     this.pointObjects.some(point => point === obj) );
-	},
-
 	addToScene: function(scene) {
-		this.objects.forEach(obj => scene.add(obj));
+		this.objects.forEach(function(obj) {
+			scene.add(obj);
+		});
 	    scene.add(this.cursor);
 	},
 	removeFromScene: function(scene) {
-		this.objects.forEach(obj => scene.remove(obj, true));
+		this.objects.forEach(function(obj) {
+			scene.remove(obj, true);
+		});
 		scene.remove(this.cursor);
 	},
 
