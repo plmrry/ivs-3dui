@@ -16,21 +16,84 @@ const room_size = {
 	height: 3
 };
 
+export function component({ 
+		dom, raycasters, main_raycaster$, camera_is_birds_eye$, add_object_click$ 
+	}) {
+		const new_object_proxy$ = new Rx.ReplaySubject(1);
+		
+		const editor_raycaster$ = raycasters
+			.select({ name: 'editor' })
+			.pluck('event$')
+			.flatMapLatest(obs => obs)
+		  .distinctUntilChanged();
+		  
+		const editor_mousemove_panel$ = editor_raycaster$
+			.pluck('intersect_groups')
+			.flatMap(arr => stream.from(arr))
+			.filter(d => d.key === 'children')
+			.pluck('intersects', '0', 'point');
+	
+		const { add_object$, selected_object$, add_cone$ } = intent({
+				main_raycaster$,
+				camera_is_birds_eye$,
+				new_object_proxy$,
+				add_object_click$,
+				dom
+			});
+	
+		const { scenes_model$, new_object$, selected$ } = model(
+				{ add_object$ }, 
+				{ selected_object$, add_cone$ }, 
+				{ editor_raycaster$, editor_mousemove_panel$ }
+			);
+		
+		new_object$.subscribe(new_object_proxy$);
+		
+		const scenes_state_reducer$ = view(scenes_model$);
+		
+		return {
+			scenes_state_reducer$,
+			selected$
+		};
+	}
+
 export function intent(sources) {
 	const { 
 		main_raycaster$, 
 		camera_is_birds_eye$, 
 		new_object_proxy$, 
-		add_object_click$ 
+		add_object_click$,
+		dom
 	} = sources;
 	
+	const new_object_key$ = new_object_proxy$
+		.pluck('id');
+		
 	const add_object_mode$ = stream
 		.merge(
-			add_object_click$.map(ev => true),
-			new_object_proxy$.map(ev => false)
+			add_object_click$.map(() => true),
+			new_object_proxy$.map(() => false)
 		)
 		.startWith(false)
 		.shareReplay(1);
+	
+	const selected_object$ = main_raycaster$
+		.filter(({ event }) => event.type === 'dragstart')
+		.withLatestFrom(
+			add_object_mode$,
+			(event, mode) => ({ event, mode })
+		)
+		.filter(({ mode }) => mode !== true)
+		.pluck('event', 'intersect_groups')
+		.flatMapLatest(arr => stream.from(arr))
+		.pluck('intersects', '0', 'object')
+		.map(obj => {
+			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
+			/** TODO: Better way of selecting parent when child cone is clicked? */
+			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
+			return undefined;
+		})
+		.merge(new_object_key$);
 	
 	const add_object$ = main_raycaster$
 		.pairwise()
@@ -50,17 +113,31 @@ export function intent(sources) {
 		)
 		.filter(({ mode, birds}) => mode === true && birds === true)
 		.pluck('point');
+		
+	const add_cone$ = dom
+		.select('#add-cone')
+		.events('click')
+		.shareReplay(1);
 	
 	return {
-		add_object$
+		add_object$,
+		selected_object$,
+		add_cone$
 	};
 }
 
-export function model({ add_object$ }, object_sources) {
-	
+export function model(
+		{ add_object$ }, 
+		{ selected_object$, add_cone$ }, 
+		{ editor_raycaster$, editor_mousemove_panel$ }
+	) {
 	const new_object$ = add_object$
 		.map((position, id) => {
-			return scoped_sound_object(id, position)(object_sources);
+			return scoped_sound_object(id, position)
+				(
+					{ selected_object$, add_cone$ }, 
+					{ editor_raycaster$, editor_mousemove_panel$ }
+				);
 		})
 		.shareReplay(1);
 	

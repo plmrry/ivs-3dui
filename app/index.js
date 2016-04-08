@@ -60,18 +60,12 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	 
 	const cameras_model_proxy$ = new Rx.Subject();
 	
-	const event_sources = {
-		dom, 
-		raycasters,
-		cameras_model_proxy$
-	};
-	
 	const { 
 		add_object_click$,
 		camera_is_birds_eye$,
 		size$,
 		main_raycaster$
-	} = intent(event_sources);
+	} = intent({ dom, raycasters, cameras_model_proxy$ });
 	
 	/** 
 	 *	RENDERERS
@@ -83,27 +77,12 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	/** 
 	 *	SCENES
 	 */
-	 
-	const new_object_proxy$ = new Rx.ReplaySubject(1);
-	 
-	const scene_sources = {
-		main_raycaster$,
-		camera_is_birds_eye$,
-		new_object_proxy$,
-		add_object_click$
-	};
 	
-	const scene_actions = scene.intent(scene_sources);
-	
-	const object_sources = {
-		main_raycaster$, new_object_proxy$, add_object_click$, raycasters, dom
-	};
-
-	const { scenes_model$, new_object$, selected$ } = scene.model(scene_actions, object_sources);
-	
-	new_object$.subscribe(new_object_proxy$);
-	
-	const scenes_state_reducer$ = scene.view(scenes_model$);
+	const { scenes_state_reducer$, selected$ } = scene
+		.component({ 
+			dom, raycasters, main_raycaster$, 
+			camera_is_birds_eye$, add_object_click$ 
+		});
 	
 	/** 
 	 *	DOM
@@ -119,32 +98,33 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	/** 
 	 *	CAMERAS
 	 */ 
-		
-	const camera_actions = camera.intent({
-		add_object_click$,
-		camera_is_birds_eye$,
-		dom,
-		size$
-	});
-	
-	const cameras_model$ = camera
-		.model({ 
-			actions: camera_actions
+	 
+	const { cameras_model$, cameras_state_reducer$ } = camera
+		.component3({
+			add_object_click$, camera_is_birds_eye$, dom, size$
 		});
 		
 	cameras_model$.subscribe(cameras_model_proxy$);
-	
-	const cameras_state_reducer$ = camera
-		.view(cameras_model$);
 		
-	/** RAYCASTERS */
+	/** 
+	 * RAYCASTERS 
+	 */
 	
 	const raycasters_state_reducer$ = raycaster
 		.component({
 			dom, cameras, scenes
 		});
 		
+	/**
+	 * RENDER SETS
+	 */
+		
 	const render_sets$ = getRenderSets();
+	
+	/**
+	 * RENDER FUNCTION
+	 */
+	 
 	const render_function$ = renderFunction({
 		renderers,
 		scenes,

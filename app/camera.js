@@ -14,6 +14,30 @@ export function component2({ dom, size$, editor_size$ }) {
 	return cameras_state_reducer$;
 }
 
+export function component3({ 
+	add_object_click$, camera_is_birds_eye$, dom, size$
+}) {
+	const camera_actions = intent({
+		add_object_click$,
+		camera_is_birds_eye$,
+		dom,
+		size$
+	});
+	
+	const cameras_model$ = model({ 
+			actions: camera_actions
+		});
+		
+	// cameras_model$.subscribe(cameras_model_proxy$);
+	
+	const cameras_state_reducer$ = view(cameras_model$);
+	
+	return {
+		cameras_state_reducer$,
+		cameras_model$
+	};
+}
+
 export function view(cameras_model$) {
 	return cameras_model$
 		.map(cameras => state_reducer(cameras));
