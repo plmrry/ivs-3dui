@@ -25,13 +25,15 @@
     <script>
 
 		var axisHelper;
-		var objLoader;
+		var loader;
+		var headModel;
+		var ambienLight;
 		var container;
 		var camera, scene, renderer;
 		var moveLeft = 0, moveRight= 0, moveForward = 0, moveBackwards = 0;
 		var pitchUp = 0, pitchDown = 0, yawLeft = 0, yawRight = 0;
-		var rotationSpeed = 0.01;
-		var movementSpeed = 10;
+		var rotationSpeed = 0.05;
+		var movementSpeed = 5;
 		var temporaryQuaternion;
 
 		init();
@@ -43,9 +45,12 @@
 			document.body.appendChild(container);
 
 			camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
-			camera.position.set(0, 0, 1300);
+			camera.position.set(0, 0, 10);
 
 			scene = new THREE.Scene();
+
+			ambienLight = new THREE.AmbientLight();
+			scene.add(ambienLight);
 
 			renderer = new THREE.WebGLRenderer({antialias: true});
 			renderer.setClearColor(0xf0f0f0);
@@ -56,7 +61,13 @@
 			axisHelper = new THREE.AxisHelper(100);
 			scene.add(axisHelper);
 
+			loader = new THREE.OBJLoader();
+			loader.load('head.obj', function(object){
+				headModel = object;
+				//headModel.scale.set(10, 10, 10);
+				scene.add(headModel);
 
+			});
 
 			temporaryQuaternion = new THREE.Quaternion();
 
@@ -71,18 +82,16 @@
 
 		function onDocumentKeyDown(event) {
 
-			console.log(event.keyCode);
-
 			switch(event.keyCode){
-				case 65: yawLeft = 1 * rotationSpeed; break; //A
+				// case 65: moveLeft = 1 * movementSpeed; break; //A
 				case 87: moveForward = 1 * movementSpeed; break; //W
-				case 68: yawRight = 1 * rotationSpeed; break; //D
+				// case 68: moveRight = 1 * movementSpeed; break; //D
 				case 83: moveBackwards = 1 * movementSpeed; break; //S
-				case 81: moveLeft = 1 * movementSpeed; break; //Q
-				case 69: moveRight = 1 * movementSpeed; break; //E
-				case 37: yawLeft = 1 * rotationSpeed; break; //Left
+				// case 37: yawLeft = 1 * rotationSpeed; break; //Left
+				case 68: yawLeft = 1 * rotationSpeed; break; // D
 				case 38: pitchUp = 1 * rotationSpeed; break; //Top
-				case 39: yawRight = 1 * rotationSpeed; break; //Right
+				// case 39: yawRight = 1 * rotationSpeed; break; //Right
+				case 65: yawRight = 1 * rotationSpeed; break; // A
 				case 40: pitchDown = 1 * rotationSpeed; break; //Bottom
 			}
 		}
@@ -90,28 +99,34 @@
 		function onDocumentKeyUp(event) {
 
 			switch(event.keyCode){
-				case 65: yawLeft = 0; break; //A
+				// case 65: moveLeft = 0; break; //A
 				case 87: moveForward = 0; break; //W
-				case 68: yawRight = 0; break; //D
+				// case 68: moveRight = 0; break; //D
 				case 83: moveBackwards = 0; break; //S
-				case 81: moveLeft = 0; break; //Q
-				case 69: moveRight = 0; break; //E
-				case 37: yawLeft = 0; break; //Left
+				// case 37: yawLeft = 0; break; //Left
+				case 68: yawLeft = 0; break; // D
 				case 38: pitchUp = 0; break; //Top
-				case 39: yawRight = 0; break; //Right
+				// case 39: yawRight = 0; break; //Right
+				case 65: yawRight = 0; break; // A
 				case 40: pitchDown = 0; break; //Bottom
 			}
 		}
 
 		function updateDummyHead(){
 
-			temporaryQuaternion.set(- pitchUp + pitchDown, - yawLeft + yawRight, 0, 1).normalize();
-			axisHelper.quaternion.multiply(temporaryQuaternion);
-			axisHelper.rotation.setFromQuaternion(axisHelper.quaternion, axisHelper.rotation.order);
-			axisHelper.updateMatrixWorld;
+			// temporaryQuaternion.set(- pitchUp + pitchDown, - yawLeft + yawRight, 0, 1).normalize();
+			// axisHelper.quaternion.multiply(temporaryQuaternion);
+			// axisHelper.rotation.setFromQuaternion(axisHelper.quaternion, axisHelper.rotation.order);
+			// axisHelper.updateMatrixWorld;
 
-			axisHelper.translateX(- moveLeft + moveRight);
-			axisHelper.translateZ(moveBackwards - moveForward);
+			// axisHelper.rotation.x += - pitchUp + pitchDown;
+			axisHelper.rotation.y += - yawLeft + yawRight;
+			headModel.rotation.y += - yawLeft + yawRight;
+
+			axisHelper.translateX( - moveLeft + moveRight);
+			axisHelper.translateZ( moveBackwards - moveForward);
+			headModel.translateX( - moveLeft + moveRight);
+			headModel.translateZ( moveBackwards - moveForward);
 
 		}
 
