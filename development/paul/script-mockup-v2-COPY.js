@@ -269,6 +269,7 @@
     _current = ((ref = current.floor[0]) != null ? ref.point : void 0) || (new THREE.Vector3());
     _start = ((ref1 = start.floor[0]) != null ? ref1.point : void 0) || _current;
     delta = (new THREE.Vector3()).subVectors(_start, _current);
+    // console.log(_start, _current);
     update = function(model) {
       model.camera._lookAt.add(delta);
       model.camera.position.add(delta);

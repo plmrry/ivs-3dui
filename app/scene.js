@@ -31,72 +31,74 @@ export function component({ add_object$ }, objectComponentCreator) {
 	};
 }
 
-export function intent({ 
-		main_raycaster$, 
-		camera_is_birds_eye$, 
-		new_object_proxy$, 
-		add_object_click$,
-		dom
-	}) {
-	const new_object_key$ = new_object_proxy$
-		.pluck('id');
+// export function intent({ 
+// 		main_raycaster$, 
+// 		camera_is_birds_eye$, 
+// 		new_object_proxy$, 
+// 		add_object_click$,
+// 		dom
+// 	}) {
+// 	const new_object_key$ = new_object_proxy$
+// 		.pluck('id');
 		
-	const add_object_mode$ = stream
-		.merge(
-			add_object_click$.map(() => true),
-			new_object_proxy$.map(() => false)
-		)
-		.startWith(false)
-		.shareReplay(1);
+// 	const add_object_mode$ = stream
+// 		.merge(
+// 			add_object_click$.map(() => true),
+// 			new_object_proxy$.map(() => false)
+// 		)
+// 		.startWith(false)
+// 		.shareReplay(1);
 	
-	const selected_object$ = main_raycaster$
-		.filter(({ event }) => event.type === 'dragstart')
-		.withLatestFrom(
-			add_object_mode$,
-			(event, mode) => ({ event, mode })
-		)
-		.filter(({ mode }) => mode !== true)
-		.pluck('event', 'intersect_groups')
-		.flatMapLatest(arr => stream.from(arr))
-		.pluck('intersects', '0', 'object')
-		.map(obj => {
-			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
-			/** TODO: Better way of selecting parent when child cone is clicked? */
-			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
-			return undefined;
-		})
-		.merge(new_object_key$);
+// 	const selected_object$ = main_raycaster$
+// 		.filter(({ event }) => event.type === 'dragstart')
+// 		.withLatestFrom(
+// 			add_object_mode$,
+// 			(event, mode) => ({ event, mode })
+// 		)
+// 		.filter(({ mode }) => mode !== true)
+// 		.pluck('event', 'intersect_groups')
+// 		.flatMapLatest(arr => stream.from(arr))
+// 		.pluck('intersects', '0', 'object')
+// 		.map(obj => {
+// 			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
+// 			/** TODO: Better way of selecting parent when child cone is clicked? */
+// 			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
+// 			return undefined;
+// 		})
+// 		.merge(new_object_key$)
+// 		.shareReplay(1);
 	
-	const add_object$ = main_raycaster$
-		.pairwise()
-		.filter(arr => arr[0].event.type === 'dragstart')
-		.filter(arr => arr[1].event.type === 'dragend')
-		.pluck('1')
-		.pluck('intersect_groups')
-		.flatMapLatest(arr => stream.from(arr))
-		.pluck('intersects')
-		.flatMapLatest(arr => stream.from(arr))
-		.filter(({ object }) => object.name === 'floor')
-		.pluck('point')
-		.withLatestFrom(
-			add_object_mode$,
-			camera_is_birds_eye$,
-			(point, mode, birds) => ({ point, mode, birds })
-		)
-		.filter(({ mode, birds}) => mode === true && birds === true)
-		.pluck('point');
+// 	const add_object$ = main_raycaster$
+// 		.pairwise()
+// 		.filter(arr => arr[0].event.type === 'dragstart')
+// 		.filter(arr => arr[1].event.type === 'dragend')
+// 		.pluck('1')
+// 		.pluck('intersect_groups')
+// 		.flatMapLatest(arr => stream.from(arr))
+// 		.pluck('intersects')
+// 		.flatMapLatest(arr => stream.from(arr))
+// 		.filter(({ object }) => object.name === 'floor')
+// 		.pluck('point')
+// 		.withLatestFrom(
+// 			add_object_mode$,
+// 			camera_is_birds_eye$,
+// 			(point, mode, birds) => ({ point, mode, birds })
+// 		)
+// 		.filter(({ mode, birds}) => mode === true && birds === true)
+// 		.pluck('point');
 		
-	const add_cone$ = dom
-		.select('#add-cone')
-		.events('click')
-		.shareReplay(1);
+// 	const add_cone$ = dom
+// 		.select('#add-cone')
+// 		.events('click')
+// 		.shareReplay();
+// 		// .shareReplay(1);
 	
-	return {
-		add_object$,
-		selected_object$,
-		add_cone$
-	};
-}
+// 	return {
+// 		add_object$,
+// 		selected_object$,
+// 		add_cone$
+// 	};
+// }
 
 export function model(
 		{ add_object$ }, 
@@ -107,12 +109,16 @@ export function model(
 		.shareReplay(1);
 	
 	const sound_objects$ = new_object$
+		.pluck('model$')
+		.map(obs => obs.shareReplay(1))
 		.map(new_obj => array => array.concat(new_obj))
-		.startWith([])
-		.scan(apply)
-		.map(arr => arr.map(d => d.model$))
+		// .startWith([])
+		.scan(apply, [])
+		// .map(arr => arr.map(d => d.model$))
 		.flatMapLatest(stream.combineLatest)
-		.startWith([]);
+		.startWith([])
+		.do(debug('sound objects'))
+		.shareReplay();
 		
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0])
@@ -338,6 +344,9 @@ function updateOneCone(d) {
 	/** Update color */
 	let SELECTED_COLOR = new THREE.Color("#66c2ff");
 	if (d.selected === true) cone.material.color = SELECTED_COLOR;
+	else cone.material.color = new THREE.Color('#ffffff');
+	/** Update color */
+	// cone.material.color = new THREE.Color(`#${d.material.color}`);
 }
 
 function updateSoundObjects2(scenes) {

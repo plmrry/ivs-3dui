@@ -6,17 +6,17 @@ import d3 from 'd3';
 import Rx from 'rx';
 import combineLatestObj from 'rx-combine-latest-obj';
 
+import log from './log.js';
+
 const stream = Rx.Observable;
 
 export function scoped_sound_object(id, position) {
-  return function soundObject(
-  	{ selected_object$, add_cone$ },
-  	createCone
-  ) {
+  return function soundObject({ selected_object$, add_cone$, dom }, createCone, cone_action$) {
+  	debug('event:object')('new', id);
+  	
 		const selected$ = selected_object$
 			.map(key => key === id)
-			.startWith(true)
-			.shareReplay();
+			.startWith(true);
 			
 		const position$ = stream.of(position);
 		
@@ -28,17 +28,22 @@ export function scoped_sound_object(id, position) {
 				(event, selected) => selected
 			)
 			.filter(selected => selected)
-			.map(createCone);
-			
-		const cones$ = new_cone$
-			.map(new_cone => cones => {
-				return cones.concat(new_cone);
-			})
-			.startWith([])
-			.scan(apply)
-			.map(arr => arr.map(d => d.model$))
-			.flatMapLatest(stream.combineLatest)
-			.startWith([]);
+			.map((_, index) => index)
+			.map(createCone)
+			.do(debug('event:add-cone'));
+
+		// const cones$ = new_cone$
+		// 	.pluck('model$')
+		// 	.map(obs => obs.shareReplay(1))
+		// 	.map(new_cone => cones => {
+		// 		return cones.concat(new_cone);
+		// 	})
+		// 	.scan(apply, [])
+		// 	.flatMapLatest(stream.combineLatest)
+		// 	.startWith([])
+		// 	// .do(arr => debug('event:cones')(arr.map()))
+		
+		const cones$ = stream.just([]);
 			
 		const color$ = selected$
 			.map(selected => selected ? '66c2ff' : 'ffffff');

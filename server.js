@@ -13,8 +13,6 @@ app.set('port', 9877);
 // Application
 //
 
-var appPath = path.resolve(__dirname, 'app', 'index.js');
-
 const external = [
   'three/three.js',
   '@cycle/core', 
@@ -24,6 +22,9 @@ const external = [
   'underscore'
 ];
 app.use('/bundle.js', babelify(external));
+
+var appPath = path.resolve(__dirname, 'app', 'index.js');
+
 app.use('/app.js', babelify(appPath, { external: external }));
 
 app.use(express.static(appPath));

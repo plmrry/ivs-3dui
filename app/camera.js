@@ -6,21 +6,21 @@ import d3 from 'd3';
 import Rx from 'rx';
 import combineLatestObj from 'rx-combine-latest-obj';
 
+import log from './log.js';
+
 const stream = Rx.Observable;
 
 export function component({ 
-	add_object_click$, camera_is_birds_eye$, dom, size$
+	add_object_click$, camera_is_birds_eye$, dom, size$, main_floor_delta$
 }) {
-	const camera_actions = intent({
+	const { orbit$, move_to_birds_eye$ } = intent({
 		add_object_click$,
 		camera_is_birds_eye$,
 		dom,
 		size$
 	});
 	
-	const cameras_model$ = model({ 
-			actions: camera_actions
-		});
+	const cameras_model$ = model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ });
 	
 	const cameras_state_reducer$ = view(cameras_model$);
 	
@@ -36,7 +36,7 @@ export function view(cameras_model$) {
 }
 
 export function intent({ 
-	add_object_click$, camera_is_birds_eye$, dom, size$ 
+	add_object_click$, camera_is_birds_eye$, dom
 }) {
 	const auto_birds_eye$ = add_object_click$
 		.withLatestFrom(
@@ -60,23 +60,46 @@ export function intent({
 		.d3dragHandler()
 		.events('drag')
 		.pluck('event')
-		.shareReplay();
+		.shareReplay(1);
 		
 	return {
 		move_to_birds_eye$,
-		orbit$,
-		size$
+		orbit$
+		// size$
 	};
 }
 
-export function model({ actions }) {
+export function model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ }) {
 	
-	const orbit$ = actions.orbit$;
+	// const { orbit$, move_to_birds_eye$, size$ } = actions;
+	
+	const panning_offset$ = main_floor_delta$
+		.map(({ x, z }) => ({ x, y: 0, z }))
+		.startWith({
+			x: 0,
+			y: 0,
+			z: 0
+		})
+		.scan((a,b) => {
+			return {
+				x: a.x + b.x,
+				y: 0,
+				z: a.z + b.z
+			};
+		})
+		// .shareReplay(1)
+		// .distinctUntilChanged()
+		.do(d => log('fooo', d))
+		// .subscribe()
+		// .subscribe(d => log('fooo', d));
+	
+	// const orbit$ = actions.orbit$;
     
 	const MAX_LATITUDE = 89.99;
 	const MIN_LATITUDE = 5;
 	
-	const to_birds_eye$ = actions.move_to_birds_eye$
+	// const to_birds_eye$ = actions.move_to_birds_eye$
+	const to_birds_eye$ = move_to_birds_eye$
 		.flatMap(ev => {
 			let destination = MAX_LATITUDE;
       return d3TweenStream(500)
@@ -143,23 +166,46 @@ export function model({ actions }) {
 		);
 	
 	const relative_position$ = polar_position$
-		.map(polarToVector);
+		.map(polarToVector)
+		// .combineLatest
 		
-	const lookAt$ = stream
-		.of({
-			x: 0, y: 0, z: 0
-		});
+	// const lookAt$ = stream
+	// 	.just({
+	// 		x: 0, y: 0, z: 0
+	// 	});
+	
+	const lookAt$ = panning_offset$;
 		
+	// const position_and_lookAt$ = stream
+	// 	.combineLatest(
+	// 		relative_position$,
+	// 		panning_offset$,
+	// 		(rel, look) => ({
+	// 			lookAt: look,
+	// 			position: {
+	// 				x: rel.x + look.x,
+	// 				y: rel.y + look.y,
+	// 				z: rel.z + look.z
+	// 			}
+	// 		})
+	// 	);
+	
 	const position$ = stream
 		.combineLatest(
 			relative_position$,
 			lookAt$,
+			// panning_offset$,
 			(rel, look) => ({
 				x: rel.x + look.x,
 				y: rel.y + look.y,
 				z: rel.z + look.z
 			})
 		);
+	
+	// const position$ = stream
+	// 	.just({
+	// 		x: 50, y: 70, z: 50
+	// 	});
 		
 	const lat_lng$ = combineLatestObj
 		({
@@ -167,12 +213,16 @@ export function model({ actions }) {
 		});
 		
 	const main_camera$ = combineLatestObj({
+			// position_and_lookAt$,
 			position$,
+			// lookAt$: panning_offset$,
 			lookAt$,
-			size$: actions.size$,
-			lat_lng$
+			// size$: actions.size$,
+			size$,
+			lat_lng$,
+			// panning_offset$
 		})
-		.map(({ position, lookAt, size, lat_lng }) => {
+		.map(({ position, lookAt, size, lat_lng }, index) => {
 			return {
 				name: 'main',
 				size: size,
@@ -180,8 +230,12 @@ export function model({ actions }) {
 				zoom: 40,
 				lookAt: lookAt,
 				lat_lng
+				// index
+				// panning_offset
 			};
-		});
+		})
+		// .distinctUntilChanged(d => d.index)
+		// .do(d => log(d.position))
 		
 	const editor_camera$ = stream
 		.just({
@@ -233,10 +287,13 @@ export function state_reducer(model) {
         if (! _.isMatch(this.position, d.position)) {
           debug('camera')('update position');
           this.position.copy(d.position);
-          this.lookAt(d.lookAt || new THREE.Vector3());
-          this.up.copy(new THREE.Vector3(0, 1, 0));
+          // this.lookAt(d.lookAt || new THREE.Vector3());
+          // this.up.copy(new THREE.Vector3(0, 1, 0));
           /** Apparently we do not need to call `updateProjectionMatrix()` */
         }
+        // if (! _.isMatch())
+        // console.log(d.lookAt, d.name)
+        this.lookAt(d.lookAt || new THREE.Vector3());
         /**
         * NOTE: You could, in theory, raycast from the middle of the camera's
         * view to the floor in order to get the "current lookat". But that's
@@ -294,6 +351,6 @@ function observableFromD3Event(type) {
 	};
 }
 
-function log(d) {
-	console.log(d);
-}
+// function log(d) {
+// 	console.log(d);
+// }
