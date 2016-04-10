@@ -18,8 +18,8 @@
 
 		<script src="js/three.min.js"></script>
 		<script src="js/Detector.js"></script>
-		<script src="FlyControlsUpdated.js"></script>
-		<script src="AxisHelper.js"></script>
+		<script src="js/FlyControlsUpdated.js"></script>
+		<script src="js/AxisHelper.js"></script>
 
     <script>
       // if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
@@ -326,7 +326,7 @@
 				scene.add(soundCones[soundCones.length - 1]);
 				objects.push(soundCones[soundCones.length - 1]);
 
-				soundCones[soundCones.length - 1].sound = loadSound('samples/wetShort.wav');
+				soundCones[soundCones.length - 1].sound = loadSound('assets/wetShort.wav');
 				soundCones[soundCones.length - 1].sound.panner.coneInnerAngle = 0.01*180/Math.PI;
 				soundCones[soundCones.length - 1].sound.panner.coneOuterAngle = 1*180/Math.PI;
 				soundCones[soundCones.length - 1].sound.panner.coneOuterGain = 0.03;
@@ -339,7 +339,7 @@
 			function onDocumentKeyDown(event) {
 
 				event.preventDefault();
-				
+
 				switch(event.keyCode){
 					case 8:
 						soundCones[interactiveCone].sound.source.stop();
