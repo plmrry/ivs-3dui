@@ -71,9 +71,9 @@ export function intent({
 
 export function model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ }) {
 	
-	// const { orbit$, move_to_birds_eye$, size$ } = actions;
-	
 	const panning_offset$ = main_floor_delta$
+		.filter(({ start: { objects } }) => objects.length === 0)
+		.pluck('delta')
 		.map(({ x, z }) => ({ x, y: 0, z }))
 		.startWith({
 			x: 0,
@@ -86,16 +86,9 @@ export function model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ }) 
 				y: 0,
 				z: a.z + b.z
 			};
-		})
-		// .shareReplay(1)
-		// .distinctUntilChanged()
-		.do(d => log('fooo', d))
-		// .subscribe()
-		// .subscribe(d => log('fooo', d));
-	
-	// const orbit$ = actions.orbit$;
+		});
     
-	const MAX_LATITUDE = 89.99;
+	const MAX_LATITUDE = 89.9;
 	const MIN_LATITUDE = 5;
 	
 	// const to_birds_eye$ = actions.move_to_birds_eye$
@@ -166,47 +159,21 @@ export function model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ }) 
 		);
 	
 	const relative_position$ = polar_position$
-		.map(polarToVector)
-		// .combineLatest
-		
-	// const lookAt$ = stream
-	// 	.just({
-	// 		x: 0, y: 0, z: 0
-	// 	});
+		.map(polarToVector);
 	
 	const lookAt$ = panning_offset$;
-		
-	// const position_and_lookAt$ = stream
-	// 	.combineLatest(
-	// 		relative_position$,
-	// 		panning_offset$,
-	// 		(rel, look) => ({
-	// 			lookAt: look,
-	// 			position: {
-	// 				x: rel.x + look.x,
-	// 				y: rel.y + look.y,
-	// 				z: rel.z + look.z
-	// 			}
-	// 		})
-	// 	);
 	
 	const position$ = stream
 		.combineLatest(
 			relative_position$,
 			lookAt$,
-			// panning_offset$,
 			(rel, look) => ({
 				x: rel.x + look.x,
 				y: rel.y + look.y,
 				z: rel.z + look.z
 			})
 		);
-	
-	// const position$ = stream
-	// 	.just({
-	// 		x: 50, y: 70, z: 50
-	// 	});
-		
+
 	const lat_lng$ = combineLatestObj
 		({
 			latitude$, longitude$, is_max_lat$
@@ -291,8 +258,6 @@ export function state_reducer(model) {
           // this.up.copy(new THREE.Vector3(0, 1, 0));
           /** Apparently we do not need to call `updateProjectionMatrix()` */
         }
-        // if (! _.isMatch())
-        // console.log(d.lookAt, d.name)
         this.lookAt(d.lookAt || new THREE.Vector3());
         /**
         * NOTE: You could, in theory, raycast from the middle of the camera's

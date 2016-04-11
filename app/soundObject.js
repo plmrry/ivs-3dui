@@ -10,15 +10,74 @@ import log from './log.js';
 
 const stream = Rx.Observable;
 
-export function scoped_sound_object(id, position) {
-  return function soundObject({ selected_object$, add_cone$, dom }, createCone, cone_action$) {
+function subtractVectors(a, b) {
+	return {
+		x: a.x - b.x,
+		y: a.y - b.y,
+		z: a.z - b.z
+	};
+}
+
+function addVectors(a, b) {
+	return {
+		x: a.x + b.x,
+		y: a.y + b.y,
+		z: a.z + b.z
+	};
+}
+
+export function scoped_sound_object_2(id) {
+	return function soundObject({ object_drag$, props$ }) {
+		const obj = {
+			key: id,
+			name: 'sound_object',
+			position: {
+				x: Math.random() * 2,
+				y: 1,
+				z: 1
+			},
+			volume: 1,
+			material: {
+				color: 'ffdddd'
+			},
+			cones: [],
+			selected: true
+		};
+		object_drag$
+			.subscribe(log);
+		// return props$;
+		// const position$ = 
+		return stream.just(obj);
+	};
+}
+
+export function scoped_sound_object(id, initial_position) {
+  return function soundObject({ selected_object$, add_cone$, object_drag$, dom }, createCone, cone_action$) {
   	debug('event:object')('new', id);
   	
 		const selected$ = selected_object$
 			.map(key => key === id)
 			.startWith(true);
 			
-		const position$ = stream.of(position);
+		const drag$ = object_drag$
+  		.filter(({ drag: { start: { first_object_key } } }) => first_object_key === id);
+  		/** or use selected$ ??? */
+  		
+  	const drag_x_z$ = drag$
+  		.filter(({ camera }) => camera === true)
+  		.map(({ drag: { delta: { x, z } } }) => ({ x, y: 0, z }) )
+  		// .map(delta => position => addVectors(position, delta));
+  		.map(delta => position => subtractVectors(position, delta));
+  		// .subscribe(d => log('faaabbb', d));
+			
+		// const position$ = stream.of(position);
+		const position$ = stream
+			.merge(
+				drag_x_z$
+			)
+			.startWith(initial_position)
+			.scan(apply)
+			// .shareReplay(500);
 		
 		const volume$ = stream.of(Math.random() + 0.4);
 		
@@ -70,7 +129,8 @@ export function scoped_sound_object(id, position) {
 				},
 				cones,
 				selected
-			}));
+			}))
+			// .shareReplay();
 			
 		return {
 			id,

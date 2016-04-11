@@ -13,13 +13,13 @@ import * as renderer from './renderer.js';
 import * as dom_component from './dom.js';
 import * as raycaster from './raycaster.js';
 
-import { scoped_sound_object } from './soundObject.js';
+import { scoped_sound_object, scoped_sound_object_2 } from './soundObject.js';
 import { scoped_sound_cone } from './soundCone.js';
 
 // debug.enable('*');
-// debug.enable('*,-raycasters');
+// debug.enable('*,-raycasters,-cameras,-camera');
 debug.disable();
-debug.enable('event:*');
+// debug.enable('event:*');
 
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
@@ -120,12 +120,57 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 				// 	return Object.assign({}, intersect, { event: obj.event });
 				// });
 		})
-		.shareReplay(1)
+		.shareReplay(1);
 		// .do(log)
 		// .subscribe(log)
 		
+	const main_intersects$ = main_raycaster$
+		.map(({ event, intersect_groups }) => {
+			const intersects = intersect_groups[0].intersects;
+			const floors = intersects.filter(({ object: { name } }) => name === 'floor');
+			const floor_point = typeof floors[0] === 'undefined' ? undefined : floors[0].point;
+			const objects = intersects
+				.filter(({ object: { name } }) => name === 'sound_object')
+				.map(({ object }) => object);
+			const first_object = objects[0];
+			const first_object_name = first_object ? first_object.name : undefined;
+			
+			const first_object_key = (first_object_name === 'sound_object') ? 
+				d3.select(first_object).datum().key : 
+				(first_object_name === 'cone') ? 
+				d3.select(first_object.parent.parent).datum().key :
+				undefined;
+				
+			return {
+				event,
+				floors,
+				floor_point,
+				objects,
+				first_object,
+				first_object_key
+			};
+		});
+		// .flatMapLatest(({ event, intersect_groups }) => {
+		// 	return stream.from(intersect_groups)
+		// 		.pluck('intersects')
+		// 		.map(intersects => ({ intersects, event }));
+		// })
+		// .subscribe(log);
+		
+	const main_dragstart_2$ = main_intersects$
+		.filter(({ event }) => event.type === 'dragstart');
+		
+	const main_drag_2$ = main_intersects$
+		.filter(({ event }) => event.type === 'drag');
+		
+	const main_dragend$ = main_intersects$
+		.filter(({ event: { type } }) => type === 'dragend');
+		
 	const main_dragstart$ = main_raycaster$
 		.filter(({ event }) => event.type === 'dragstart');
+		
+	const main_drag$ = main_raycaster$
+		.filter(({ event: { type } }) => type === 'drag');
 		
 	const main_dragstart_intersects$ = main_dragstart$
 		.pluck('intersect_groups')
@@ -133,23 +178,66 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.pluck('intersects')
 		.shareReplay(1);
 		
-	const main_floor_start$ = main_floor_point$
-		.filter(({ event: { type } }) => type === 'dragstart')
-		.pluck('point')
+	// const main_floor_start$ = main_floor_point$
+	// 	.filter(({ event: { type } }) => type === 'dragstart')
+	// 	// .pluck('point')
 		
-	const main_floor_drag$ = main_floor_point$
-		.filter(({ event: { type } }) => type === 'drag')
-		.pluck('point');
+	// const main_floor_drag$ = main_floor_point$
+	// 	.filter(({ event: { type } }) => type === 'drag')
+	// 	// .pluck('point');
 		
-	const main_floor_end$ = main_floor_point$
-		.filter(({ event: { type } }) => type === 'dragend')
-		.pluck('point');
+	// const main_floor_end$ = main_floor_point$
+	// 	.filter(({ event: { type } }) => type === 'dragend')
+	// 	.pluck('point');
+	
+	function subVectors(arr) {
+		return {
+			x: arr[0].floor_point.x - arr[1].floor_point.x,
+			y: arr[0].floor_point.y - arr[1].floor_point.y,
+			z: arr[0].floor_point.z - arr[1].floor_point.z
+		};
+	}
 		
-	const main_floor_delta$ = main_floor_drag$
+	const main_floor_delta$ = main_drag_2$
 		.withLatestFrom(
-			main_floor_start$,
-			(drag, start) => (new THREE.Vector3()).subVectors(start, drag)
+			main_dragstart_2$,
+			(drag, start) => ({ drag, start })
+		)
+		.map(obj => {
+			const { drag, start } = obj;
+			const delta = (new THREE.Vector3()).subVectors(start.floor_point, drag.floor_point);
+			return Object.assign(obj, { delta });
+		})
+		.shareReplay(1);
+		
+	const main_floor_pairwise_delta$ = main_dragstart_2$
+		.flatMap(start => main_drag_2$
+			.startWith(start)
+			.pairwise()
+			.takeUntil(main_dragend$)
+		)
+		.map(subVectors)
+		.withLatestFrom(
+			main_dragstart_2$,
+			(delta, start) => ({ delta, start })
+		)
+		// .subscribe(log)
+		
+	// const object_drag$ = main_floor_delta$
+	const object_drag$ = main_floor_pairwise_delta$
+		.filter(({ start: { first_object_key } }) => typeof first_object_key !== 'undefined')
+		.withLatestFrom(
+			camera_is_birds_eye$,
+			(drag, camera) => ({ drag, camera })
 		);
+		// .subscribe(log);
+		// .subscribe(({ start }) => console.log(start.first_object_key))
+		// .map(({ delta }) => {
+		// 	return delta;
+		// });
+		// .map(({ drag, start }) => {
+		// 	return (new THREE.Vector3()).subVectors(start.floor_point, drag.floor_point);
+		// });
 
 	const main_dragstart_intersect$ = main_dragstart_intersects$
 		.pluck('0', 'object')
@@ -177,17 +265,17 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.merge(new_object_key$)
 		.shareReplay(1);
 		
-	const main_drag$ = main_raycaster$
-		.filter(({ event }) => event.type === 'drag')
+	// const main_drag$ = main_raycaster$
+	// 	.filter(({ event }) => event.type === 'drag')
 		
-	const drag_object$ = main_drag$
-		.withLatestFrom(
-			main_dragstart_intersect$,
-			(drag, start) => ({ drag, start })
-		)
-		.filter(({ start }) => start.name === 'sound_object' || start.name === 'cone')
-		.do(debug('event:drag'))
-		.subscribe()
+	// const drag_object$ = main_drag$
+	// 	.withLatestFrom(
+	// 		main_dragstart_intersect$,
+	// 		(drag, start) => ({ drag, start })
+	// 	)
+	// 	.filter(({ start }) => start.name === 'sound_object' || start.name === 'cone')
+	// 	.do(debug('event:drag'))
+	// 	.subscribe()
 		
 	const add_object$ = main_raycaster$
 		.pairwise()
@@ -257,11 +345,17 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	function createSoundObject(position, index) {
 		const id = index;
 		return scoped_sound_object(id, position)
-			({ selected_object$, add_cone$, dom }, createCone);
+			({ selected_object$, add_cone$, object_drag$, dom }, createCone);
+	}
+	
+	function createSoundObject2(index, props$) {
+		const id = index;
+		const object_actions = { object_drag$, props$ };
+		return scoped_sound_object_2(id)(object_actions);
 	}
 	
 	const { scenes_state_reducer$, selected$, new_object$ } = scene
-		.component({ add_object$ }, createSoundObject);
+		.component({ add_object$ }, createSoundObject, createSoundObject2);
 		
 	new_object$.subscribe(new_object_proxy$);
 	

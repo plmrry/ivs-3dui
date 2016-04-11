@@ -8,7 +8,7 @@ import combineLatestObj from 'rx-combine-latest-obj';
 
 const stream = Rx.Observable;
 
-import { scoped_sound_object } from './soundObject.js';
+import { scoped_sound_object, scoped_sound_object_2 } from './soundObject.js';
 
 const room_size = {
 	width: 20,
@@ -16,10 +16,11 @@ const room_size = {
 	height: 3
 };
 
-export function component({ add_object$ }, objectComponentCreator) {
+export function component({ add_object$ }, objectComponentCreator, createSoundObject2) {
 	const { scenes_model$, new_object$, selected$ } = model(
 			{ add_object$ }, 
-			objectComponentCreator
+			objectComponentCreator,
+			createSoundObject2
 		);
 	
 	const scenes_state_reducer$ = view(scenes_model$);
@@ -102,21 +103,50 @@ export function component({ add_object$ }, objectComponentCreator) {
 
 export function model(
 		{ add_object$ }, 
-		objectComponentCreator
+		objectComponentCreator,
+		scopedSoundObject
 	) {
 	const new_object$ = add_object$
-		.map(objectComponentCreator)
-		.shareReplay(1);
+		// .map(objectComponentCreator)
+		// .shareReplay();
 	
 	const sound_objects$ = new_object$
-		.pluck('model$')
-		.map(obs => obs.shareReplay(1))
+		.map((d, i) => {
+			return {
+				key: i,
+				name: 'sound_object',
+				position: {
+					x: Math.random() * 2,
+					y: 1,
+					z: 1
+				},
+				volume: 1,
+				material: {
+					color: 'ffdddd'
+				},
+				cones: [],
+				selected: true
+			}
+		})
+		.flatMap((obj) => {
+			// const props$ = stream.just(obj);
+			const props$ = new Rx.ReplaySubject(1);
+			const model$ = scopedSoundObject(obj.key, props$);
+			model$.subscribe(props$.asObserver());
+			// const model$ = scoped_sound_object_2(obj.key)({ object_drag$, })
+			// return props$;
+			return model$;
+		})
+		// .pluck('model$')
+		// .map(obs => obs.shareReplay())
 		.map(new_obj => array => array.concat(new_obj))
 		// .startWith([])
-		.scan(apply, [])
+		// .scan(apply, [])
+		// .map(arr => arr.map(objectComponentCreator).map(d => d.model$)) //objectComponentCreator))
 		// .map(arr => arr.map(d => d.model$))
-		.flatMapLatest(stream.combineLatest)
+		// .flatMapLatest(stream.combineLatest)
 		.startWith([])
+		.scan(apply)
 		.do(debug('sound objects'))
 		.shareReplay();
 		
