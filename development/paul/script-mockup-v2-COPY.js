@@ -269,7 +269,8 @@
     _current = ((ref = current.floor[0]) != null ? ref.point : void 0) || (new THREE.Vector3());
     _start = ((ref1 = start.floor[0]) != null ? ref1.point : void 0) || _current;
     delta = (new THREE.Vector3()).subVectors(_start, _current);
-    // console.log(_start, _current);
+    console.log(_start.x, _current.x);
+    console.log(delta.x);
     update = function(model) {
       model.camera._lookAt.add(delta);
       model.camera.position.add(delta);
@@ -302,7 +303,7 @@
     obj = int.room[0].object;
     return function(model) {
       obj.position.add(delta);
-      console.log(obj.position);
+      // console.log(obj.position);
       return model;
     };
   }).subscribe(function(update) {

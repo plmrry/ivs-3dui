@@ -145,82 +145,12 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.filter(({ event: { type } }) => type === 'dragend')
 		.pluck('point');
 		
-	const main_floor_delta$ = main_floor_start$
-		.flatMapLatest(start => {
-			return main_floor_drag$
-				.startWith(start)
-				// .pairwise()
-				.bufferWithCount(2, 1)
-				.takeUntil(main_floor_end$)
-				.map(arr => {
-					return {
-						x: arr[0].x - arr[1].x,
-						y: arr[0].y - arr[1].y,
-						z: arr[0].z - arr[1].z,
-					};
-				});
-		});
-		// .map(arr => {
-		// 	return {
-		// 		x: arr[0].x - arr[1].x,
-		// 		y: arr[0].y - arr[1].y,
-		// 		z: arr[0].z - arr[1].z,
-		// 	};
-		// })
-		// .do(log)
-		
-	// const main_floor_delta$ = main_floor_drag$
-		// .withLatestFrom(main_floor_start$)
-		// .startWith(main_floor_start$)
-		// .do(d => { debugger })
-	// const main_floor_delta$ = main_floor_start$
-	// 	.flatMapLatest(start => {
-	// 		return main_floor_drag$
-	// 			.startWith(start);
-	// 	})
-	// 	.scan((a, b) => ({
-	// 		x: a.x - b.x,
-	// 		y: a.y - b.y,
-	// 		z: a.z - b.z
-	// 	}));
-		// .map(arr => {
-		// 	return {
-		// 		x: arr[0].x - arr[1].x,
-		// 		y: arr[0].y - arr[1].y,
-		// 		z: arr[0].z - arr[1].z,
-		// 	};
-		// })
-		// .map(subtract)
-		// .flatMap(arr => stream.from(arr))
-		// .subscribe(log);
-		
-	// function subtract(arr) {
-	// 	const vectors = arr
-	// 		.map(({ x, y, z }) => [x,y,z]);
-	// 	return d3.zip(vectors)
-	// 		.map(arr => arr.reduce((a,b) => a-b));
-			
-	// 	// return arr
-	// 	// 	.reduce((a,b) => )
-	// 	// var zipped = d3.zip(arr)
-	// 	// 	.reduce((a, b) => {
-	// 	// 		return 
-	// 	// 	})
-	// 	// debugger
-	// 	// return d3.zip(arr);
-	// }
-		
-	// const main_dragstart_floor$ = main_dragstart_intersects$
-	// 	.flatMap(arr => stream.from(arr))
-	// 	.filter(({ object: { name } }) => name === 'floor')
-	// 	.pluck('point')
-	// 	.do(log)
-	// 	.subscribe();
-		
-	// const main_dragstart_intersect$ = main_dragstart$
-	// 	.pluck('intersect_groups')
-	// 	.flatMapLatest(arr => stream.from(arr))
-	// 	.pluck('intersects', '0', 'object')
+	const main_floor_delta$ = main_floor_drag$
+		.withLatestFrom(
+			main_floor_start$,
+			(drag, start) => (new THREE.Vector3()).subVectors(start, drag)
+		);
+
 	const main_dragstart_intersect$ = main_dragstart_intersects$
 		.pluck('0', 'object')
 		.map(obj => {
@@ -235,8 +165,6 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 			};
 		})
 		.shareReplay(1)
-		// .distinctUntilChanged()
-		// .do(debug('event:dragstart'))
 
 	const selected_object$ = main_dragstart_intersect$
 		.withLatestFrom(
@@ -251,7 +179,6 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		
 	const main_drag$ = main_raycaster$
 		.filter(({ event }) => event.type === 'drag')
-		// .do(debug('event:drag'));/
 		
 	const drag_object$ = main_drag$
 		.withLatestFrom(
@@ -261,14 +188,6 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.filter(({ start }) => start.name === 'sound_object' || start.name === 'cone')
 		.do(debug('event:drag'))
 		.subscribe()
-		// .subscribe();
-		
-	
-		
-	// const drag_object$ = main_drag$
-	// 	.withLatestFrom(
-	// 		selected_object$
-	// 	)
 		
 	const add_object$ = main_raycaster$
 		.pairwise()
