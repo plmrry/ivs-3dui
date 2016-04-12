@@ -74,7 +74,8 @@ function intent({
 		.filter(({ mode }) => mode !== true)
 		.pluck('event')
 		.pluck('first_object_key')
-		.merge(new_object_key$);
+		.merge(new_object_key$)
+		.shareReplay(1);
 	
 	const add_object$ = main_raycaster$
 		.pairwise()
@@ -112,9 +113,18 @@ function intent({
 	const editor_mousemove$ = editor_raycaster$
 		.filter(({ event }) => event.type === 'mousemove');
 		
+	const editor_dragstart$ = editor_raycaster$
+		.filter(({ event }) => event.type === 'dragstart');
+		
+	const editor_mousemove_panel$ = editor_mousemove$
+		.pluck('intersect_groups')
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.key === 'children')
+		.pluck('intersects', '0', 'point');
+		
 	return {
 		add_object$, drag_object$, selected_object$, delete_selected_object$,
-		add_cone$
+		add_cone$, editor_mousemove_panel$, editor_dragstart$
 	};
 }
 
@@ -143,19 +153,6 @@ export function component({
 	};
 }
 
-// 	const add_cone$ = dom
-// 		.select('#add-cone')
-// 		.events('click')
-// 		.shareReplay();
-// 		// .shareReplay(1);
-	
-// 	return {
-// 		add_object$,
-// 		selected_object$,
-// 		add_cone$
-// 	};
-// }
-
 function subtractVectors(a, b) {
 	return {
 		x: a.x - b.x,
@@ -166,7 +163,7 @@ function subtractVectors(a, b) {
 
 export function model({ 
 	add_object$, drag_object$, selected_object$, delete_selected_object$,
-	add_cone$
+	add_cone$, editor_mousemove_panel$, editor_dragstart$
 }) {
 	const new_object$ = new Rx.Subject();
 	
@@ -226,8 +223,68 @@ export function model({
 			return obj;
 		});
 		
-	function getNewCone() {
+	const add_cone_to_selected$ = add_cone$
+		.let(withSelected(selected_object$, addCone));
+		
+	const move_interactive$ = editor_mousemove_panel$
+		.let(withSelected(selected_object$, moveInteractiveCone));
+		
+	const disable_interactive$ = editor_dragstart$
+		.let(withSelected(selected_object$, disableInteractiveCone));
+		
+	function disableInteractiveCone(_) {
+		return function(object) {
+			object.cones = object.cones.map(cone => {
+				if (cone.interactive) cone.interactive = false;
+				return cone;
+			});
+		};
+	}
+		
+	function moveInteractiveCone(lookAt) {
+		return function(object) {
+			object.cones = object.cones.map(cone => {
+				if (cone.interactive) cone.lookAt = lookAt;
+				return cone;
+			});
+		};
+	}
+	
+	function addCone(value) {
+		return function(object) {
+			const maxKey = d3.max(object.cones, d => d.key);
+			const key = typeof maxKey === 'undefined' ? 0 : maxKey + 1;
+			object.cones.push(getNewCone(key));
+		};
+	}
+		
+	function withSelected(selected_object$, func) {
+		return function(observable) {
+			return observable
+				.withLatestFrom(
+					selected_object$,
+					(value, key) => ({ value, key })
+				)
+				.map(({ value, key }) => obj => {
+					if (obj.key === key) func(value)(obj);
+					return obj;
+				});
+		};
+	}
+		
+	// const add_cone_to_selected$ = add_cone$
+	// 	.withLatestFrom(
+	// 		selected_object$,
+	// 		(del, selected) => selected
+	// 	)
+	// 	.map(key => obj => {
+	// 		if (obj.key === key) addCone(obj);
+	// 		return obj;
+	// 	});
+		
+	function getNewCone(key) {
 		return {
+			key,
 			volume: 1,
 			spread: 0.5,
 			interactive: true,
@@ -240,25 +297,15 @@ export function model({
 		};
 	}
 		
-	const add_cone_to_selected$ = add_cone$
-		.withLatestFrom(
-			selected_object$,
-			(del, selected) => selected
-		)
-		.map(key => obj => {
-			if (obj.key === key) obj.cones.push(getNewCone());
-			return obj;
-		});
-		
 	const object_update$ = stream
 		.merge(
 			drag_x_z_update$,
 			selected_object_update$,
-			add_cone_to_selected$
+			add_cone_to_selected$,
+			move_interactive$,
+			disable_interactive$
 		)
 		.map(update => objects => objects.map(update));
-		
-	const sound_objects_proxy$ = new Rx.ReplaySubject(1);
 		
 	const sound_objects$ = stream
 		.merge(
