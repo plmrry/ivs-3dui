@@ -74,7 +74,8 @@ function intent({
 		.filter(({ mode }) => mode !== true)
 		.pluck('event')
 		.pluck('first_object_key')
-		.merge(new_object_key$);
+		.merge(new_object_key$)
+		.shareReplay(1);
 	
 	const add_object$ = main_raycaster$
 		.pairwise()
@@ -100,8 +101,21 @@ function intent({
 		.select('#delete-object')
 		.events('click');
 		
+	const add_cone$ = dom
+		.select('#add-cone')
+		.events('click');
+		
+	const editor_raycaster$ = raycasters
+		.select({ name: 'editor' })
+		.pluck('event$')
+		.flatMapLatest(obs => obs);
+		
+	const editor_mousemove$ = editor_raycaster$
+		.filter(({ event }) => event.type === 'mousemove');
+		
 	return {
-		add_object$, drag_object$, selected_object$, delete_selected_object$
+		add_object$, drag_object$, selected_object$, delete_selected_object$,
+		add_cone$
 	};
 }
 
@@ -130,19 +144,6 @@ export function component({
 	};
 }
 
-// 	const add_cone$ = dom
-// 		.select('#add-cone')
-// 		.events('click')
-// 		.shareReplay();
-// 		// .shareReplay(1);
-	
-// 	return {
-// 		add_object$,
-// 		selected_object$,
-// 		add_cone$
-// 	};
-// }
-
 function subtractVectors(a, b) {
 	return {
 		x: a.x - b.x,
@@ -152,30 +153,32 @@ function subtractVectors(a, b) {
 }
 
 export function model({ 
-	add_object$, drag_object$, selected_object$, delete_selected_object$ 
+	add_object$, drag_object$, selected_object$, delete_selected_object$,
+	add_cone$
 }) {
 	const new_object$ = new Rx.Subject();
+	
+	function getNewObject(id, position) {
+		return {
+			id,
+			key: id,
+			name: 'sound_object',
+			position: {
+				x: position.x,
+				y: position.y,
+				z: position.z
+			},
+			volume: 1,
+			cones: [],
+			selected: true
+		}
+	}
 	
 	const add_object_update$ = add_object$
 		.map(position => objects => {
 			const max = d3.max(objects, d => d.id);
 			const id = typeof max === 'undefined' ? 0 : max + 1;
-			const new_object = {
-				id,
-				key: id,
-				name: 'sound_object',
-				position: {
-					x: position.x,
-					y: position.y,
-					z: position.z
-				},
-				volume: 1,
-				material: {
-					color: 'ffffff'
-				},
-				cones: [],
-				selected: true
-			};
+			const new_object = getNewObject(id, position);
 			new_object$.onNext(new_object);
 			return objects.concat(new_object);
 		});
@@ -187,62 +190,108 @@ export function model({
 		)
 		.map(key => objects => objects.filter(obj => obj.key !== key));
 		
-	const selected_object_update$ = selected_object$
-		.map(key => object => {
-			if (key === object.key) {
-				object.selected = true;
-				object.material.color = '66c2ff';
-			}
-			else {
-				object.selected = false;
-				object.material.color = 'ffffff';
-			}
-			return object;
-		})
-		.map(update => objects => objects.map(update));
-		
-	const drag_x_z$ = drag_object$
-		.filter(({ camera }) => camera === true)
-		.map(({ drag: { delta: { x, z }, start } }) => {
-			const delta = { x, y: 0, z };
-			const key = start.first_object_key;
-			return { delta, key };
-		});
-	
-	const drag_x_z_update$ = drag_x_z$
-		.map(({ delta, key }) => {
-			const update = obj => {
-				if (obj.key === key) obj.position = subtractVectors(obj.position, delta);
-				return obj;
-			};
-			return update;
-		})
-		.map(update => objects => objects.map(update));
-		
 	const sound_objects_proxy$ = new Rx.ReplaySubject(1);
 		
 	const sound_objects$ = stream
 		.merge(
 			add_object_update$,
-			delete_object_update$,
-			drag_x_z_update$,
-			selected_object_update$
+			delete_object_update$
 		)
 		.withLatestFrom(
 			sound_objects_proxy$,
 			(fn, o) => fn(o)
 		)
-		// .flatMap(arr => stream
-		// 	.from(arr)
-		// 	.scan((a,b) => a.concat(b), [])
-		// 	// .flatMap(stream.combineLatest)
-		// )
+		.flatMapLatest(arr => stream
+			.from(arr)
+			.map(object => {
+				const new_cone$ = new Rx.Subject();
+				
+				function getNewCone(key) {
+					return {
+						key,
+						volume: 1,
+						spread: 0.5,
+						interactive: true,
+						selected: true,
+						lookAt: {
+							x: Math.random(),
+							y: Math.random(),
+							z: Math.random()
+						}
+					};
+				}
+				
+				const selected$ = selected_object$
+					.map(key => key === object.key)
+					.startWith(true);
+					
+				const add_cone_update$ = add_cone$
+					.withLatestFrom(
+						selected$,
+						(event, selected) => selected
+					)
+					.filter(selected => selected)
+					.map(() => cones => {
+						const max = d3.max(cones, d => d.id);
+						const id = typeof max === 'undefined' ? 0 : max + 1;
+						const new_cone = getNewCone(id);
+						new_cone$.onNext(new_cone);
+						return cones.concat(new_cone);
+					});
+					
+				const cones$ = stream
+					.merge(
+						add_cone_update$
+					)
+					.startWith([])
+					.scan(apply);
+					
+				const color$ = selected$
+					.map(selected => selected ? '66c2ff' : 'ffffff');
+					
+				const material$ = color$
+					.map(color => ({ color }));
+				
+				const drag_x_z$ = drag_object$
+					.filter(({ camera }) => camera === true)
+					.map(({ drag: { delta: { x, z }, start } }) => {
+						const delta = { x, y: 0, z };
+						const key = start.first_object_key;
+						return { delta, key };
+					})
+					.filter(({ key }) => key === object.key)
+					.map(({ delta }) => position => subtractVectors(position, delta));
+					
+				const position$ = drag_x_z$
+					.startWith(object.position)
+					.scan(apply);
+					
+				return combineLatestObj
+					({
+						position$, selected$, material$, cones$
+					})
+					.map(({ position, selected, material, cones }) => {
+						return {
+							id: object.id,
+							key: object.key,
+							name: object.name,
+							position,
+							selected,
+							volume: object.volume,
+							material,
+							cones
+						};
+					});
+			})
+			.scan((a,b) => a.concat(b), [])
+			.flatMapLatest(arr => arr.length ? stream.combineLatest(arr) : stream.just([]))
+		)
 		.startWith([])
 		.do(debug('sound objects'))
 		.shareReplay(1);
 		
 	sound_objects$
-		.subscribe(sound_objects_proxy$.asObserver());
+		.subscribe(sound_objects_proxy$);
 		
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0])
@@ -354,8 +403,6 @@ export function state_reducer(model) {
 function getScreen() {
 	const geometry = new THREE.PlaneGeometry(6, 6);
 	const material = new THREE.MeshPhongMaterial({
-		// color: new THREE.Color(1, 0.5, 0.5),
-		// side: THREE.DoubleSide,
 		depthWrite: false
 	});
 	material.opacity = 0;
