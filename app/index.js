@@ -19,7 +19,7 @@ import { scoped_sound_cone } from './soundCone.js';
 // debug.enable('*');
 // debug.enable('*,-raycasters,-cameras,-camera');
 debug.disable();
-// debug.enable('event:*');
+debug.enable('event:*,sound-objects:*');
 
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
@@ -33,6 +33,11 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	const cameras_model_proxy$ = new Rx.Subject();
 	
 	const size$ = windowSize(dom);
+	
+	const editor_size$ = stream.just({
+		width: 300,
+		height: 300
+	});
 	
 	const camera_is_birds_eye$ = cameras_model_proxy$
 		.flatMap(arr => stream.from(arr))
@@ -108,7 +113,7 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	 */ 
 
 	const renderers_state_reducer$ = renderer
-		.component({ size$ });
+		.component({ size$, editor_size$ });
 		
 	/** 
 	 *	SCENES
@@ -129,7 +134,8 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 		.component({ 
 			renderers, 
 			selected$,
-			size$
+			size$,
+			editor_size$
 		});
 		
 	/** 
@@ -142,7 +148,8 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 			camera_is_birds_eye$, 
 			main_floor_delta$,
 			dom, 
-			size$
+			size$,
+			editor_size$
 		});
 		
 	cameras_model$.subscribe(cameras_model_proxy$);

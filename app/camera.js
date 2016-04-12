@@ -11,7 +11,8 @@ import log from './log.js';
 const stream = Rx.Observable;
 
 export function component({ 
-	add_object_click$, camera_is_birds_eye$, dom, size$, main_floor_delta$
+	add_object_click$, camera_is_birds_eye$, dom, size$, main_floor_delta$,
+	editor_size$
 }) {
 	const { orbit$, move_to_birds_eye$ } = intent({
 		add_object_click$,
@@ -19,7 +20,10 @@ export function component({
 		dom
 	});
 	
-	const cameras_model$ = model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ });
+	const cameras_model$ = model({ 
+		orbit$, move_to_birds_eye$, size$, main_floor_delta$,
+		editor_size$
+	});
 	
 	const cameras_state_reducer$ = view(cameras_model$);
 	
@@ -67,7 +71,10 @@ export function intent({
 	};
 }
 
-export function model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ }) {
+export function model({ 
+	orbit$, move_to_birds_eye$, size$, main_floor_delta$,
+	editor_size$
+}) {
 	
 	const panning_offset$ = main_floor_delta$
 		.filter(({ start: { objects } }) => objects.length === 0)
@@ -177,14 +184,10 @@ export function model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ }) 
 		});
 		
 	const main_camera$ = combineLatestObj({
-			// position_and_lookAt$,
 			position$,
-			// lookAt$: panning_offset$,
 			lookAt$,
-			// size$: actions.size$,
 			size$,
 			lat_lng$,
-			// panning_offset$
 		})
 		.map(({ position, lookAt, size, lat_lng }, index) => {
 			return {
@@ -193,26 +196,20 @@ export function model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ }) 
 				position: position,
 				zoom: 40,
 				lookAt: lookAt,
-				lat_lng
-				// index
-				// panning_offset
+				lat_lng,
+				index
 			};
-		})
-		// .distinctUntilChanged(d => d.index)
-		// .do(d => log(d.position))
+		});
 		
-	const editor_camera$ = stream
-		.just({
+	const editor_camera$ = editor_size$
+		.map(editor_size => ({
 			name: 'editor',
-			size: {
-				width: 300,
-				height: 300
-			},
+			size: editor_size,
 			position: {
 				x: 0, y: 0, z: 10
 			},
 			zoom: 50
-		});
+		}));
 		
 	return stream
 		.combineLatest(

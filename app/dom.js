@@ -39,7 +39,7 @@ export function view(dom_model$) {
 					style: {
 						right: 0,
 						top: 0,
-						width: '400px'
+						// width: `${model.editor_size.width}px`
 					},
 					// buttons: [
 					// 	{
@@ -80,8 +80,6 @@ export function view(dom_model$) {
 				.attr('class', d => d.class)
 				.classed('controls', true)
 				.style({
-					width: '300px',
-					height: '100px',
 					border: '1px solid black',
 					position: 'absolute'
 				})
@@ -141,10 +139,9 @@ export function view(dom_model$) {
 				.enter()
 				.append('div')
 				.classed('card', true)
-				.style({
-					width: '100px',
-					height: '100px',
-					border: '2px solid red'
+				.each(function(d) {
+					d3.select(this)
+						.style(d.style);
 				});
 				
 			const editor_canvas = editor_cards
@@ -164,6 +161,58 @@ export function view(dom_model$) {
 				.enter()
 				.append('button')
 				.attr('id', d => d.id)
+				.text(d => d.text)
+				.each(function(d) {
+					d3.select(this)
+						.style(d.style);
+				});
+				
+			const card_blocks = editor_cards
+				.selectAll('.card-block')
+				.data(d => d.card_blocks || []);
+				
+			card_blocks
+				.exit()
+				.remove()
+				
+			const card_blocks_enter = card_blocks
+				.enter()
+				.append('div')
+				.classed('card-block', true)
+				.attr('id', d => d.id)
+				
+			card_blocks_enter
+				.append('h6')
+				.classed('card-title', true)
+				.text(d => d.header);
+				
+			const card_blocks_rows = card_blocks
+				.selectAll('.row')
+				.data(d => d.rows || []);
+				
+			card_blocks_rows
+				.enter()
+				.append('div')
+				.classed('row parameter', true);
+				
+			const card_blocks_rows_cols = card_blocks_rows
+				.selectAll('div')
+				.data(d => d.columns || []);
+				
+			card_blocks_rows_cols
+				.enter()
+				.append('div')
+				.attr('class', d => d.class)
+				.attr('id', d => d.id)
+				.append('span')
+				.attr('class', d => d.span_class)
+				.each(function(d) {
+					d3.select(this)
+						.style(d.span_style);
+				});
+				
+			card_blocks_rows_cols
+				.select('span')
 				.text(d => d.text);
 				
 			return dom;
@@ -172,7 +221,7 @@ export function view(dom_model$) {
 	return dom_state_reducer$;
 }
 
-export function component({ renderers, selected$, size$ }) {
+export function component({ renderers, selected$, size$, editor_size$ }) {
 	const main_canvas$ = renderers
 		.select({ name: 'main' })
 		.map(renderer => renderer.domElement);
@@ -186,12 +235,13 @@ export function component({ renderers, selected$, size$ }) {
 	const editor_dom$ = selected$
 		.withLatestFrom(
 			renderers.select({ name: 'editor' }),
-			(s, r) => ({ selected: s, renderer: r })
+			editor_size$,
+			(s, r, size) => ({ selected: s, renderer: r, size })
 		)
-		.map(({ selected, renderer }) => {
+		.map(({ selected, renderer, size }) => {
 			if (typeof selected === 'undefined') return [];
-			const cards = [
-				{ 
+			// const object_view_card =
+			const object_renderer_card = { 
 					canvases: [ { node: renderer.domElement } ],
 					style: {
 						position: 'relative'
@@ -199,16 +249,45 @@ export function component({ renderers, selected$, size$ }) {
 					buttons: [
 						{
 							id: 'add-cone',
-							text: 'add cone'
-						},
-						{
-							id: 'delete-object',
-							text: 'delete object'
+							text: 'add cone',
+							style: {
+								position: 'absolute',
+								left: 0
+							}
 						}
 					]
-				}
-			];
-			return cards;
+				};
+			const object_info_card_block = {
+				id: 'object-card',
+				header: `Object ${selected.key}`,
+				rows: [
+					{
+						columns: [
+							{
+								width: '6',
+								class: 'col-xs-6',
+								span_class: 'value delete-object',
+								span_style: {
+									cursor: 'pointer'
+								},
+								text: 'Delete',
+								id: 'delete-object'
+							}
+						]
+					}
+				]
+			};
+			const info_card = {
+				card_blocks: [
+					selected.name === 'sound_object' ? object_info_card_block : undefined
+				].filter(d => typeof d !== 'undefined')
+			};
+			const cards = [
+				selected.name === 'sound_object' ? object_renderer_card : undefined,
+				info_card,
+				selected.name === 'foo-bar' ? object_renderer_card : undefined
+			].filter(d => typeof d !== 'undefined');
+			return { cards, size };
 		});
 		
 	const dom_model$ = model({ main_canvas$, editor_dom$, size$ });
@@ -235,7 +314,8 @@ export function model({ main_canvas$, editor_dom$, size$ }) {
 					],
 					size
 				},
-				editor_cards: editor_dom
+				editor_cards: editor_dom.cards,
+				editor_size: editor_dom.size
 			};
 		});
 	return dom_model$;

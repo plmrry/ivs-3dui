@@ -98,7 +98,7 @@ function intent({
 		.do(debug('event:add-object'));
 		
 	const delete_selected_object$ = dom
-		.select('#delete-object')
+		.select('.delete-object')
 		.events('click');
 		
 	const add_cone$ = dom
@@ -169,7 +169,7 @@ function intent({
 	const drag_cone$ = editor_dragstart$
 		.filter(({ first_cone }) => typeof first_cone !== 'undefined')
 		.flatMap(start => editor_drag$
-			.startWith(start)
+			// .startWith(start)
 			.takeUntil(editor_dragend$)
 		)
 		.pluck('screen_point');
@@ -407,15 +407,45 @@ export function model({
 		)
 		.map(update => objects => objects.map(update));
 		
+	const first = {
+		cones: [
+			{
+				interactive: false,
+				key: 0,
+				lookAt: {
+					x: 0.57,
+					y: 0.44,
+					z: 0.34
+				},
+				selected: true,
+				spread: 0.5,
+				volume: 2,
+				name: 'cone'
+			}
+		],
+		key: 0,
+		material: {
+			color: 'ffffff'
+		},
+		name: 'sound_object',
+		position: {
+			x: -5,
+			y: 1.5,
+			z: 1.8
+		},
+		selected: true,
+		volume: 1
+	};
+		
 	const sound_objects$ = stream
 		.merge(
 			add_object_update$,
 			delete_object_update$,
 			object_update$
 		)
-		.startWith([])
+		.startWith([first])
 		.scan(apply)
-		.do(debug('sound objects'))
+		.do(debug('sound-objects:model'))
 		.shareReplay(1);
 		
 	const selected$ = sound_objects$

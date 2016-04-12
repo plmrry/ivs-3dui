@@ -3,12 +3,16 @@ import THREE from 'three/three.js';
 import _ from 'underscore';
 import d3_selection from 'd3-selection';
 import Rx from 'rx';
+import combineLatestObj from 'rx-combine-latest-obj';
 
 const stream = Rx.Observable;
 
-export function component({ size$ }) {
-		const renderers_model$ = size$
-			.map(size => {
+export function component({ size$, editor_size$ }) {
+		const renderers_model$ = combineLatestObj
+			({
+				size$, editor_size$
+			})
+			.map(({ size, editor_size }) => {
 				return [
 					{
 						name: 'main',
@@ -16,10 +20,7 @@ export function component({ size$ }) {
 					},
 					{
 						name: 'editor',
-						size: {
-							width: 300,
-							height: 300
-						}
+						size: editor_size
 					}
 				];
 			});
