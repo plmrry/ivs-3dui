@@ -203,86 +203,7 @@ export function model({
 		)
 		.flatMapLatest(arr => stream
 			.from(arr)
-			.map(object => {
-				const new_cone$ = new Rx.Subject();
-				
-				function getNewCone(key) {
-					return {
-						key,
-						volume: 1,
-						spread: 0.5,
-						interactive: true,
-						selected: true,
-						lookAt: {
-							x: Math.random(),
-							y: Math.random(),
-							z: Math.random()
-						}
-					};
-				}
-				
-				const selected$ = selected_object$
-					.map(key => key === object.key)
-					.startWith(true);
-					
-				const add_cone_update$ = add_cone$
-					.withLatestFrom(
-						selected$,
-						(event, selected) => selected
-					)
-					.filter(selected => selected)
-					.map(() => cones => {
-						const max = d3.max(cones, d => d.id);
-						const id = typeof max === 'undefined' ? 0 : max + 1;
-						const new_cone = getNewCone(id);
-						new_cone$.onNext(new_cone);
-						return cones.concat(new_cone);
-					});
-					
-				const cones$ = stream
-					.merge(
-						add_cone_update$
-					)
-					.startWith([])
-					.scan(apply);
-					
-				const color$ = selected$
-					.map(selected => selected ? '66c2ff' : 'ffffff');
-					
-				const material$ = color$
-					.map(color => ({ color }));
-				
-				const drag_x_z$ = drag_object$
-					.filter(({ camera }) => camera === true)
-					.map(({ drag: { delta: { x, z }, start } }) => {
-						const delta = { x, y: 0, z };
-						const key = start.first_object_key;
-						return { delta, key };
-					})
-					.filter(({ key }) => key === object.key)
-					.map(({ delta }) => position => subtractVectors(position, delta));
-					
-				const position$ = drag_x_z$
-					.startWith(object.position)
-					.scan(apply);
-					
-				return combineLatestObj
-					({
-						position$, selected$, material$, cones$
-					})
-					.map(({ position, selected, material, cones }) => {
-						return {
-							id: object.id,
-							key: object.key,
-							name: object.name,
-							position,
-							selected,
-							volume: object.volume,
-							material,
-							cones
-						};
-					});
-			})
+			.map(SoundObject({ selected_object$, add_cone$, drag_object$ }))
 			.scan((a,b) => a.concat(b), [])
 			.flatMapLatest(arr => arr.length ? stream.combineLatest(arr) : stream.just([]))
 		)
@@ -343,6 +264,104 @@ export function model({
 		new_object$,
 		selected$
 	};
+}
+
+// function getNewCone(key) {
+// 	return {
+// 		key,
+// 		volume: 1,
+// 		spread: 0.5,
+// 		interactive: true,
+// 		selected: true,
+// 		lookAt: {
+// 			x: Math.random(),
+// 			y: Math.random(),
+// 			z: Math.random()
+// 		}
+// 	};
+// }
+
+function SoundObject({ selected_object$, add_cone$, drag_object$ }) {
+	return function(object) {
+		const new_cone$ = new Rx.Subject();
+		
+		function getNewCone(key) {
+			return {
+				key,
+				volume: 1,
+				spread: 0.5,
+				interactive: true,
+				selected: true,
+				lookAt: {
+					x: Math.random(),
+					y: Math.random(),
+					z: Math.random()
+				}
+			};
+		}
+			
+		const selected$ = selected_object$
+			.map(key => key === object.key)
+			.startWith(true);
+			
+		const add_cone_update$ = add_cone$
+			.withLatestFrom(
+				selected$,
+				(event, selected) => selected
+			)
+			.filter(selected => selected)
+			.map(() => cones => {
+				const max = d3.max(cones, d => d.id);
+				const id = typeof max === 'undefined' ? 0 : max + 1;
+				const new_cone = getNewCone(id);
+				new_cone$.onNext(new_cone);
+				return cones.concat(new_cone);
+			});
+			
+		const cones$ = stream
+			.merge(
+				add_cone_update$
+			)
+			.startWith([])
+			.scan(apply);
+			
+		const color$ = selected$
+			.map(selected => selected ? '66c2ff' : 'ffffff');
+			
+		const material$ = color$
+			.map(color => ({ color }));
+		
+		const drag_x_z$ = drag_object$
+			.filter(({ camera }) => camera === true)
+			.map(({ drag: { delta: { x, z }, start } }) => {
+				const delta = { x, y: 0, z };
+				const key = start.first_object_key;
+				return { delta, key };
+			})
+			.filter(({ key }) => key === object.key)
+			.map(({ delta }) => position => subtractVectors(position, delta));
+			
+		const position$ = drag_x_z$
+			.startWith(object.position)
+			.scan(apply);
+			
+		return combineLatestObj
+			({
+				position$, selected$, material$, cones$
+			})
+			.map(({ position, selected, material, cones }) => {
+				return {
+					id: object.id,
+					key: object.key,
+					name: object.name,
+					position,
+					selected,
+					volume: object.volume,
+					material,
+					cones
+				};
+			});
+	}
 }
 
 export function view(model$) {
