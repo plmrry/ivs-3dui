@@ -3,6 +3,7 @@ import debug from 'debug';
 import d3 from 'd3';
 import Rx from 'rx';
 import THREE from 'three/three.js';
+import OBJLoader from 'three-obj-loader';
 import _ from 'underscore';
 import combineLatestObj from 'rx-combine-latest-obj';
 import d3_selection from 'd3-selection';
@@ -19,12 +20,12 @@ import { scoped_sound_cone } from './soundCone.js';
 // debug.enable('*');
 // debug.enable('*,-raycasters,-cameras,-camera');
 debug.disable();
-debug.enable('event:*,sound-objects:*');
+// debug.enable('event:*,sound-objects:*');
 
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
-function main({ renderers, dom, scenes, cameras, raycasters }) {
+function main({ renderers, dom, scenes, cameras, raycasters, head }) {
 		
 	/** 
 	 *	ACTIONS
@@ -121,7 +122,7 @@ function main({ renderers, dom, scenes, cameras, raycasters }) {
 	
 	const scene_sources = {
 		raycasters, main_dragstart$, main_drag$, main_dragend$,
-		camera_is_birds_eye$, add_object_click$, dom
+		camera_is_birds_eye$, add_object_click$, dom, head
 	};
 	
 	const { scenes_state_reducer$, selected$ } = scene.component(scene_sources);
@@ -238,7 +239,17 @@ Cycle.run(main, {
 	cameras: makeStateDriver('cameras'),
 	raycasters: makeStateDriver('raycasters'),
 	render: (source$) => source$.subscribe(fn => fn()),
-	dom: dom_component.makeD3DomDriver('#app')
+	dom: dom_component.makeD3DomDriver('#app'),
+	head: function() {
+		OBJLoader(THREE);
+		const loader = new THREE.OBJLoader();
+		// loader.load('assets/head.obj', d => { debugger })
+		// return stream.empty()
+		// return stream.fromCallback(loader.load.bind(this))('assets/head.obj');
+		return stream.create(observer => {
+			loader.load('assets/head.obj', d => { observer.onNext(d) });
+		});
+	}
 });
 
 function makeStateDriver(name) {

@@ -6,6 +6,128 @@ import combineLatestObj from 'rx-combine-latest-obj';
 
 const stream = Rx.Observable;
 
+export function component({ renderers, selected$, size$, editor_size$ }) {
+	const main_canvas$ = renderers
+		.select({ name: 'main' })
+		.map(renderer => renderer.domElement);
+		
+	// const editor_dom$ = selected$
+	// 	.map(s => {
+	// 		if (typeof s === 'undefined' || s === null) return [];
+	// 		return [s];
+	// 	});
+	
+	const editor_dom$ = selected$
+		.withLatestFrom(
+			renderers.select({ name: 'editor' }),
+			editor_size$,
+			(s, r, size) => ({ selected: s, renderer: r, size })
+		)
+		.map(({ selected, renderer, size }) => {
+			if (typeof selected === 'undefined') return [];
+			const selected_cones = selected.cones || [];
+			const selected_cone = selected_cones.filter(d => d.selected)[0];
+			const object_renderer_card = { 
+					canvases: [ { node: renderer.domElement } ],
+					style: {
+						position: 'relative',
+						height: `${size.height}px`
+					},
+					buttons: [
+						{
+							id: 'add-cone',
+							text: 'add cone',
+							style: {
+								position: 'absolute',
+								right: 0,
+								bottom: 0
+							}
+						}
+					]
+				};
+			const cone_info_card_block = typeof selected_cone !== 'undefined' 
+				? {
+					id: 'cone-card',
+					header: `Cone ${selected.key}.${selected_cone.key}`
+				} 
+				: undefined;
+			const object_info_card_block = selected.name === 'sound_object' ? {
+				id: 'object-card',
+				header: `Object ${selected.key}`,
+				rows: getObjectInfoRows(selected)
+			} : undefined;
+			const info_card = {
+				card_blocks: [
+					object_info_card_block,
+					cone_info_card_block
+				].filter(d => typeof d !== 'undefined')
+			};
+			const cards = [
+				selected.name === 'sound_object' ? object_renderer_card : undefined,
+				info_card,
+				selected.name === 'foo-bar' ? object_renderer_card : undefined
+			].filter(d => typeof d !== 'undefined');
+			return { cards, size };
+		});
+		
+	const dom_model$ = model({ main_canvas$, editor_dom$, size$ });
+	
+	const dom_state_reducer$ = view(dom_model$);
+	
+	return dom_state_reducer$;
+}
+
+export function model({ main_canvas$, editor_dom$, size$ }) {
+  const dom_model$ = combineLatestObj
+		({
+			main_canvas$,
+			editor_dom$,
+			size$
+		})
+		.map(({ main_canvas, editor_dom, size }) => {
+			return {
+				main: {
+					canvases: [
+						{
+							node: main_canvas
+						}
+					],
+					size
+				},
+				editor_cards: editor_dom.cards,
+				editor_size: editor_dom.size
+			};
+		});
+	return dom_model$;
+}
+
+export function makeD3DomDriver(selector) {
+	return function d3DomDriver(state_reducer$) {
+		const dom_state$ = state_reducer$
+			.scan(apply, d3.select(selector))
+			.shareReplay(1);
+		dom_state$
+			.do(s => debug('dom')('update'))
+			.subscribe();
+		return {
+			state$: dom_state$,
+			select: function(selector) {
+				let selection$ = dom_state$
+					.map(dom => dom.select(selector))
+					.filter(s => s.node() !== null)
+					.shareReplay(1);
+				return {
+					observable: function() {
+						return selection$;
+					},
+					events: makeEventsGetter(selection$),
+					d3dragHandler: makeDragHandler(selection$)
+				};
+			}
+		};
+	};
+}
+
 export function view(dom_model$) {
   const dom_state_reducer$ = dom_model$
 		.map(model => dom => {
@@ -178,12 +300,15 @@ export function view(dom_model$) {
 			const card_blocks_enter = card_blocks
 				.enter()
 				.append('div')
-				.classed('card-block', true)
-				.attr('id', d => d.id)
+				.classed('card-block', true);
 				
 			card_blocks_enter
 				.append('h6')
 				.classed('card-title', true)
+				
+			card_blocks
+				.select('.card-title')
+				.attr('id', d => d.id)
 				.text(d => d.header);
 				
 			const card_blocks_rows = card_blocks
@@ -221,131 +346,23 @@ export function view(dom_model$) {
 	return dom_state_reducer$;
 }
 
-export function component({ renderers, selected$, size$, editor_size$ }) {
-	const main_canvas$ = renderers
-		.select({ name: 'main' })
-		.map(renderer => renderer.domElement);
-		
-	// const editor_dom$ = selected$
-	// 	.map(s => {
-	// 		if (typeof s === 'undefined' || s === null) return [];
-	// 		return [s];
-	// 	});
-	
-	const editor_dom$ = selected$
-		.withLatestFrom(
-			renderers.select({ name: 'editor' }),
-			editor_size$,
-			(s, r, size) => ({ selected: s, renderer: r, size })
-		)
-		.map(({ selected, renderer, size }) => {
-			if (typeof selected === 'undefined') return [];
-			// const object_view_card =
-			const object_renderer_card = { 
-					canvases: [ { node: renderer.domElement } ],
-					style: {
-						position: 'relative'
+function getObjectInfoRows(object) {
+	return [
+		{
+			columns: [
+				{
+					width: '6',
+					class: 'col-xs-6',
+					span_class: 'value delete-object',
+					span_style: {
+						cursor: 'pointer'
 					},
-					buttons: [
-						{
-							id: 'add-cone',
-							text: 'add cone',
-							style: {
-								position: 'absolute',
-								left: 0
-							}
-						}
-					]
-				};
-			const object_info_card_block = {
-				id: 'object-card',
-				header: `Object ${selected.key}`,
-				rows: [
-					{
-						columns: [
-							{
-								width: '6',
-								class: 'col-xs-6',
-								span_class: 'value delete-object',
-								span_style: {
-									cursor: 'pointer'
-								},
-								text: 'Delete',
-								id: 'delete-object'
-							}
-						]
-					}
-				]
-			};
-			const info_card = {
-				card_blocks: [
-					selected.name === 'sound_object' ? object_info_card_block : undefined
-				].filter(d => typeof d !== 'undefined')
-			};
-			const cards = [
-				selected.name === 'sound_object' ? object_renderer_card : undefined,
-				info_card,
-				selected.name === 'foo-bar' ? object_renderer_card : undefined
-			].filter(d => typeof d !== 'undefined');
-			return { cards, size };
-		});
-		
-	const dom_model$ = model({ main_canvas$, editor_dom$, size$ });
-	
-	const dom_state_reducer$ = view(dom_model$);
-	
-	return dom_state_reducer$;
-}
-
-export function model({ main_canvas$, editor_dom$, size$ }) {
-  const dom_model$ = combineLatestObj
-		({
-			main_canvas$,
-			editor_dom$,
-			size$
-		})
-		.map(({ main_canvas, editor_dom, size }) => {
-			return {
-				main: {
-					canvases: [
-						{
-							node: main_canvas
-						}
-					],
-					size
-				},
-				editor_cards: editor_dom.cards,
-				editor_size: editor_dom.size
-			};
-		});
-	return dom_model$;
-}
-
-export function makeD3DomDriver(selector) {
-	return function d3DomDriver(state_reducer$) {
-		const dom_state$ = state_reducer$
-			.scan(apply, d3.select(selector))
-			.shareReplay(1);
-		dom_state$
-			.do(s => debug('dom')('update'))
-			.subscribe();
-		return {
-			state$: dom_state$,
-			select: function(selector) {
-				let selection$ = dom_state$
-					.map(dom => dom.select(selector))
-					.filter(s => s.node() !== null)
-					.shareReplay(1);
-				return {
-					observable: function() {
-						return selection$;
-					},
-					events: makeEventsGetter(selection$),
-					d3dragHandler: makeDragHandler(selection$)
-				};
-			}
-		};
-	};
+					text: 'Delete',
+					id: 'delete-object'
+				}
+			]
+		}
+	];
 }
 
 function apply(o, fn) {

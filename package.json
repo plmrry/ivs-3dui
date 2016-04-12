@@ -29,6 +29,7 @@
     "rx-combine-latest-obj": "^1.0.2",
     "serve-index": "^1.7.3",
     "three": "^0.74.0",
+    "three-obj-loader": "^1.0.2",
     "underscore": "^1.8.3"
   },
   "devDependencies": {

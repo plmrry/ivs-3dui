@@ -190,7 +190,7 @@ function intent({
 
 export function component({
 		raycasters, main_dragstart$, main_drag$, main_dragend$,
-		camera_is_birds_eye$, add_object_click$, dom
+		camera_is_birds_eye$, add_object_click$, dom, head
 	}) {
 		
 	const new_object_proxy$ = new Rx.Subject();
@@ -199,6 +199,8 @@ export function component({
 		raycasters, main_dragstart$, main_drag$, main_dragend$,
 		camera_is_birds_eye$, add_object_click$, new_object_proxy$, dom
 	});
+	
+	actions.head = head;
 	
 	const { scenes_model$, new_object$, selected$ } = model(actions);
 	
@@ -224,17 +226,17 @@ function subtractVectors(a, b) {
 export function model({ 
 	add_object$, drag_object$, selected_object$, delete_selected_object$,
 	add_cone$, editor_mousemove_screen$, editor_dragstart$, drag_cone$,
-	selected_cone$, drag_sphere$
+	selected_cone$, drag_sphere$, head
 }) {
 	const new_object$ = new Rx.Subject();
 	
 	const add_object_update$ = add_object$
 		.map(position => objects => {
-			const max = d3.max(objects, d => d.id);
-			const id = typeof max === 'undefined' ? 0 : max + 1;
+			const maxKey = d3.max(objects, d => d.key);
+			const key = typeof maxKey === 'undefined' ? 0 : maxKey + 1;
 			const new_object = {
-				id,
-				key: id,
+				id: key,
+				key: key,
 				name: 'sound_object',
 				position: {
 					x: position.x,
@@ -269,6 +271,11 @@ export function model({
 			else {
 				object.selected = false;
 				object.material.color = 'ffffff';
+				object.cones = object.cones.map(cone => {
+					cone.selected = false;
+					cone.interactive = false;
+					return cone;
+				});
 			}
 			return object;
 		});
@@ -451,9 +458,43 @@ export function model({
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0])
 		.shareReplay(1);
+	
+	const dummy_head$ = head
+		.map(head => ({
+			name: 'head',
+			position: {
+				x: 1,
+				y: 1,
+				z: 2
+			},
+			lookAt: {
+				x: 3,
+				y: 2,
+				z: 1
+			},
+			object: head
+		}));
 		
-	const main_scene_model$ = sound_objects$
-		.map(sound_objects => {
+	// const dummy_head$ = stream
+	// 	.just({
+	// 		position: {
+	// 			x: 1,
+	// 			y: 1,
+	// 			z: 2
+	// 		},
+	// 		lookAt: {
+	// 			x: 3,
+	// 			y: 2,
+	// 			z: 1
+	// 		},
+	// 		name: 'head'
+	// 	});
+		
+	const main_scene_model$ = combineLatestObj({
+			sound_objects$,
+			dummy_head$
+		})
+		.map(({ sound_objects, dummy_head }) => {
 			return {
 				name: 'main',
 				floors: [
@@ -461,7 +502,8 @@ export function model({
 						name: 'floor'
 					}
 				],
-				sound_objects
+				sound_objects,
+				heads: [ dummy_head ]
 			};
 		});
 		
@@ -551,6 +593,19 @@ export function state_reducer(model) {
 		const sound_objects = updateSoundObjects(scenes);
 		
 		updateCones(sound_objects);
+		
+		const heads_join = scenes
+			.selectAll({ name: 'head' })
+			.data(d => d.heads || []);
+			
+		const heads = heads_join
+			.enter()
+			.append(d => {
+				const head = d.object;
+				head.rotation.y += Math.PI;
+				return head;
+			});
+		
     return selectable;
   };
 }
