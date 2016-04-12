@@ -160,7 +160,6 @@ export function model({
 		.map(position => objects => {
 			const max = d3.max(objects, d => d.id);
 			const id = typeof max === 'undefined' ? 0 : max + 1;
-					
 			const new_object = {
 				id,
 				key: id,
@@ -220,38 +219,30 @@ export function model({
 		})
 		.map(update => objects => objects.map(update));
 		
-	// const object_update$ = stream
-	// 	.merge(
-	// 		selected_object_update$
-	// 	);
-		
 	const sound_objects_proxy$ = new Rx.ReplaySubject(1);
-	
-	sound_objects_proxy$.subscribe(log);
 		
 	const sound_objects$ = stream
 		.merge(
 			add_object_update$,
-			delete_object_update$
-			// drag_x_z_update$,
-			// selected_object_update$
+			delete_object_update$,
+			drag_x_z_update$,
+			selected_object_update$
 		)
-		.startWith([])
-		.scan(apply)
-		// .combineLatest(
-		// 	sound_objects_proxy$.startWith([]),
-		// 	(fn, o) => { debugger }
-		// )
-		// .startWith([])
-		// .scan(apply)
+		.withLatestFrom(
+			sound_objects_proxy$,
+			(fn, o) => fn(o)
+		)
 		// .flatMap(arr => stream
 		// 	.from(arr)
 		// 	.scan((a,b) => a.concat(b), [])
+		// 	// .flatMap(stream.combineLatest)
 		// )
+		.startWith([])
 		.do(debug('sound objects'))
 		.shareReplay(1);
 		
-	sound_objects$.subscribe(sound_objects_proxy$.asObserver());
+	sound_objects$
+		.subscribe(sound_objects_proxy$.asObserver());
 		
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0])
