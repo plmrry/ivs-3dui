@@ -251,7 +251,7 @@ export function state_reducer(model) {
         if (! _.isMatch(this.position, d.position)) {
           debug('camera')('update position');
           this.position.copy(d.position);
-          this.lookAt(d.lookAt || new THREE.Vector3());
+          // this.lookAt(d.lookAt || new THREE.Vector3());
           this.up.copy(new THREE.Vector3(0, 1, 0));
           /** Apparently we do not need to call `updateProjectionMatrix()` */
         }

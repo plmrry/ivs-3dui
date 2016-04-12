@@ -110,21 +110,81 @@ function intent({
 		.pluck('event$')
 		.flatMapLatest(obs => obs);
 		
-	const editor_mousemove$ = editor_raycaster$
+	const editor_intersects$ = editor_raycaster$
+		.map(({ event, intersect_groups, mouse }) => {
+			const intersects = intersect_groups[0].intersects;
+			const cones = intersects
+				.filter(({ object: { name } }) => name === 'cone')
+				.map(({ object }) => object);
+			const screens = intersects
+				.filter(({ object: { name } }) => name === 'screen')
+			const screen_point = typeof screens[0] === 'undefined' ? undefined : screens[0].point;
+			const first_cone = cones[0];
+			const first_cone_key = first_cone ? d3.select(first_cone).datum().key : undefined;
+			return {
+				event,
+				screen_point,
+				intersects,
+				cones,
+				first_cone,
+				first_cone_key,
+				mouse
+			};
+		})
+		.distinctUntilChanged();
+		
+	const editor_mousemove$ = editor_intersects$
 		.filter(({ event }) => event.type === 'mousemove');
 		
-	const editor_dragstart$ = editor_raycaster$
-		.filter(({ event }) => event.type === 'dragstart');
+	const editor_dragstart$ = editor_intersects$
+		.filter(({ event }) => event.type === 'dragstart')
+		.shareReplay(1);
 		
-	const editor_mousemove_panel$ = editor_mousemove$
-		.pluck('intersect_groups')
-		.flatMap(arr => stream.from(arr))
-		.filter(d => d.key === 'children')
-		.pluck('intersects', '0', 'point');
+	const editor_drag$ = editor_intersects$
+		.filter(({ event: { type } }) => type === 'drag');
+		
+	const editor_dragend$ = editor_intersects$
+		.filter(({ event: { type } }) => type === 'dragend');
+		
+	const selected_cone$ = editor_dragstart$
+	  .filter(({ first_cone }) => typeof first_cone !== 'undefined')
+	  .pluck('first_cone_key');
+	  
+	const drag_sphere$ = editor_dragstart$
+		.filter(({ first_cone }) => typeof first_cone === 'undefined')
+		.flatMap(start => editor_drag$
+			.startWith(start)
+			.takeUntil(editor_dragend$)
+		)
+		.pluck('mouse', 'mouse')
+		.pairwise()
+		.map(arr => {
+			return {
+				dx: arr[1][0] - arr[0][0],
+				dy: arr[1][1] - arr[0][1]
+			};
+		})
+		// .subscribe(log)
+		
+	const drag_cone$ = editor_dragstart$
+		.filter(({ first_cone }) => typeof first_cone !== 'undefined')
+		.flatMap(start => editor_drag$
+			.startWith(start)
+			.takeUntil(editor_dragend$)
+		)
+		.pluck('screen_point');
+		// .pluck('first_cone')
+		// .map(const intersects = intersect_groups[0].intersects;)
+		// .filter((obj) => { debugger })
+		// .subscribe(log);
+		
+	const editor_mousemove_screen$ = editor_mousemove$
+		.pluck('screen_point');
 		
 	return {
 		add_object$, drag_object$, selected_object$, delete_selected_object$,
-		add_cone$, editor_mousemove_panel$, editor_dragstart$
+		add_cone$, editor_mousemove_screen$, editor_dragstart$, drag_cone$,
+		selected_cone$, drag_sphere$
 	};
 }
 
@@ -163,7 +223,8 @@ function subtractVectors(a, b) {
 
 export function model({ 
 	add_object$, drag_object$, selected_object$, delete_selected_object$,
-	add_cone$, editor_mousemove_panel$, editor_dragstart$
+	add_cone$, editor_mousemove_screen$, editor_dragstart$, drag_cone$,
+	selected_cone$, drag_sphere$
 }) {
 	const new_object$ = new Rx.Subject();
 	
@@ -180,6 +241,7 @@ export function model({
 					y: position.y,
 					z: position.z
 				},
+				quaternion: new THREE.Quaternion(),
 				volume: 1,
 				material: {
 					color: 'ffffff'
@@ -226,16 +288,60 @@ export function model({
 	const add_cone_to_selected$ = add_cone$
 		.let(withSelected(selected_object$, addCone));
 		
-	const move_interactive$ = editor_mousemove_panel$
+	const select_cone$ = selected_cone$
+		.let(withSelected(selected_object$, setSelected))
+		
+	const move_dragged$ = drag_cone$
+		.let(withSelected(selected_object$, moveSelected));
+		
+	const rotate_object$ = drag_sphere$
+	  .let(withSelected(selected_object$, rotateObject));
+		
+	const move_interactive$ = editor_mousemove_screen$
 		.let(withSelected(selected_object$, moveInteractiveCone));
 		
 	const disable_interactive$ = editor_dragstart$
 		.let(withSelected(selected_object$, disableInteractiveCone));
 		
+	function toRadians(angle) {
+    return angle * (Math.PI / 180);
+	}
+		
+	function rotateObject({ dx, dy }) {
+	  const euler = new THREE.Euler(
+	    toRadians(dx * 0.2),
+	    toRadians(dy * 0.2),
+	    0
+	  );
+	  const delta_quaternion = (new THREE.Quaternion()).setFromEuler(euler);
+	  return function(object) {
+	    object.quaternion.multiplyQuaternions(delta_quaternion, object.quaternion);
+	  };
+	}
+		
+	function moveSelected(lookAt) {
+		return function(object) {
+			object.cones = object.cones.map(cone => {
+				if (cone.selected) cone.lookAt = lookAt;
+				return cone;
+			});
+		};
+	}
+		
+	function setSelected(key) {
+		return function(object) {
+			object.cones = object.cones.map(cone => {
+				if (cone.key === key) cone.selected = true;
+				return cone;
+			});
+		};
+	}
+		
 	function disableInteractiveCone(_) {
 		return function(object) {
 			object.cones = object.cones.map(cone => {
 				if (cone.interactive) cone.interactive = false;
+				if (cone.selected) cone.selected = false;
 				return cone;
 			});
 		};
@@ -254,7 +360,8 @@ export function model({
 		return function(object) {
 			const maxKey = d3.max(object.cones, d => d.key);
 			const key = typeof maxKey === 'undefined' ? 0 : maxKey + 1;
-			object.cones.push(getNewCone(key));
+			const parentKey = object.key;
+			object.cones.push(getNewCone(key, parentKey));
 		};
 	}
 		
@@ -271,16 +378,6 @@ export function model({
 				});
 		};
 	}
-		
-	// const add_cone_to_selected$ = add_cone$
-	// 	.withLatestFrom(
-	// 		selected_object$,
-	// 		(del, selected) => selected
-	// 	)
-	// 	.map(key => obj => {
-	// 		if (obj.key === key) addCone(obj);
-	// 		return obj;
-	// 	});
 		
 	function getNewCone(key) {
 		return {
@@ -303,7 +400,10 @@ export function model({
 			selected_object_update$,
 			add_cone_to_selected$,
 			move_interactive$,
-			disable_interactive$
+			disable_interactive$,
+			select_cone$,
+			move_dragged$
+			// rotate_object$
 		)
 		.map(update => objects => objects.map(update));
 		
@@ -411,14 +511,14 @@ export function state_reducer(model) {
 			.selectAll({ name: 'screen' })
 			.data(d => d.screens || []);
 			
-		const screens = screens_join
+		const panels = screens_join
 			.enter()
 			.append(d => {
 				return getScreen();
 			})
 			.merge(screens_join);
 					
-		const sound_objects = updateSoundObjects2(scenes);
+		const sound_objects = updateSoundObjects(scenes);
 		
 		updateCones(sound_objects);
     return selectable;
@@ -493,7 +593,7 @@ function updateCones(sound_objects) {
 		.each(updateOneCone);
 }
 
-function getNewCone() {
+function getNewCone(d) {
 	let CONE_BOTTOM = 0.01;
 	let CONE_RADIAL_SEGMENTS = 50;
 	let params = {
@@ -519,6 +619,7 @@ function getNewCone() {
 	cone._type = 'cone';
 	cone.castShadow = true;
 	cone.receiveShadow = true;
+	d3.select(cone).datum(d);
 	let coneParent = new THREE.Object3D();
 	coneParent.name = 'cone_parent';
 	coneParent.add(cone);
@@ -546,10 +647,10 @@ function updateOneCone(d) {
 	if (d.selected === true) cone.material.color = SELECTED_COLOR;
 	else cone.material.color = new THREE.Color('#ffffff');
 	/** Update color */
-	// cone.material.color = new THREE.Color(`#${d.material.color}`);
+// 	cone.material.color = new THREE.Color(`#${d.material.color}`);
 }
 
-function updateSoundObjects2(scenes) {
+function updateSoundObjects(scenes) {
 	let sound_objects_join = scenes
 		.selectAll({ name: 'sound_object' })
 		.data(function(d) { return d.sound_objects || [] });
@@ -583,6 +684,19 @@ function updateSoundObjects2(scenes) {
 		})
 		.merge(sound_objects_join)
 		.each(function(d) {
+		  /** Update quaternion */
+		  if (! _.isMatch(this.quaternion, d.quaternion)) {
+		    this.quaternion.copy(d.quaternion);
+				var vec = new THREE.Vector3(0,0,1);
+				var m = this.matrixWorld;
+				var mx = m.elements[12], my = m.elements[13], mz = m.elements[14];
+				m.elements[12] = m.elements[13] = m.elements[14] = 0;
+				vec.applyProjection(m);
+				vec.normalize();
+				m.elements[12] = mx;
+				m.elements[13] = my;
+				m.elements[14] = mz;
+		  }
 			/** Update position */
 			if (! _.isMatch(this.position, d.position)) {
 				debug('sound object')('set position', d.position);

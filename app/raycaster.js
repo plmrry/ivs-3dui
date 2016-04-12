@@ -95,7 +95,8 @@ export function component({ dom, cameras, scenes }) {
  						});
  					this.event$.onNext({
  						event: d.mouse.event,
- 						intersect_groups
+ 						intersect_groups,
+ 						mouse: d.mouse
  					});
  				});
  				

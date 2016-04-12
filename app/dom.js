@@ -35,21 +35,18 @@ export function view(dom_model$) {
 			const controls_data = [
 				{
 					id: 'scene-controls',
+					class: 'container',
 					style: {
 						right: 0,
 						top: 0,
 						width: '400px'
 					},
-					buttons: [
-						{
-							id: 'add-object-random',
-							text: 'add object at random'
-						},
-						{
-							id: 'add-object',
-							text: 'add object'
-						}
-					],
+					// buttons: [
+					// 	{
+					// 		id: 'add-object',
+					// 		text: 'add object'
+					// 	}
+					// ],
 					cards: model.editor_cards
 				},
 				{
@@ -80,6 +77,7 @@ export function view(dom_model$) {
 				.enter()
 				.append('div')
 				.attr('id', d => d.id)
+				.attr('class', d => d.class)
 				.classed('controls', true)
 				.style({
 					width: '300px',
@@ -91,6 +89,30 @@ export function view(dom_model$) {
 					d3.select(this)
 						.style(d.style);
 				});
+				
+			controls
+				.filter('#scene-controls')
+				.each(function(d) {
+					const add = d3.select(this)
+						.selectAll('.add-controls')
+						.data(['add-object']);
+						
+					add.enter()
+						.append('div')
+						.classed('row add-controls', true)
+						.append('div')
+						.classed('col-xs-12', true)
+						// .style('margin-top', '-5px')
+						.append('div')
+						.classed('btn-group modes pull-right', true)
+						.append('button')
+						.classed('btn btn-lg btn-primary', true)
+						.attr('id', 'add-object')
+						.append('i')
+						.classed('material-icons', true)
+						.style('display', 'block')
+						.text('add');
+				})
 				
 			controls
 				.selectAll('button')
