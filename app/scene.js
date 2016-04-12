@@ -113,6 +113,9 @@ function intent({
 	const editor_mousemove$ = editor_raycaster$
 		.filter(({ event }) => event.type === 'mousemove');
 		
+	const editor_dragstart$ = editor_raycaster$
+		.filter(({ event }) => event.type === 'dragstart');
+		
 	const editor_mousemove_panel$ = editor_mousemove$
 		.pluck('intersect_groups')
 		.flatMap(arr => stream.from(arr))
@@ -121,7 +124,7 @@ function intent({
 		
 	return {
 		add_object$, drag_object$, selected_object$, delete_selected_object$,
-		add_cone$, editor_mousemove_panel$
+		add_cone$, editor_mousemove_panel$, editor_dragstart$
 	};
 }
 
@@ -160,7 +163,7 @@ function subtractVectors(a, b) {
 
 export function model({ 
 	add_object$, drag_object$, selected_object$, delete_selected_object$,
-	add_cone$, editor_mousemove_panel$
+	add_cone$, editor_mousemove_panel$, editor_dragstart$
 }) {
 	const new_object$ = new Rx.Subject();
 	
@@ -200,7 +203,8 @@ export function model({
 		selected_object$,
 		add_cone$,
 		drag_object$,
-		editor_mousemove_panel$
+		editor_mousemove_panel$,
+		editor_dragstart$
 	};
 	
 	const sound_objects_proxy$ = new Rx.ReplaySubject(1);
@@ -275,23 +279,8 @@ export function model({
 	};
 }
 
-// function getNewCone(key) {
-// 	return {
-// 		key,
-// 		volume: 1,
-// 		spread: 0.5,
-// 		interactive: true,
-// 		selected: true,
-// 		lookAt: {
-// 			x: Math.random(),
-// 			y: Math.random(),
-// 			z: Math.random()
-// 		}
-// 	};
-// }
-
 function SoundObject({ 
-	selected_object$, add_cone$, drag_object$, editor_mousemove_panel$
+	selected_object$, add_cone$, drag_object$, editor_mousemove_panel$, editor_dragstart$
 }) {
 	return function(object) {
 		const new_cone$ = new Rx.Subject();
@@ -310,9 +299,6 @@ function SoundObject({
 				}
 			};
 		};
-		
-		editor_mousemove_panel$
-			.subscribe(log);
 			
 		const selected$ = selected_object$
 			.map(key => key === object.key)
@@ -325,19 +311,62 @@ function SoundObject({
 			)
 			.filter(selected => selected)
 			.map(() => cones => {
-				const max = d3.max(cones, d => d.id);
-				const id = typeof max === 'undefined' ? 0 : max + 1;
-				const new_cone = getNewCone(id);
+				const max = d3.max(cones, d => d.key);
+				const key = typeof max === 'undefined' ? 0 : max + 1;
+				const new_cone = getNewCone(key);
 				new_cone$.onNext(new_cone);
 				return cones.concat(new_cone);
 			});
+		
+		const cones_proxy$ = new Rx.ReplaySubject(1);
+		
+		const cone_sources = {
+			editor_mousemove_panel$
+		};
 			
 		const cones$ = stream
 			.merge(
 				add_cone_update$
 			)
-			.startWith([])
-			.scan(apply);
+			.withLatestFrom(
+				cones_proxy$,
+				(fn, o) => fn(o)
+			)
+			.map(arr => arr.map(cone => {
+
+				const interactive$ = editor_dragstart$
+					.map(() => false)
+					.startWith(cone.interactive);
+					
+				const lookAt$ = editor_mousemove_panel$
+			    .withLatestFrom(
+			      interactive$,
+			      (point, interactive) => ({ point, interactive })
+		      )
+		      .filter(({ interactive }) => interactive)
+		      .pluck('point')
+		      .startWith(cone.lookAt);
+		    
+		    return combineLatestObj
+		    	({
+		    		interactive$, lookAt$
+		    	})
+		    	.map(({ interactive, lookAt }) => {
+		    		return {
+		    			key: cone.key,
+		    			interactive,
+		    			lookAt,
+		    			selected: cone.selected,
+		    			spread: cone.spread,
+		    			volume: cone.volume
+		    		};
+		    	});
+			}))
+			.flatMapLatest(arr => arr.length ? stream.combineLatest(arr) : stream.just([]))
+			.startWith(object.cones)
+			.shareReplay(1);
+			
+		cones$.subscribe(cones_proxy$);
 			
 		const color$ = selected$
 			.map(selected => selected ? '66c2ff' : 'ffffff');
