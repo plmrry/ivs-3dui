@@ -113,9 +113,15 @@ function intent({
 	const editor_mousemove$ = editor_raycaster$
 		.filter(({ event }) => event.type === 'mousemove');
 		
+	const editor_mousemove_panel$ = editor_mousemove$
+		.pluck('intersect_groups')
+		.flatMap(arr => stream.from(arr))
+		.filter(d => d.key === 'children')
+		.pluck('intersects', '0', 'point');
+		
 	return {
 		add_object$, drag_object$, selected_object$, delete_selected_object$,
-		add_cone$
+		add_cone$, editor_mousemove_panel$
 	};
 }
 
@@ -154,7 +160,7 @@ function subtractVectors(a, b) {
 
 export function model({ 
 	add_object$, drag_object$, selected_object$, delete_selected_object$,
-	add_cone$
+	add_cone$, editor_mousemove_panel$
 }) {
 	const new_object$ = new Rx.Subject();
 	
@@ -189,7 +195,14 @@ export function model({
 			(del, selected) => selected
 		)
 		.map(key => objects => objects.filter(obj => obj.key !== key));
-		
+	
+	const sound_object_sources = {
+		selected_object$,
+		add_cone$,
+		drag_object$,
+		editor_mousemove_panel$
+	};
+	
 	const sound_objects_proxy$ = new Rx.ReplaySubject(1);
 		
 	const sound_objects$ = stream
@@ -201,12 +214,8 @@ export function model({
 			sound_objects_proxy$,
 			(fn, o) => fn(o)
 		)
-		.flatMapLatest(arr => stream
-			.from(arr)
-			.map(SoundObject({ selected_object$, add_cone$, drag_object$ }))
-			.scan((a,b) => a.concat(b), [])
-			.flatMapLatest(arr => arr.length ? stream.combineLatest(arr) : stream.just([]))
-		)
+		.map(arr => arr.map(SoundObject(sound_object_sources)))
+		.flatMapLatest(arr => arr.length ? stream.combineLatest(arr) : stream.just([]))
 		.startWith([])
 		.do(debug('sound objects'))
 		.shareReplay(1);
@@ -281,7 +290,9 @@ export function model({
 // 	};
 // }
 
-function SoundObject({ selected_object$, add_cone$, drag_object$ }) {
+function SoundObject({ 
+	selected_object$, add_cone$, drag_object$, editor_mousemove_panel$
+}) {
 	return function(object) {
 		const new_cone$ = new Rx.Subject();
 		
@@ -298,7 +309,10 @@ function SoundObject({ selected_object$, add_cone$, drag_object$ }) {
 					z: Math.random()
 				}
 			};
-		}
+		};
+		
+		editor_mousemove_panel$
+			.subscribe(log);
 			
 		const selected$ = selected_object$
 			.map(key => key === object.key)
