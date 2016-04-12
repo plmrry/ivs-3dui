@@ -18,9 +18,9 @@
 
 		<script src="js/three.min.js"></script>
 		<script src="js/Detector.js"></script>
-		<script src="FlyControlsUpdated.js"></script>
-		<script src="AxisHelper.js"></script>
-		<script src="OBJLoader.js"></script>
+		<script src="js/FlyControlsUpdated.js"></script>
+		<script src="js/AxisHelper.js"></script>
+		<script src="js/OBJLoader.js"></script>
 
     <script>
 
@@ -90,7 +90,7 @@
 			scene.add(axisHelper);
 
 			loader = new THREE.OBJLoader();
-			loader.load('head.obj', function(object){
+			loader.load('assets/head.obj', function(object){
 				headModel = object;
 				headModel.rotation.y += Math.PI;
 
@@ -101,13 +101,15 @@
 
 			temporaryQuaternion = new THREE.Quaternion();
 
-			// document.addEventListener('mousemove', onDocumentMouseMove, false);
-			// document.addEventListener('mousedown', onDocumentMouseDown, false);
-			// document.addEventListener('mouseup', onDocumentMouseUp, false);
 			document.addEventListener('keydown', onDocumentKeyDown, false);
 			document.addEventListener('keyup', onDocumentKeyUp, false);
-			//
-			// window.addEventListener('resize', onWindowResize, false);
+			window.addEventListener('resize', onWindowResize, false);
+		}
+
+		function onWindowResize(){
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+			renderer.setSize(window.innerWidth, window.innerHeight);
 		}
 
 		function onDocumentKeyDown(event) {
