@@ -6,9 +6,10 @@ import d3 from 'd3';
 import Rx from 'rx';
 import combineLatestObj from 'rx-combine-latest-obj';
 
-const stream = Rx.Observable;
+import log from './log.js';
+import apply from './apply.js';
 
-import { scoped_sound_object, scoped_sound_object_2 } from './soundObject.js';
+const stream = Rx.Observable;
 
 const room_size = {
 	width: 20,
@@ -16,12 +17,109 @@ const room_size = {
 	height: 3
 };
 
-export function component({ add_object$ }, objectComponentCreator, createSoundObject2) {
-	const { scenes_model$, new_object$, selected$ } = model(
-			{ add_object$ }, 
-			objectComponentCreator,
-			createSoundObject2
+function subVectors(arr) {
+	return {
+		x: arr[0].floor_point.x - arr[1].floor_point.x,
+		y: arr[0].floor_point.y - arr[1].floor_point.y,
+		z: arr[0].floor_point.z - arr[1].floor_point.z
+	};
+}
+
+function intent({
+		raycasters, main_dragstart$, main_drag$, main_dragend$,
+		camera_is_birds_eye$, add_object_click$, new_object_proxy$, dom
+	}) {
+	const main_raycaster$ = raycasters
+		.select({ name: 'main' })
+		.pluck('event$')
+		.flatMapLatest(obs => obs)
+		.shareReplay(1)
+		.distinctUntilChanged()
+	
+	const main_floor_pairwise_delta$ = main_dragstart$
+		.flatMap(start => main_drag$
+			.startWith(start)
+			.pairwise()
+			.takeUntil(main_dragend$)
+		)
+		.map(subVectors)
+		.withLatestFrom(
+			main_dragstart$,
+			(delta, start) => ({ delta, start })
 		);
+	
+	const drag_object$ = main_floor_pairwise_delta$
+		.filter(({ start: { first_object_key } }) => typeof first_object_key !== 'undefined')
+		.withLatestFrom(
+			camera_is_birds_eye$,
+			(drag, camera) => ({ drag, camera })
+		);
+		
+	/** Adding a new object turns off add object mode */
+	const add_object_mode$ = stream
+		.merge(
+			add_object_click$.map(() => true),
+			new_object_proxy$.map(() => false) 
+		)
+		.startWith(false);
+		
+	const new_object_key$ = new_object_proxy$
+		.pluck('key');
+		
+	const selected_object$ = main_dragstart$
+		.withLatestFrom(
+			add_object_mode$,
+			(event, mode) => ({ event, mode })
+		)
+		.filter(({ mode }) => mode !== true)
+		.pluck('event')
+		.pluck('first_object_key')
+		.merge(new_object_key$);
+	
+	const add_object$ = main_raycaster$
+		.pairwise()
+		.filter(arr => arr[0].event.type === 'dragstart')
+		.filter(arr => arr[1].event.type === 'dragend')
+		.pluck('1')
+		.pluck('intersect_groups')
+		.flatMapLatest(arr => stream.from(arr))
+		.pluck('intersects')
+		.flatMapLatest(arr => stream.from(arr))
+		.filter(({ object }) => object.name === 'floor')
+		.pluck('point')
+		.withLatestFrom(
+			add_object_mode$,
+			camera_is_birds_eye$,
+			(point, mode, birds) => ({ point, mode, birds })
+		)
+		.filter(({ mode, birds}) => mode === true && birds === true)
+		.pluck('point')
+		.do(debug('event:add-object'));
+		
+	const delete_selected_object$ = dom
+		.select('#delete-object')
+		.events('click');
+		
+	return {
+		add_object$, drag_object$, selected_object$, delete_selected_object$
+	};
+}
+
+export function component({
+		raycasters, main_dragstart$, main_drag$, main_dragend$,
+		camera_is_birds_eye$, add_object_click$, dom
+	}) {
+		
+	const new_object_proxy$ = new Rx.Subject();
+		
+	const actions = intent({
+		raycasters, main_dragstart$, main_drag$, main_dragend$,
+		camera_is_birds_eye$, add_object_click$, new_object_proxy$, dom
+	});
+	
+	const { scenes_model$, new_object$, selected$ } = model(actions);
+	
+	new_object$.subscribe(new_object_proxy$);
 	
 	const scenes_state_reducer$ = view(scenes_model$);
 	
@@ -32,62 +130,6 @@ export function component({ add_object$ }, objectComponentCreator, createSoundOb
 	};
 }
 
-// export function intent({ 
-// 		main_raycaster$, 
-// 		camera_is_birds_eye$, 
-// 		new_object_proxy$, 
-// 		add_object_click$,
-// 		dom
-// 	}) {
-// 	const new_object_key$ = new_object_proxy$
-// 		.pluck('id');
-		
-// 	const add_object_mode$ = stream
-// 		.merge(
-// 			add_object_click$.map(() => true),
-// 			new_object_proxy$.map(() => false)
-// 		)
-// 		.startWith(false)
-// 		.shareReplay(1);
-	
-// 	const selected_object$ = main_raycaster$
-// 		.filter(({ event }) => event.type === 'dragstart')
-// 		.withLatestFrom(
-// 			add_object_mode$,
-// 			(event, mode) => ({ event, mode })
-// 		)
-// 		.filter(({ mode }) => mode !== true)
-// 		.pluck('event', 'intersect_groups')
-// 		.flatMapLatest(arr => stream.from(arr))
-// 		.pluck('intersects', '0', 'object')
-// 		.map(obj => {
-// 			if (obj.name === 'sound_object') return d3.select(obj).datum().key;
-// 			/** TODO: Better way of selecting parent when child cone is clicked? */
-// 			if (obj.name === 'cone') return d3.select(obj.parent.parent).datum().key;
-// 			return undefined;
-// 		})
-// 		.merge(new_object_key$)
-// 		.shareReplay(1);
-	
-// 	const add_object$ = main_raycaster$
-// 		.pairwise()
-// 		.filter(arr => arr[0].event.type === 'dragstart')
-// 		.filter(arr => arr[1].event.type === 'dragend')
-// 		.pluck('1')
-// 		.pluck('intersect_groups')
-// 		.flatMapLatest(arr => stream.from(arr))
-// 		.pluck('intersects')
-// 		.flatMapLatest(arr => stream.from(arr))
-// 		.filter(({ object }) => object.name === 'floor')
-// 		.pluck('point')
-// 		.withLatestFrom(
-// 			add_object_mode$,
-// 			camera_is_birds_eye$,
-// 			(point, mode, birds) => ({ point, mode, birds })
-// 		)
-// 		.filter(({ mode, birds}) => mode === true && birds === true)
-// 		.pluck('point');
-		
 // 	const add_cone$ = dom
 // 		.select('#add-cone')
 // 		.events('click')
@@ -101,58 +143,119 @@ export function component({ add_object$ }, objectComponentCreator, createSoundOb
 // 	};
 // }
 
-export function model(
-		{ add_object$ }, 
-		objectComponentCreator,
-		scopedSoundObject
-	) {
-	const new_object$ = add_object$
-		// .map(objectComponentCreator)
-		// .shareReplay();
+function subtractVectors(a, b) {
+	return {
+		x: a.x - b.x,
+		y: a.y - b.y,
+		z: a.z - b.z
+	};
+}
+
+export function model({ 
+	add_object$, drag_object$, selected_object$, delete_selected_object$ 
+}) {
+	const new_object$ = new Rx.Subject();
 	
-	const sound_objects$ = new_object$
-		.map((d, i) => {
-			return {
-				key: i,
+	const add_object_update$ = add_object$
+		.map(position => objects => {
+			const max = d3.max(objects, d => d.id);
+			const id = typeof max === 'undefined' ? 0 : max + 1;
+					
+			const new_object = {
+				id,
+				key: id,
 				name: 'sound_object',
 				position: {
-					x: Math.random() * 2,
-					y: 1,
-					z: 1
+					x: position.x,
+					y: position.y,
+					z: position.z
 				},
 				volume: 1,
 				material: {
-					color: 'ffdddd'
+					color: 'ffffff'
 				},
 				cones: [],
 				selected: true
+			};
+			new_object$.onNext(new_object);
+			return objects.concat(new_object);
+		});
+		
+	const delete_object_update$ = delete_selected_object$
+		.withLatestFrom(
+			selected_object$,
+			(del, selected) => selected
+		)
+		.map(key => objects => objects.filter(obj => obj.key !== key));
+		
+	const selected_object_update$ = selected_object$
+		.map(key => object => {
+			if (key === object.key) {
+				object.selected = true;
+				object.material.color = '66c2ff';
 			}
+			else {
+				object.selected = false;
+				object.material.color = 'ffffff';
+			}
+			return object;
 		})
-		.flatMap((obj) => {
-			// const props$ = stream.just(obj);
-			const props$ = new Rx.ReplaySubject(1);
-			const model$ = scopedSoundObject(obj.key, props$);
-			model$.subscribe(props$.asObserver());
-			// const model$ = scoped_sound_object_2(obj.key)({ object_drag$, })
-			// return props$;
-			return model$;
+		.map(update => objects => objects.map(update));
+		
+	const drag_x_z$ = drag_object$
+		.filter(({ camera }) => camera === true)
+		.map(({ drag: { delta: { x, z }, start } }) => {
+			const delta = { x, y: 0, z };
+			const key = start.first_object_key;
+			return { delta, key };
+		});
+	
+	const drag_x_z_update$ = drag_x_z$
+		.map(({ delta, key }) => {
+			const update = obj => {
+				if (obj.key === key) obj.position = subtractVectors(obj.position, delta);
+				return obj;
+			};
+			return update;
 		})
-		// .pluck('model$')
-		// .map(obs => obs.shareReplay())
-		.map(new_obj => array => array.concat(new_obj))
-		// .startWith([])
-		// .scan(apply, [])
-		// .map(arr => arr.map(objectComponentCreator).map(d => d.model$)) //objectComponentCreator))
-		// .map(arr => arr.map(d => d.model$))
-		// .flatMapLatest(stream.combineLatest)
+		.map(update => objects => objects.map(update));
+		
+	// const object_update$ = stream
+	// 	.merge(
+	// 		selected_object_update$
+	// 	);
+		
+	const sound_objects_proxy$ = new Rx.ReplaySubject(1);
+	
+	sound_objects_proxy$.subscribe(log);
+		
+	const sound_objects$ = stream
+		.merge(
+			add_object_update$,
+			delete_object_update$
+			// drag_x_z_update$,
+			// selected_object_update$
+		)
 		.startWith([])
 		.scan(apply)
+		// .combineLatest(
+		// 	sound_objects_proxy$.startWith([]),
+		// 	(fn, o) => { debugger }
+		// )
+		// .startWith([])
+		// .scan(apply)
+		// .flatMap(arr => stream
+		// 	.from(arr)
+		// 	.scan((a,b) => a.concat(b), [])
+		// )
 		.do(debug('sound objects'))
-		.shareReplay();
+		.shareReplay(1);
+		
+	sound_objects$.subscribe(sound_objects_proxy$.asObserver());
 		
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0])
-		.shareReplay();
+		.shareReplay(1);
 		
 	const main_scene_model$ = sound_objects$
 		.map(sound_objects => {
@@ -170,8 +273,10 @@ export function model(
 	const editor_sound_objects_model$ = selected$
 		.map(obj => {
 			if (typeof obj !== 'undefined') {
-				obj.position = undefined;
-				return [obj];
+				const position = {
+					x: 0, y: 0, z: 0
+				};
+				return [Object.assign({}, obj, { position })];
 			}
 			else return [];
 		});
@@ -449,9 +554,7 @@ function cylinder_geometry_from_params(params) {
 	);
 }
 
-function log(d) { console.log(d); }
-
-function apply(o, fn) { return fn(o); }
+// function apply(o, fn) { return fn(o); }
 
 THREE.Object3D.prototype.appendChild = function (c) { 
 	this.add(c); 

@@ -178,6 +178,10 @@ export function component({ renderers, selected$, size$ }) {
 						{
 							id: 'add-cone',
 							text: 'add cone'
+						},
+						{
+							id: 'delete-object',
+							text: 'delete object'
 						}
 					]
 				}

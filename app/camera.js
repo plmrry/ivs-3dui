@@ -16,8 +16,7 @@ export function component({
 	const { orbit$, move_to_birds_eye$ } = intent({
 		add_object_click$,
 		camera_is_birds_eye$,
-		dom,
-		size$
+		dom
 	});
 	
 	const cameras_model$ = model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ });
@@ -65,7 +64,6 @@ export function intent({
 	return {
 		move_to_birds_eye$,
 		orbit$
-		// size$
 	};
 }
 
@@ -88,10 +86,9 @@ export function model({ orbit$, move_to_birds_eye$, size$, main_floor_delta$ }) 
 			};
 		});
     
-	const MAX_LATITUDE = 89.9;
+	const MAX_LATITUDE = 89;
 	const MIN_LATITUDE = 5;
 	
-	// const to_birds_eye$ = actions.move_to_birds_eye$
 	const to_birds_eye$ = move_to_birds_eye$
 		.flatMap(ev => {
 			let destination = MAX_LATITUDE;
@@ -254,8 +251,8 @@ export function state_reducer(model) {
         if (! _.isMatch(this.position, d.position)) {
           debug('camera')('update position');
           this.position.copy(d.position);
-          // this.lookAt(d.lookAt || new THREE.Vector3());
-          // this.up.copy(new THREE.Vector3(0, 1, 0));
+          this.lookAt(d.lookAt || new THREE.Vector3());
+          this.up.copy(new THREE.Vector3(0, 1, 0));
           /** Apparently we do not need to call `updateProjectionMatrix()` */
         }
         this.lookAt(d.lookAt || new THREE.Vector3());
