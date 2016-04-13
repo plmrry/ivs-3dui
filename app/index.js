@@ -30,8 +30,11 @@ Rx.config.longStackSupport = true;
 
 function main({ 
 	renderers, dom, scenes, cameras, raycasters, head, loadFile,
-	audioContexts, decodeAudio
+	audioContexts, decodeAudio, bufferSources
 }) {
+	bufferSources
+		.select({ name: 'main' })
+		.subscribe(log);
 	
 	/**
 	 * DECODE AUDIO
@@ -152,6 +155,16 @@ function main({
 	 * FILE
 	 */
 	 
+	const all_objects$ = main_scene_model$
+		.map(model => {
+			const objects = model.sound_objects;
+			const cones = objects
+				.map(obj => obj.cones)
+				.reduce((a,b) => a.concat(b), []);
+			return { objects, cones };
+		})
+		// .subscribe(log);
+	 
 	const cone_with_file$ = main_scene_model$
 		.pluck('sound_objects')
 		.flatMap(arr => stream.from(arr))
@@ -167,8 +180,90 @@ function main({
 	 * BUFFER SOURCES
 	 */
 	 
-	decodeAudio
-		.subscribe(log);
+	const buffer_source_model$ = all_objects$
+		.pluck('cones')
+		.flatMapLatest(arr => stream
+			.from(arr)
+			.flatMap(cone => {
+				return decodeAudio
+					.filter((d) => d.name === cone.file)
+					.take(1)
+					.map(({ buffer }) => {
+						return {
+							cone,
+							buffer,
+							key: cone.id
+						};
+					});
+			})
+			.toArray()
+		)
+		.withLatestFrom(
+			audioContexts.select({ name: 'main' }),
+			(model, contextObj) => ({ model, contextObj })
+		);
+		
+	const buffer_sources_state_reducer$ = buffer_source_model$
+		.map(buffer_sources_state_reducer);
+		
+	function buffer_sources_state_reducer({ model, contextObj }) {
+		const { context, destination } = contextObj;
+		return function(selectable) {
+			const join = d3_selection
+				.select(selectable)
+				.selectAll()
+				.data(model, d => d.key);
+				
+			const buffer_sources = join
+				.enter()
+				.append(function(d) {
+					console.warn('create buffer source');
+					const source = context.createBufferSource();
+					const panner = context.createPanner();
+					const volume = context.createGain();
+					
+					source.loop = true;
+					source.buffer = d.buffer;
+					source.start(context.currentTime + 0.020);
+					
+					panner.panningModel = 'HRTF';
+					
+					source.connect(volume);
+					volume.connect(panner);
+					panner.connect(destination);
+					
+					return {
+						cone_id: d.cone.id,
+						source,
+						panner,
+						volume,
+						key: d.key
+					};
+				})
+				.merge(join)
+				.each(function(d) {
+					
+				});
+				
+			return selectable;
+		};
+	}
+	 
+	// cone_with_file$
+	// 	.flatMap(cone => {
+	// 		return decodeAudio
+	// 			.filter((d) => d.name === cone.file)
+	// 			.map(({ buffer }) => {
+	// 				return {
+	// 					cone,
+	// 					buffer
+	// 				};
+	// 			});
+	// 	})
+	// 	.subscribe(log);
+	 
+	// decodeAudio
+	// 	.subscribe(log);
 	
 	/**
 	 * AUDIO CONTEXTS
@@ -206,18 +301,18 @@ function main({
 				.append(function(d) {
 					console.warn('create context');
 					const context = new window.AudioContext();
-					const gain = context.createGain();
-					gain.connect(context.destination);
+					const destination = context.createGain();
+					destination.connect(context.destination);
 					return {
 						name: d.name,
 						context,
-						gain
+						destination
 					};
 				})
 				.merge(join)
 				.each(function(d) {
 					/** set orientation and position */
-					console.warn('set context position');
+					// console.warn('set context position');
 				});
 				
 			return selectable;
@@ -281,6 +376,7 @@ function main({
 	});
 	
 	return {
+		bufferSources: buffer_sources_state_reducer$,
 		decodeAudio: audioBuffer$,
 		loadFile: cone_file_names$,
 		audioContexts: contexts_state_reducer$,

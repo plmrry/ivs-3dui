@@ -239,7 +239,6 @@ export function model({
 			const maxKey = d3.max(objects, d => d.key);
 			const key = typeof maxKey === 'undefined' ? 0 : maxKey + 1;
 			const new_object = {
-				id: key,
 				key: key,
 				name: 'sound_object',
 				position: {
@@ -373,7 +372,7 @@ export function model({
 			const key = typeof maxKey === 'undefined' ? 0 : maxKey + 1;
 			const parentKey = object.key;
 			const parent = object;
-			object.cones.push(getNewCone(key, parentKey, parent));
+			object.cones.push(getNewConeModel(key, parentKey, parent));
 		};
 	}
 		
@@ -391,7 +390,7 @@ export function model({
 		};
 	}
 		
-	function getNewCone(key, parentKey, parent) {
+	function getNewConeModel(key, parentKey, parent) {
 		return {
 			parent,
 			key,
@@ -403,7 +402,9 @@ export function model({
 				x: Math.random(),
 				y: Math.random(),
 				z: Math.random()
-			}
+			},
+			file: 'wetShort.wav',
+			id: `${parent.key}-${key}`
 		};
 	}
 		
@@ -438,6 +439,7 @@ export function model({
 	first.cones = [
 		{
 			parent: first,
+			id: `${first.key}-0`,
 			interactive: false,
 			key: 0,
 			lookAt: {
