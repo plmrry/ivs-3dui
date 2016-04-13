@@ -231,7 +231,7 @@ function main({
 			const buffer_sources = join
 				.enter()
 				.append(function(d) {
-					console.warn('create buffer source');
+					debug('buffer:create')(d);
 					const source = context.createBufferSource();
 					const panner = context.createPanner();
 					const volume = context.createGain();
@@ -265,12 +265,10 @@ function main({
 					/** Set position */
 					const p = cone.parent.position;
 					if (! _.isMatch(this.panner._position, p)) {
-						console.log('set cone position');
 						this.panner.setPosition(p.x, p.y, p.z);
 						this.panner._position = p;
 					}
 					if (! _.isMatch(this.panner._lookAt, cone.lookAt)) {
-						console.log('cone lookat');
 						this.panner._lookAt = cone.lookAt;
 						const vec = new THREE.Vector3();
 						vec.copy(cone.lookAt);
@@ -317,7 +315,6 @@ function main({
 			const contexts = join
 				.enter()
 				.append(function(d) {
-					console.warn('create context');
 					const context = new window.AudioContext();
 					const destination = context.createGain();
 					destination.connect(context.destination);
@@ -450,13 +447,11 @@ function makeFileLoaderDriver() {
 	return function(fileName$) {
 		const file$ = fileName$
 			.flatMap(name => {
-				console.log(name);
 				var request = new XMLHttpRequest();
 				request.open("GET", `assets/${name}`, true);
         request.responseType = "arraybuffer";
         const response$ = stream.create(observer => {
         	request.onload = function() {
-        		console.log('loaded');
         		observer.onNext({
         			name,
         			data: request.response

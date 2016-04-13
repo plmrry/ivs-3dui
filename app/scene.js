@@ -466,6 +466,47 @@ export function model({
 			playing: true
 		}
 	];
+	
+	const hertz = 0.1;
+	const period = 1/hertz;
+	
+	const animation$ = stream
+		.create(observer => {
+			d3.timer(() => observer.onNext())
+		})
+		.timestamp()
+		.pluck('timestamp')
+		.map(time => time / 1e3)
+		.map(seconds => seconds % period / period)
+		.map(t => ({
+			target: 0,
+			value: t
+		}));
+		// .map(time => time * hertz)
+		// .subscribe(log);
+		
+	function soundObject({ animation$ }) {
+		return function(props$) {
+			const key$ = props$.pluck('key');
+			const trajectoryOffset$ = animation$
+				.withLatestFrom(
+					key$,
+					(action, key) => ({ action, key })
+				)
+				.filter(({ action, key }) => action.target === key)
+				.pluck('action', 'value')
+				// .do(log)
+
+			return combineLatestObj
+				({
+					props$,
+					t: trajectoryOffset$
+				})
+				.map(({ props, t }) => {
+					return Object.assign({}, props, { t });
+				});
+		};
+	}
 		
 	const sound_objects$ = stream
 		.merge(
@@ -478,7 +519,8 @@ export function model({
 		.flatMap(arr => {
 			const states = arr
 				.map(obj => stream.just(obj))
-				.map(props$ => props$);
+				// .map(props$ => props$);
+				.map(soundObject({ animation$ }))
 			return stream.combineLatest(states);
 		})
 		.do(debug('sound-objects:model'))
@@ -530,7 +572,8 @@ export function model({
 				const position = {
 					x: 0, y: 0, z: 0
 				};
-				return [Object.assign({}, obj, { position })];
+				const trajectories = [];
+				return [Object.assign({}, obj, { position, trajectories })];
 			}
 			else return [];
 		});
@@ -890,6 +933,20 @@ function updateSoundObjects(scenes) {
 				// m.elements[13] = my;
 				// m.elements[14] = mz;
 		  // }
+		  /** FIXME: This is lame. DRY. */
+			/** FIXME: An object should be a point inside a trajectory */
+			d.trajectories = d.trajectories || [];
+			if (d.trajectories.length > 0) {
+				const traj = d.trajectories[0];
+				const vectors = traj.points.map(v => (new THREE.Vector3()).copy(v));
+				const curve = new THREE[traj.splineType](vectors);
+				curve.closed = true;
+				const trajectoryOffset = curve.getPoint(d.t);
+				if (! _.isMatch(this.position, trajectoryOffset)) {
+					debug('sound object')('set trajectory position', trajectoryOffset);
+					this.position.copy(trajectoryOffset);
+				}
+			}
 			// /** Update position */
 			// if (! _.isMatch(this.position, d.position)) {
 			// 	debug('sound object')('set position', d.position);
