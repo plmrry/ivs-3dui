@@ -155,29 +155,29 @@ function main({
 	 * FILE
 	 */
 	 
-	const all_objects_2$ = scenes
-		.select({ name: 'main' })
-		.map(scene => { 
-			const objects = scene.children.filter(d => d.name === 'sound_object');
-			const cones = objects
-				.map(obj => obj.children)
-				.reduce((a,b) => a.concat(b), [])
-				.map(cone_parent => {
-					const datum = d3.select(cone_parent).datum();
-					const { matrixWorld } = cone_parent;
-					return Object.assign({}, datum, { matrixWorld })
-				});
-			return { objects, cones };
-		});
-	 
-	// const all_objects$ = main_scene_model$
-	// 	.map(model => {
-	// 		const objects = model.sound_objects;
+	// const all_objects_2$ = scenes
+	// 	.select({ name: 'main' })
+	// 	.map(scene => { 
+	// 		const objects = scene.children.filter(d => d.name === 'sound_object');
 	// 		const cones = objects
-	// 			.map(obj => obj.cones)
-	// 			.reduce((a,b) => a.concat(b), []);
+	// 			.map(obj => obj.children)
+	// 			.reduce((a,b) => a.concat(b), [])
+	// 			.map(cone_parent => {
+	// 				const datum = d3.select(cone_parent).datum();
+	// 				const { matrixWorld } = cone_parent;
+	// 				return Object.assign({}, datum, { matrixWorld })
+	// 			});
 	// 		return { objects, cones };
 	// 	});
+	 
+	const all_objects$ = main_scene_model$
+		.map(model => {
+			const objects = model.sound_objects;
+			const cones = objects
+				.map(obj => obj.cones)
+				.reduce((a,b) => a.concat(b), []);
+			return { objects, cones };
+		});
 	 
 	const cone_with_file$ = main_scene_model$
 		.pluck('sound_objects')
@@ -194,7 +194,7 @@ function main({
 	 * BUFFER SOURCES
 	 */
 	 
-	const buffer_source_model$ = all_objects_2$
+	const buffer_source_model$ = all_objects$
 		.pluck('cones')
 		.flatMapLatest(arr => stream
 			.from(arr)

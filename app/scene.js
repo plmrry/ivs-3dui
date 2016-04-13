@@ -774,7 +774,7 @@ function updateOneCone(d) {
 
 function updateSoundObjects(scenes) {
 	let sound_objects_join = scenes
-		.selectAll({ name: 'sound_object' })
+		.selectAll({ name: 'sound_object_parent' })
 		.data(function(d) { return d.sound_objects || [] });
 		
 	sound_objects_join
@@ -798,13 +798,18 @@ function updateSoundObjects(scenes) {
 			var sphere = new THREE.Mesh(geometry, material);
 			sphere.castShadow = true;
 			sphere.receiveShadow = true;
-			sphere.name = d.name;
+			sphere.name = 'sound_object';
 			sphere._type = 'sound_object';
 			sphere._volume = 1;
 			sphere.renderOrder = 10;
-			return sphere;
+			const object_parent = new THREE.Object3D();
+			object_parent.name = 'sound_object_parent';
+			object_parent.add(sphere);
+			return object_parent;
+			// return sphere;
 		})
 		.merge(sound_objects_join)
+		.select({ name: 'sound_object' })
 		.each(function(d) {
 		  /** Update quaternion */
 		  if (! _.isMatch(this.quaternion, d.quaternion)) {
