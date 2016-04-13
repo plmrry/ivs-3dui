@@ -155,15 +155,29 @@ function main({
 	 * FILE
 	 */
 	 
-	const all_objects$ = main_scene_model$
-		.map(model => {
-			const objects = model.sound_objects;
+	const all_objects_2$ = scenes
+		.select({ name: 'main' })
+		.map(scene => { 
+			const objects = scene.children.filter(d => d.name === 'sound_object');
 			const cones = objects
-				.map(obj => obj.cones)
-				.reduce((a,b) => a.concat(b), []);
+				.map(obj => obj.children)
+				.reduce((a,b) => a.concat(b), [])
+				.map(cone_parent => {
+					const datum = d3.select(cone_parent).datum();
+					const { matrixWorld } = cone_parent;
+					return Object.assign({}, datum, { matrixWorld })
+				});
 			return { objects, cones };
-		})
-		// .subscribe(log);
+		});
+	 
+	// const all_objects$ = main_scene_model$
+	// 	.map(model => {
+	// 		const objects = model.sound_objects;
+	// 		const cones = objects
+	// 			.map(obj => obj.cones)
+	// 			.reduce((a,b) => a.concat(b), []);
+	// 		return { objects, cones };
+	// 	});
 	 
 	const cone_with_file$ = main_scene_model$
 		.pluck('sound_objects')
@@ -180,7 +194,7 @@ function main({
 	 * BUFFER SOURCES
 	 */
 	 
-	const buffer_source_model$ = all_objects$
+	const buffer_source_model$ = all_objects_2$
 		.pluck('cones')
 		.flatMapLatest(arr => stream
 			.from(arr)
@@ -227,6 +241,12 @@ function main({
 					source.start(context.currentTime + 0.020);
 					
 					panner.panningModel = 'HRTF';
+					panner.coneInnerAngle = 0.01*180/Math.PI;
+					panner.coneOuterAngle = 1*180/Math.PI;
+					panner.coneOuterGain = 0.03;
+					panner._position = {};
+					panner._orientation = {};
+					panner._lookAt = {}
 					
 					source.connect(volume);
 					volume.connect(panner);
@@ -241,29 +261,29 @@ function main({
 					};
 				})
 				.merge(join)
-				.each(function(d) {
-					
+				.each(function({ cone }) {
+					/** Set position */
+					const p = cone.parent.position;
+					if (! _.isMatch(this.panner._position, p)) {
+						console.log('set cone position');
+						this.panner.setPosition(p.x, p.y, p.z);
+						this.panner._position = p;
+					}
+					if (! _.isMatch(this.panner._lookAt, cone.lookAt)) {
+						console.log('cone lookat');
+						this.panner._lookAt = cone.lookAt;
+						const m = cone.matrixWorld.clone();
+						var vec = new THREE.Vector3(0,0,1);
+						m.elements[12] = m.elements[13] = m.elements[14] = 0;
+						vec.applyProjection(m);
+						vec.normalize();
+						this.panner.setOrientation(vec.x, vec.y, vec.z);
+					}
 				});
 				
 			return selectable;
 		};
 	}
-	 
-	// cone_with_file$
-	// 	.flatMap(cone => {
-	// 		return decodeAudio
-	// 			.filter((d) => d.name === cone.file)
-	// 			.map(({ buffer }) => {
-	// 				return {
-	// 					cone,
-	// 					buffer
-	// 				};
-	// 			});
-	// 	})
-	// 	.subscribe(log);
-	 
-	// decodeAudio
-	// 	.subscribe(log);
 	
 	/**
 	 * AUDIO CONTEXTS

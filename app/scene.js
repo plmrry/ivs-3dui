@@ -605,6 +605,7 @@ export function state_reducer(model) {
 			.enter()
 			.append(d => {
 				const head = d.object;
+				head.rotation.y += Math.PI;
 				head.name = d.name;
 				return head;
 			});
