@@ -202,7 +202,10 @@ export function component({
 	
 	actions.head = head;
 	
-	const { scenes_model$, new_object$, selected$ } = model(actions);
+	const { 
+		scenes_model$, new_object$, selected$, heads$,
+		main_scene_model$
+	} = model(actions);
 	
 	new_object$.subscribe(new_object_proxy$);
 	
@@ -210,8 +213,9 @@ export function component({
 	
 	return {
 		scenes_state_reducer$,
-		new_object$,
-		selected$
+		selected$,
+		heads$,
+		main_scene_model$
 	};
 }
 
@@ -368,7 +372,8 @@ export function model({
 			const maxKey = d3.max(object.cones, d => d.key);
 			const key = typeof maxKey === 'undefined' ? 0 : maxKey + 1;
 			const parentKey = object.key;
-			object.cones.push(getNewCone(key, parentKey));
+			const parent = object;
+			object.cones.push(getNewCone(key, parentKey, parent));
 		};
 	}
 		
@@ -386,8 +391,9 @@ export function model({
 		};
 	}
 		
-	function getNewCone(key) {
+	function getNewCone(key, parentKey, parent) {
 		return {
+			parent,
 			key,
 			volume: 1,
 			spread: 0.5,
@@ -415,21 +421,6 @@ export function model({
 		.map(update => objects => objects.map(update));
 		
 	const first = {
-		cones: [
-			{
-				interactive: false,
-				key: 0,
-				lookAt: {
-					x: 0.57,
-					y: 0.44,
-					z: 0.34
-				},
-				selected: true,
-				spread: 0.5,
-				volume: 2,
-				name: 'cone'
-			}
-		],
 		key: 0,
 		material: {
 			color: 'ffffff'
@@ -443,6 +434,25 @@ export function model({
 		selected: true,
 		volume: 1
 	};
+	
+	first.cones = [
+		{
+			parent: first,
+			interactive: false,
+			key: 0,
+			lookAt: {
+				x: 0.57,
+				y: 0.44,
+				z: 0.34
+			},
+			selected: true,
+			spread: 0.5,
+			volume: 2,
+			name: 'cone',
+			file: 'wetShort.wav',
+			playing: true
+		}
+	];
 		
 	const sound_objects$ = stream
 		.merge(
@@ -459,7 +469,7 @@ export function model({
 		.map(arr => arr.filter(d => d.selected)[0])
 		.shareReplay(1);
 	
-	const dummy_head$ = head
+	const heads$ = head
 		.map(head => ({
 			name: 'head',
 			position: {
@@ -473,28 +483,16 @@ export function model({
 				z: 1
 			},
 			object: head
-		}));
-		
-	// const dummy_head$ = stream
-	// 	.just({
-	// 		position: {
-	// 			x: 1,
-	// 			y: 1,
-	// 			z: 2
-	// 		},
-	// 		lookAt: {
-	// 			x: 3,
-	// 			y: 2,
-	// 			z: 1
-	// 		},
-	// 		name: 'head'
-	// 	});
+		}))
+		.map(h => [h])
+		.startWith([])
+		.shareReplay(1);
 		
 	const main_scene_model$ = combineLatestObj({
 			sound_objects$,
-			dummy_head$
+			heads$
 		})
-		.map(({ sound_objects, dummy_head }) => {
+		.map(({ sound_objects, heads }) => {
 			return {
 				name: 'main',
 				floors: [
@@ -503,7 +501,7 @@ export function model({
 					}
 				],
 				sound_objects,
-				heads: [ dummy_head ]
+				heads
 			};
 		});
 		
@@ -538,7 +536,9 @@ export function model({
 	return {
 		scenes_model$,
 		new_object$,
-		selected$
+		selected$,
+		heads$,
+		main_scene_model$
 	};
 }
 
@@ -603,7 +603,7 @@ export function state_reducer(model) {
 			.enter()
 			.append(d => {
 				const head = d.object;
-				head.rotation.y += Math.PI;
+				head.name = d.name;
 				return head;
 			});
 		

@@ -15,8 +15,10 @@ import * as renderer from './renderer.js';
 import * as dom_component from './dom.js';
 import * as raycaster from './raycaster.js';
 
-import { scoped_sound_object, scoped_sound_object_2 } from './soundObject.js';
-import { scoped_sound_cone } from './soundCone.js';
+window.AudioContext = window.AudioContext || window.webkitAudioContext;
+
+// import { scoped_sound_object, scoped_sound_object_2 } from './soundObject.js';
+// import { scoped_sound_cone } from './soundCone.js';
 
 // debug.enable('*');
 // debug.enable('*,-raycasters,-cameras,-camera');
@@ -26,7 +28,23 @@ debug.disable();
 const stream = Rx.Observable;
 Rx.config.longStackSupport = true;
 
-function main({ renderers, dom, scenes, cameras, raycasters, head }) {
+function main({ 
+	renderers, dom, scenes, cameras, raycasters, head, loadFile,
+	audioContexts, decodeAudio
+}) {
+	
+	/**
+	 * DECODE AUDIO
+	 */
+	
+	const audioBuffer$ = loadFile
+		.withLatestFrom(
+			audioContexts.select({ name: 'main' }),
+			(file, context) => ({ file, context })
+		);
+		
+	// decodeAudio
+	// 	.subscribe(log);
 		
 	/** 
 	 *	ACTIONS
@@ -126,7 +144,87 @@ function main({ renderers, dom, scenes, cameras, raycasters, head }) {
 		camera_is_birds_eye$, add_object_click$, dom, head
 	};
 	
-	const { scenes_state_reducer$, selected$ } = scene.component(scene_sources);
+	const { 
+		scenes_state_reducer$, selected$, heads$, main_scene_model$
+	} = scene.component(scene_sources);
+	
+	/**
+	 * FILE
+	 */
+	 
+	const cone_with_file$ = main_scene_model$
+		.pluck('sound_objects')
+		.flatMap(arr => stream.from(arr))
+		.pluck('cones')
+		.flatMap(arr => stream.from(arr))
+		.filter(({ file }) => typeof file !== 'undefined');
+		
+	const cone_file_names$ = cone_with_file$
+		.pluck('file')
+		.distinctUntilChanged();
+		
+	/**
+	 * BUFFER SOURCES
+	 */
+	 
+	decodeAudio
+		.subscribe(log);
+	
+	/**
+	 * AUDIO CONTEXTS
+	 */
+	 
+	function audio_context_component({ head$ }) {
+		const contexts_model$ = head$
+			.map(({ matrix, position }) => ({
+				name: 'main',
+				matrix,
+				position
+			}))
+			.map(c => [c]);
+			
+		const contexts_state_reducer$ = contexts_model$
+			.map(context_state_reducer);
+			
+		return { contexts_state_reducer$ };
+	}
+	 
+	const head$ = scenes
+		.select({ name: 'main' })
+		.map(scene => scene.getObjectByProperty('name', 'head'))
+		.filter(head => typeof head !== 'undefined')
+		
+	function context_state_reducer(model) {
+		return function(selectable) {
+			const join = d3_selection
+				.select(selectable)
+				.selectAll()
+				.data(model);
+				
+			const contexts = join
+				.enter()
+				.append(function(d) {
+					console.warn('create context');
+					const context = new window.AudioContext();
+					const gain = context.createGain();
+					gain.connect(context.destination);
+					return {
+						name: d.name,
+						context,
+						gain
+					};
+				})
+				.merge(join)
+				.each(function(d) {
+					/** set orientation and position */
+					console.warn('set context position');
+				});
+				
+			return selectable;
+		};
+	}
+	
+	const { contexts_state_reducer$ } = audio_context_component({ head$ });
 	
 	/** 
 	 *	DOM
@@ -183,12 +281,81 @@ function main({ renderers, dom, scenes, cameras, raycasters, head }) {
 	});
 	
 	return {
+		decodeAudio: audioBuffer$,
+		loadFile: cone_file_names$,
+		audioContexts: contexts_state_reducer$,
 		renderers: renderers_state_reducer$,
 		scenes: scenes_state_reducer$,
 		cameras: cameras_state_reducer$,
 		render: render_function$,
 		raycasters: raycasters_state_reducer$,
 		dom: dom_state_reducer$
+	};
+}
+
+Cycle.run(main, {
+	audioContexts: makeStateDriver('audioContexts'),
+	bufferSources: makeStateDriver('bufferSources'),
+	renderers: makeStateDriver('renderers'),
+	scenes: makeStateDriver('scenes'),
+	cameras: makeStateDriver('cameras'),
+	raycasters: makeStateDriver('raycasters'),
+	render: (source$) => source$.subscribe(fn => fn()),
+	dom: dom_component.makeD3DomDriver('#app'),
+	loadFile: makeFileLoaderDriver(),
+	decodeAudio: makeDecodeDriver(),
+	head: function() {
+		OBJLoader(THREE);
+		const loader = new THREE.OBJLoader();
+		return stream.create(observer => {
+			loader.load('assets/head.obj', d => { observer.onNext(d) });
+		});
+	}
+});
+
+function makeDecodeDriver() {
+	return function(sink$) {
+		const data$ = sink$
+			.flatMap(({ context, file }) => {
+				const ctx = context.context;
+				const buffer = file.data;
+				return stream.fromPromise(ctx.decodeAudioData(buffer))
+					.map(buffer => ({
+						name: file.name,
+						buffer
+					}));
+			});
+			
+		// data$.subscribe();
+		
+		return data$;
+	};
+}
+
+function makeFileLoaderDriver() {
+	return function(fileName$) {
+		const file$ = fileName$
+			.flatMap(name => {
+				console.log(name);
+				var request = new XMLHttpRequest();
+				request.open("GET", `assets/${name}`, true);
+        request.responseType = "arraybuffer";
+        const response$ = stream.create(observer => {
+        	request.onload = function() {
+        		console.log('loaded');
+        		observer.onNext({
+        			name,
+        			data: request.response
+        		});
+        	};
+        });
+        request.send();
+				return response$;
+			});
+		
+		// file$.subscribe();
+		
+		return file$;
 	};
 }
 
@@ -234,33 +401,13 @@ function windowSize(dom$) {
 		.shareReplay(1);
 }
 
-Cycle.run(main, {
-	renderers: makeStateDriver('renderers'),
-	scenes: makeStateDriver('scenes'),
-	cameras: makeStateDriver('cameras'),
-	raycasters: makeStateDriver('raycasters'),
-	render: (source$) => source$.subscribe(fn => fn()),
-	dom: dom_component.makeD3DomDriver('#app'),
-	head: function() {
-		OBJLoader(THREE);
-		const loader = new THREE.OBJLoader();
-		// loader.load('assets/head.obj', d => { debugger })
-		// return stream.empty()
-		// return stream.fromCallback(loader.load.bind(this))('assets/head.obj');
-		return stream.create(observer => {
-			loader.load('assets/head.obj', d => { observer.onNext(d) });
-		});
-	}
-});
-
 function makeStateDriver(name) {
 	return function stateDriver(state_reducer$) {
 		const state$ = state_reducer$
 			.scan(apply, new Selectable());
 			
 		state$
-			.do(s => debug(name)(s.children))
-			.subscribe();
+			.do(s => debug(name)(s.children));
 		
 		return {
 			observable: state$,
