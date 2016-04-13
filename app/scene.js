@@ -563,6 +563,7 @@ export function state_reducer(model) {
 				new_scene._id = d.name;
 				new_scene.name = d.name;
 				new_scene.add(getSpotlight());
+				// new_scene.add(getDirectionalLight())
 				new_scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
 				return new_scene;
 			})
@@ -623,6 +624,31 @@ function getScreen() {
 	screen.position.z = 4;
 	screen.name = 'screen';
 	return screen;
+}
+
+function getDirectionalLight() {
+	var dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
+	dirLight.color.setHSL( 0.1, 1, 0.95 );
+	dirLight.position.set( -1, 1.75, 1 );
+	dirLight.position.multiplyScalar( 50 );
+
+	dirLight.castShadow = true;
+
+	dirLight.shadowMapWidth = 2048;
+	dirLight.shadowMapHeight = 2048;
+
+	var d = 50;
+
+	dirLight.shadowCameraLeft = -d;
+	dirLight.shadowCameraRight = d;
+	dirLight.shadowCameraTop = d;
+	dirLight.shadowCameraBottom = -d;
+
+	dirLight.shadowCameraFar = 3500;
+	dirLight.shadowBias = -0.0001;
+	dirLight.shadowDarkness = 0.35;
+	
+	return dirLight;
 }
 
 function getSpotlight() {
