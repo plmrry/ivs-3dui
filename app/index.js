@@ -21,6 +21,7 @@ window.AudioContext = window.AudioContext || window.webkitAudioContext;
 // import { scoped_sound_cone } from './soundCone.js';
 
 // debug.enable('*');
+// debug.enable('scenes')
 // debug.enable('*,-raycasters,-cameras,-camera');
 debug.disable();
 // debug.enable('event:*,sound-objects:*');
@@ -287,9 +288,9 @@ function main({
 	 
 	function audio_context_component({ head$ }) {
 		const contexts_model$ = head$
-			.map(({ matrix, position }) => ({
+			.map(({ position, lookAt }) => ({
 				name: 'main',
-				matrix,
+				lookAt,
 				position
 			}))
 			.map(c => [c]);
@@ -300,10 +301,14 @@ function main({
 		return { contexts_state_reducer$ };
 	}
 	 
-	const head$ = scenes
-		.select({ name: 'main' })
-		.map(scene => scene.getObjectByProperty('name', 'head'))
-		.filter(head => typeof head !== 'undefined')
+	// const head$ = scenes
+	// 	.select({ name: 'main' })
+	// 	.map(scene => scene.getObjectByProperty('name', 'head'))
+	// 	.filter(head => typeof head !== 'undefined')
+	// 	.distinctUntilChanged();
+	const head$ = heads$
+		.pluck('0')
+		.filter(head => typeof head !== 'undefined');
 		
 	function context_state_reducer(model) {
 		return function(selectable) {
@@ -513,10 +518,11 @@ function windowSize(dom$) {
 function makeStateDriver(name) {
 	return function stateDriver(state_reducer$) {
 		const state$ = state_reducer$
-			.scan(apply, new Selectable());
-			
-		state$
+			.scan(apply, new Selectable())
 			.do(s => debug(name)(s.children));
+			
+		// state$
+		// 	.do(s => debug(name)(s.children));
 		
 		return {
 			observable: state$,

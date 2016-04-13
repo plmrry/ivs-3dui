@@ -481,7 +481,9 @@ export function model({
 		.map(t => ({
 			target: 0,
 			value: t
-		}));
+		}))
+		// .take(1)
+		// .first()
 		// .map(time => time * hertz)
 		// .subscribe(log);
 		
@@ -495,13 +497,20 @@ export function model({
 				)
 				.filter(({ action, key }) => action.target === key)
 				.pluck('action', 'value')
+				
 				// .do(log)
 
-			return combineLatestObj
-				({
+			// return combineLatestObj
+			// 	({
+			// 		props$,
+			// 		t: trajectoryOffset$
+			// 	})
+			// return trajectoryOffset$
+			return stream.just(0)
+				.withLatestFrom(
 					props$,
-					t: trajectoryOffset$
-				})
+					(t, props) => ({ props, t })
+				)
 				.map(({ props, t }) => {
 					return Object.assign({}, props, { t });
 				});
@@ -521,6 +530,8 @@ export function model({
 				.map(obj => stream.just(obj))
 				// .map(props$ => props$);
 				.map(soundObject({ animation$ }))
+				// .map(state$ => state$.do(state => log('state', state.key)))
+				// .map(state$ => state$.distinctUntilChanged());
 			return stream.combineLatest(states);
 		})
 		.do(debug('sound-objects:model'))
@@ -546,8 +557,9 @@ export function model({
 			object: head
 		}))
 		.map(h => [h])
+		// .do(d => console.warn(d))
 		.startWith([])
-		.shareReplay(1);
+		// .shareReplay(1)
 		
 	const main_scene_model$ = combineLatestObj({
 			sound_objects$,
@@ -564,9 +576,11 @@ export function model({
 				sound_objects,
 				heads
 			};
-		});
+		})
+		// .do(d => console.warn(d))
 		
 	const editor_sound_objects_model$ = selected$
+		.distinctUntilChanged()
 		.map(obj => {
 			if (typeof obj !== 'undefined') {
 				const position = {
@@ -593,7 +607,7 @@ export function model({
 		.combineLatest(
 			main_scene_model$,
 			editor_scene_model$
-		);
+		)
 		
 	return {
 		scenes_model$,
