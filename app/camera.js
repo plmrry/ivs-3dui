@@ -194,7 +194,7 @@ export function model({
 				name: 'main',
 				size: size,
 				position: position,
-				zoom: 40,
+				zoom: 50,
 				lookAt: lookAt,
 				lat_lng,
 				index

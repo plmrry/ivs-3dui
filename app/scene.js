@@ -29,6 +29,16 @@ function intent({
 		raycasters, main_dragstart$, main_drag$, main_dragend$,
 		camera_is_birds_eye$, add_object_click$, new_object_proxy$, dom
 	}) {
+	const _document = dom
+		.select(() => document)
+		
+	const keydown = _document
+		.events('keydown')
+		.pluck('event')
+		.pluck('code')
+		.map(code => code.match(/Key(.)/)[1])
+		.subscribe(log);
+		
 	const main_raycaster$ = raycasters
 		.select({ name: 'main' })
 		.pluck('event$')
@@ -434,13 +444,17 @@ export function model({
 		},
 		selected: true,
 		volume: 1,
-		t: 0.5
+		t: 0
 	};
 	
 	first.trajectories = [
 		{
 			points: [
-				[+0,+0,+0], [+2,1,-2], [+2,-1,-2], [+3,+2,+3], [+3,-1,+6]
+				[+0,+0,+0], 
+				[+2,+1,-2], 
+				[+5,-1,-2], 
+				[+8,+2,+3], 
+				[+3,-1,+6]
 			].map(([x,y,z]) => ({x,y,z})),
 			splineType: 'CatmullRomCurve3',
 			parent: first
@@ -455,7 +469,7 @@ export function model({
 			key: 0,
 			lookAt: {
 				x: 0.57,
-				y: 0.44,
+				y: -0.1,
 				z: 0.34
 			},
 			selected: true,
@@ -505,8 +519,8 @@ export function model({
 			// 		props$,
 			// 		t: trajectoryOffset$
 			// 	})
-			// return trajectoryOffset$
-			return stream.just(0)
+			return trajectoryOffset$
+			// return stream.just(0)
 				.withLatestFrom(
 					props$,
 					(t, props) => ({ props, t })
@@ -540,12 +554,16 @@ export function model({
 	const selected$ = sound_objects$
 		.map(arr => arr.filter(d => d.selected)[0])
 		.shareReplay(1);
+		
+	function headComponent({ actions, props$ }) {
+	  return props$
+	}
 	
 	const heads$ = head
 		.map(head => ({
 			name: 'head',
 			position: {
-				x: 1,
+				x: -1,
 				y: 1,
 				z: 2
 			},
@@ -556,10 +574,13 @@ export function model({
 			},
 			object: head
 		}))
+		.flatMap(head => {
+		  const props$ = stream.just(head);
+		  return headComponent({ props$ });
+		})
 		.map(h => [h])
-		// .do(d => console.warn(d))
 		.startWith([])
-		// .shareReplay(1)
+		.shareReplay(1)
 		
 	const main_scene_model$ = combineLatestObj({
 			sound_objects$,
@@ -577,6 +598,7 @@ export function model({
 				heads
 			};
 		})
+		.shareReplay(1)
 		// .do(d => console.warn(d))
 		
 	const editor_sound_objects_model$ = selected$
@@ -730,9 +752,17 @@ export function state_reducer(model) {
 			.append(d => {
 				const head = d.object;
 				head.rotation.y += Math.PI;
+				const scale = 0.5;
+				head.children[0].castShadow = true;
+				head.scale.set(scale, scale, scale);
 				head.name = d.name;
 				return head;
-			});
+			})
+			.merge(heads_join)
+			.each(function(d) {
+				this.position.copy(d.position);
+				// this.lookAt(d.lookAt);
+			})
 		
     return selectable;
   };

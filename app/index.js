@@ -175,10 +175,11 @@ function main({
 		.map(model => {
 			const objects = model.sound_objects;
 			const cones = objects
-				.map(obj => obj.cones)
+				.map(obj => obj.cones.map(cone => { cone.t = obj.t; return cone; }))
 				.reduce((a,b) => a.concat(b), []);
 			return { objects, cones };
-		});
+		})
+		.shareReplay(1);
 	 
 	const cone_with_file$ = main_scene_model$
 		.pluck('sound_objects')
@@ -222,6 +223,7 @@ function main({
 		.map(buffer_sources_state_reducer);
 		
 	function buffer_sources_state_reducer({ model, contextObj }) {
+		// console.log(model[0].cone.t)
 		const { context, destination } = contextObj;
 		return function(selectable) {
 			const join = d3_selection
@@ -265,9 +267,25 @@ function main({
 				.each(function({ cone }) {
 					/** Set position */
 					const p = cone.parent.position;
-					if (! _.isMatch(this.panner._position, p)) {
-						this.panner.setPosition(p.x, p.y, p.z);
-						this.panner._position = p;
+					// var _pos;
+					// cone.parent.trajectories = cone.parent.trajectories || [];
+					// // if (cone.parent.trajectories.length > 0) {
+					const traj = cone.parent.trajectories[0];
+					const vectors = traj.points.map(v => (new THREE.Vector3()).copy(v));
+					const curve = new THREE[traj.splineType](vectors);
+					curve.closed = true;
+					const trajectoryOffset = curve.getPoint(cone.t);
+					// console.log(trajectoryOffset, p);
+					var p2 = (new THREE.Vector3()).addVectors(p, trajectoryOffset);
+						// if (! _.isMatch(this.position, trajectoryOffset)) {
+						// 	debug('sound object')('set trajectory position', trajectoryOffset);
+						// 	this.position.copy(trajectoryOffset);
+						// }
+					// }
+					// console.log(p, cone.t);
+					if (! _.isMatch(this.panner._position, p2)) {
+						this.panner.setPosition(p2.x, p2.y, p2.z);
+						this.panner._position = p2;
 					}
 					if (! _.isMatch(this.panner._lookAt, cone.lookAt)) {
 						this.panner._lookAt = cone.lookAt;
@@ -332,7 +350,12 @@ function main({
 				.merge(join)
 				.each(function(d) {
 					/** set orientation and position */
-					// console.warn('set context position');
+					const vec = new THREE.Vector3();
+					vec.copy(d.lookAt);
+					vec.normalize();
+					this.context.listener.setOrientation(vec.x, vec.y, vec.z, 0, 1, 0);
+					const p = d.position;
+					this.context.listener.setPosition(p.x, p.y, p.z);
 				});
 				
 			return selectable;
@@ -435,11 +458,17 @@ function makeDecodeDriver() {
 			.flatMap(({ context, file }) => {
 				const ctx = context.context;
 				const buffer = file.data;
-				return stream.fromPromise(ctx.decodeAudioData(buffer))
-					.map(buffer => ({
-						name: file.name,
-						buffer
-					}));
+				return stream.create(observer => {
+					ctx.decodeAudioData(buffer, function(data) {
+						observer.onNext(data);
+					})
+				})
+				// return stream.fromPromise(ctx.decodeAudioData(buffer))
+				// return stream.fromCallback(ctx.decodeAudioData)(buffer)
+				.map(buffer => ({
+					name: file.name,
+					buffer
+				}));
 			});
 			
 		// data$.subscribe();
