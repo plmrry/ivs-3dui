@@ -9,6 +9,7 @@ export default function makeD3DomDriver(selector) {
 		const dom_state$ = state_reducer$
 			.scan(apply, d3.select(selector))
 			.do(() => debug('dom')('update'))
+			.shareReplay(1);
 			
 		dom_state$.subscribe();
 			

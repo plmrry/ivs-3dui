@@ -7,9 +7,12 @@ import log from './log.js';
 
 Rx.config.longStackSupport = true;
 
-debug.disable();
+debug.enable('*');
 
 function main({ dom }) {
+	
+	const main_size$ = windowSize(dom)
+		.subscribe(log);
 	
 	const dom_state_reducer$ = stream
 		.just(dom => dom.append('p').text('hello'));
@@ -22,3 +25,15 @@ function main({ dom }) {
 Cycle.run(main, {
 	dom: makeD3DomDriver('#app')
 });
+
+function windowSize(dom) {
+	return dom
+		.select(() => window)
+		.events('resize')
+		.pluck('node')
+		.startWith(window)
+		.map(element => ({
+			width: element.innerWidth * 0.8,
+      height: element.innerHeight * 0.8
+		}));
+}
