@@ -433,16 +433,19 @@ export function model({
 			z: 1.8
 		},
 		selected: true,
-		volume: 1
+		volume: 1,
+		t: 0.5
 	};
 	
-	first.trajectory = {
-		points: [
-			[0,0,0], [2,1,-2], [2,-1,-2], [3,2,3], [3,-1-6]
-		].map(([x,y,z]) => ({x,y,z})),
-		type: 'ClosedSplineCurve3',
-		parent: first
-	};
+	first.trajectories = [
+		{
+			points: [
+				[+0,+0,+0], [+2,1,-2], [+2,-1,-2], [+3,+2,+3], [+3,-1,+6]
+			].map(([x,y,z]) => ({x,y,z})),
+			splineType: 'CatmullRomCurve3',
+			parent: first
+		}
+	];
 	
 	first.cones = [
 		{
@@ -472,6 +475,12 @@ export function model({
 		)
 		.startWith([first])
 		.scan(apply)
+		.flatMap(arr => {
+			const states = arr
+				.map(obj => stream.just(obj))
+				.map(props$ => props$);
+			return stream.combineLatest(states);
+		})
 		.do(debug('sound-objects:model'))
 		.shareReplay(1);
 		
@@ -602,6 +611,56 @@ export function state_reducer(model) {
 			.merge(screens_join);
 					
 		const sound_objects = updateSoundObjects(scenes);
+		
+		const sound_object_parents = scenes
+			.selectAll({ name: 'sound_object_parent' });
+			
+		const trajectories_join = sound_object_parents
+			.selectAll({ name: 'trajectory' })
+			.data(d => d.trajectories || []);
+			
+		const trajectories = trajectories_join
+			.enter()
+			.append(function(d) {
+				const vectors = d.points.map(v => (new THREE.Vector3()).copy(v));
+				const curve = new THREE[d.splineType](vectors);
+				curve.closed = true;
+				const geometry = new THREE.TubeGeometry(curve, 100, 0.05, 8, true);
+				const material = new THREE.MeshPhongMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.5
+        });
+        const trajectory = new THREE.Mesh(geometry, material);
+        trajectory.castShadow = true;
+        trajectory.name = 'trajectory';
+        return trajectory;
+			})
+			.merge(trajectories_join);
+			
+		const control_points_join = trajectories
+			.selectAll({ name: 'trajectory_control_point' })
+			.data(d => d.points || []);
+			
+		const control_points = control_points_join
+			.enter()
+			.append(function(d) {
+				const geometry = new THREE.SphereGeometry(0.2, 30, 30);
+        const material = new THREE.MeshPhongMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.5
+        });
+        const controlPoint = new THREE.Mesh(geometry, material);
+        controlPoint.castShadow = true;
+        controlPoint.receiveShadow = true;
+        controlPoint.name = 'trajectory_control_point';
+        return controlPoint;
+			})
+			.merge(control_points_join)
+			.each(function(d) {
+				this.position.copy(d);
+			});
 		
 		updateCones(sound_objects);
 		
@@ -809,26 +868,33 @@ function updateSoundObjects(scenes) {
 			// return sphere;
 		})
 		.merge(sound_objects_join)
-		.select({ name: 'sound_object' })
 		.each(function(d) {
-		  /** Update quaternion */
-		  if (! _.isMatch(this.quaternion, d.quaternion)) {
-		    this.quaternion.copy(d.quaternion);
-				var vec = new THREE.Vector3(0,0,1);
-				var m = this.matrixWorld;
-				var mx = m.elements[12], my = m.elements[13], mz = m.elements[14];
-				m.elements[12] = m.elements[13] = m.elements[14] = 0;
-				vec.applyProjection(m);
-				vec.normalize();
-				m.elements[12] = mx;
-				m.elements[13] = my;
-				m.elements[14] = mz;
-		  }
 			/** Update position */
 			if (! _.isMatch(this.position, d.position)) {
 				debug('sound object')('set position', d.position);
 				this.position.copy(d.position);
 			}
+		})
+		.select({ name: 'sound_object' })
+		.each(function(d) {
+		  /** Update quaternion */
+		  // if (! _.isMatch(this.quaternion, d.quaternion)) {
+		  //   this.quaternion.copy(d.quaternion);
+				// var vec = new THREE.Vector3(0,0,1);
+				// var m = this.matrixWorld;
+				// var mx = m.elements[12], my = m.elements[13], mz = m.elements[14];
+				// m.elements[12] = m.elements[13] = m.elements[14] = 0;
+				// vec.applyProjection(m);
+				// vec.normalize();
+				// m.elements[12] = mx;
+				// m.elements[13] = my;
+				// m.elements[14] = mz;
+		  // }
+			// /** Update position */
+			// if (! _.isMatch(this.position, d.position)) {
+			// 	debug('sound object')('set position', d.position);
+			// 	this.position.copy(d.position);
+			// }
 			/** Update geometry */
 			let params = this.geometry.parameters;
 			if (! _.isMatch(params, { radius: d.volume })) {
