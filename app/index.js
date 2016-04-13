@@ -272,10 +272,8 @@ function main({
 					if (! _.isMatch(this.panner._lookAt, cone.lookAt)) {
 						console.log('cone lookat');
 						this.panner._lookAt = cone.lookAt;
-						const m = cone.matrixWorld.clone();
-						var vec = new THREE.Vector3(0,0,1);
-						m.elements[12] = m.elements[13] = m.elements[14] = 0;
-						vec.applyProjection(m);
+						const vec = new THREE.Vector3();
+						vec.copy(cone.lookAt);
 						vec.normalize();
 						this.panner.setOrientation(vec.x, vec.y, vec.z);
 					}

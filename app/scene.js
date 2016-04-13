@@ -436,6 +436,14 @@ export function model({
 		volume: 1
 	};
 	
+	first.trajectory = {
+		points: [
+			[0,0,0], [2,1,-2], [2,-1,-2], [3,2,3], [3,-1-6]
+		].map(([x,y,z]) => ({x,y,z})),
+		type: 'ClosedSplineCurve3',
+		parent: first
+	};
+	
 	first.cones = [
 		{
 			parent: first,
