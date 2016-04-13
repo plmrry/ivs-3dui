@@ -72,40 +72,40 @@ function view(model$) {
 						.styles(d.styles);
 				});
 				
-			fileButtons(controls_enter);
+			controls_enter
+				.selectAll('button')
+				.data(d => d.buttons || [])
+				.enter()
+				.append('button')
+				.styles({
+					background: 'none',
+					border: 'none'
+				})
+				.classed('btn btn-lg btn-secondary', true)
+				.append('i')
+				.classed('material-icons', true)
+				.style('display', 'block')
+				.text(d => d.text);
+				
 			addObjectButton(controls_enter);
-			zoomButtons(controls_enter);
+			devControls(controls_enter);
 				
 			return dom;
 		});
 }
 
-function zoomButtons(controls_enter) {
-	const camera_buttons = [
-		{
-			id: 'zoom-in',
-			text: 'zoom_in'
-		},
-		{
-			id: 'zoom-out',
-			text: 'zoom_out'
-		}
-	];
+function devControls(controls_enter) {
+	const buttons = [
+		['add renderer', 'add-renderer'],
+		['delete renderer', 'delete-renderer']
+	].map(([text,id]) => ({id,text}));
 	controls_enter
-		.filter('#zoom-controls')
+		.filter('#dev-controls')
 		.selectAll('button')
-		.data(camera_buttons)
+		.data(buttons)
 		.enter()
 		.append('button')
-		.styles({
-			background: 'none',
-			border: 'none'
-		})
-		.classed('btn btn-lg btn-secondary', true)
 		.attr('id', d => d.id)
-		.append('i')
-		.classed('material-icons', true)
-		.style('display', 'block')
 		.text(d => d.text);
 }
 
@@ -120,8 +120,6 @@ function addObjectButton(controls_enter) {
 		.append('div')
 		.classed('col-xs-12', true)
 		.style('margin-top', '-5px')
-		.append('div')
-		.classed('btn-group modes pull-right', true)
 		.append('button')
 		.classed('btn btn-lg btn-primary', true)
 		.attr('id', d => d)
@@ -131,27 +129,6 @@ function addObjectButton(controls_enter) {
 		.text('add');
 }
 
-function fileButtons(controls_enter) {
-	const file_buttons = [
-		"volume_up", "save", "open_in_browser"
-	];
-	controls_enter
-		.filter('#file-controls')
-		.selectAll('button')
-		.data(file_buttons)
-		.enter()
-		.append('button')
-		.styles({
-			background: 'none',
-			border: 'none'
-		})
-		.classed('btn btn-lg btn-secondary', true)
-		.append('i')
-		.classed('material-icons', true)
-		.style('display', 'block')
-		.text(d => d);
-}
-
 const controls_data = [
 	{
 		id: 'file-controls',
@@ -159,6 +136,9 @@ const controls_data = [
 			left: 0,
 			top: 0
 		},
+		buttons: [
+			'volume_up', "save", "open_in_browser"
+		].map(text => ({ text }))
 	},
 	{
 		id: 'scene-controls',
@@ -173,6 +153,17 @@ const controls_data = [
 		styles: {
 			right: 0,
 			bottom: '1%'
+		},
+		buttons: [
+			['zoom-in','zoom_in'],
+			['zoom-out','zoom_out']
+		].map(([id,text]) => ({id,text}))
+	},
+	{
+		id: 'dev-controls',
+		styles: {
+			left: 0,
+			bottom: 0
 		}
 	}
 ];

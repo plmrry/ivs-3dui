@@ -8,26 +8,28 @@ export default function makeD3DomDriver(selector) {
 	return function d3DomDriver(state_reducer$) {
 		const dom_state$ = state_reducer$
 			.scan(apply, d3.select(selector))
-			.do(() => debug('dom')('update'))
+			.do(debug('driver:dom'))
 			.shareReplay(1);
-			
 		dom_state$.subscribe();
-			
 		return {
 			state$: dom_state$,
-			select: function(selector) {
-				let selection$ = dom_state$
-					.map(dom => dom.select(selector))
-					.filter(s => s.node() !== null)
-					.shareReplay(1);
-				return {
-					observable: function() {
-						return selection$;
-					},
-					events: makeEventsGetter(selection$),
-					d3dragHandler: makeDragHandler(selection$)
-				};
-			}
+			select: makeSelect(dom_state$)
+		};
+	};
+}
+
+function makeSelect(dom_state$) {
+	return function(selector) {
+		let selection$ = dom_state$
+			.map(dom => dom.select(selector))
+			.filter(s => s.node() !== null)
+			.shareReplay(1);
+		return {
+			observable: function() {
+				return selection$;
+			},
+			events: makeEventsGetter(selection$),
+			d3dragHandler: makeDragHandler(selection$)
 		};
 	};
 }
