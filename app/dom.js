@@ -1,9 +1,14 @@
 import selection from 'd3-selection';
 import 'd3-selection-multi';
 import d3 from 'd3';
+import combineLatestObj from 'rx-combine-latest-obj';
+
+import log from './log.js';
+
 Object.assign(d3, selection);
 
 export default function component(sources) {
+	const { main_size$, renderers } = sources;
 	return view(model(intent(sources)));
 }
 
@@ -12,16 +17,33 @@ function intent(sources) {
 }
 
 function model(actions) {
-	const { main_size$ } = actions;
+	const { main_size$, renderers } = actions;
 	
-	return main_size$
-		.map(main_size => ({
+	const main_canvases$ = renderers
+		.select({ name: 'main' })
+		.first()
+		.pluck('renderer', 'domElement')
+		.map(d => [d])
+		.startWith([]);
+	
+	// return main_size$
+	// 	.withLatestFrom(
+	// 		main_canvases,
+	// 		(main_size, canvases) => ({ main_size, canvases }) 
+	// 	)
+	return combineLatestObj
+		({
+			main_size$,
+			canvases: main_canvases$
+		})
+		.map(({ main_size, canvases }) => ({
 			mains: [
 				{
 					styles: {
 						height: `${main_size.height}px`,
 						width: `${main_size.width}px`
-					}
+					},
+					canvases
 				}
 			]
 		}));
@@ -38,23 +60,21 @@ function view(model$) {
 				
 			const main_enter = main_join
 				.enter()
-				.append('main');
-				
-			const main = main_enter
+				.append('main')
 				.merge(main_join)
 				.each(function(d) {
 					d3.select(this)
 						.styles(d.styles);
 				});
 				
-			const main_canvas = main
+			const main_canvas = main_enter
 				.selectAll('canvas')
 				.data(d => d.canvases || []);
 				
-			// main_canvas
-			// 	.enter()
-			// 	.append(d => d.node)
-			// 	.attr('id', 'main-canvas');
+			main_canvas
+				.enter()
+				.append(d => d)
+				.attr('id', 'main-canvas');
 				
 			const controls_join = main_enter
 				.selectAll('.controls')

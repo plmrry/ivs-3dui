@@ -9,17 +9,17 @@ import THREE from 'three/three.min.js';
 Object.assign(d3, selection);
 
 export default function Renderer(sources) {
-  const { main_size$, editor_size$ } = sources;
+  const { main_size$ } = sources;
 	return view(model(intent(sources)));
 }
 
 function intent(sources) { return sources; }
 
 function model(actions) {
-	const { main_size$, editor_size$ } = actions;
+	const { main_size$ } = actions;
 	return combineLatestObj
 		({
-			main_size$, editor_size$
+			main_size$
 		})
 		.map(({ main_size, editor_size }) => {
 			return [
@@ -28,8 +28,11 @@ function model(actions) {
 					size: main_size
 				},
 				{
-					name: 'editor',
-					size: editor_size
+				  name: 'orbit',
+				  size: {
+				    height: 100,
+				    width: 100
+				  }
 				}
 			];
 		});
@@ -48,26 +51,26 @@ function state_reducer(model) {
 			
 		const renderers = join
 			.enter()
-			.append(function(d) {
+			.append(function({ name }) {
 				debug('renderer')('new renderer');
 				let renderer = new THREE.WebGLRenderer({
 					antialias: true
 				});
-				renderer._type = 'renderer';
 				renderer.shadowMap.enabled = true;
 				renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-				renderer.name = d.name;
-				renderer._id = d.name;
 				renderer.setClearColor(0xf0f0f0);
-				return renderer;
+				return {
+				  name,
+				  renderer
+				};
 			})
 			.merge(join)
 			.each(function(d) {
-				let current = this.getSize();
-				let diff = _.difference(_.values(current), _.values(d.size));
+				const currentSize = this.renderer.getSize();
+				const diff = _.difference(_.values(currentSize), _.values(d.size));
 				if (diff.length > 0) {
 					debug('renderer')('set size');
-					this.setSize(d.size.width, d.size.height);
+					this.renderer.setSize(d.size.width, d.size.height);
 				}
 			});
     
