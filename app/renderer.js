@@ -4,7 +4,7 @@ import selection from 'd3-selection';
 import 'd3-selection-multi';
 import d3 from 'd3';
 import combineLatestObj from 'rx-combine-latest-obj';
-import THREE from 'three/three.min.js';
+import THREE from 'three/three.js';
 
 Object.assign(d3, selection);
 

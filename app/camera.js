@@ -42,29 +42,34 @@ function state_reducer(model) {
         	camera.updateProjectionMatrix();
         	this.size = s;
         }
-        /** Always update lookAt and up with position! */
+        /** Update position */
         if (! _.isMatch(camera.position, d.position)) {
           debug('camera')('update position');
           camera.position.copy(d.position);
-          // this.lookAt(d.lookAt || new THREE.Vector3());
-          // camera.up.copy(new THREE.Vector3(0, 1, 0));
-          /** Apparently we do not need to call `updateProjectionMatrix()` */
         }
-        /** Update lookAt always? */
-        camera.lookAt(d.lookAt || new THREE.Vector3());
-        // /**
-        // * NOTE: You could, in theory, raycast from the middle of the camera's
-        // * view to the floor in order to get the "current lookat". But that's
-        // * a little crazy, don't you think?
-        // */
-        // /** Update camera zoom */
-        // if (camera.zoom !== d.zoom) {
-        // 	debug('camera')('update zoom');
-        // 	camera.zoom = d.zoom;
-        // 	camera.updateProjectionMatrix();
-        // }
+        /** Update lookAt */
+        if (! _.isMatch(this.lookAt, d.lookAt)) {
+          this.lookAt = d.lookAt;
+          camera.lookAt(d.lookAt || new THREE.Vector3());
+        }
+        /** Update camera zoom */
+        if (camera.zoom !== d.zoom) {
+        	debug('camera')('update zoom');
+        	camera.zoom = d.zoom;
+        	camera.updateProjectionMatrix();
+        }
       });
     	
     return selectable;
   };
 }
+// /**
+// * NOTE: You could, in theory, raycast from the middle of the camera's
+// * view to the floor in order to get the "current lookat". But that's
+// * a little crazy, don't you think?
+// */
+// /** Update lookAt always? */
+// camera.lookAt(d.lookAt || new THREE.Vector3());
+// this.lookAt(d.lookAt || new THREE.Vector3());
+// camera.up.copy(new THREE.Vector3(0, 1, 0));
+/** Apparently we do not need to call `updateProjectionMatrix()` */

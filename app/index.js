@@ -17,7 +17,7 @@ import log from './utilities/log.js';
 Rx.config.longStackSupport = true;
 debug.enable('*');
 
-function main({ renderers, windowSize }) {
+function main({ renderers, scenes, cameras, windowSize }) {
 	
 	const main_size$ = mainSize(windowSize);
 	
@@ -156,6 +156,22 @@ function main({ renderers, windowSize }) {
 			];
 		});
 		
+	const render_sets$ = stream
+		.of([
+			{
+				render_id: 'main',
+				scene_id: 'main',
+				camera_id: 'main'
+			}
+		]);
+		
+	const render_function$ = renderFunction({
+		renderers,
+		scenes,
+		cameras,
+		render_sets$
+	});
+		
 	const dom_state_reducer$ = DOM.view(main_dom_model$);
 	const renderers_state_reducer$ = Renderer.view(renderers_model$);
 	const cameras_state_reducer$ = Camera.view(cameras_model$);
@@ -165,7 +181,8 @@ function main({ renderers, windowSize }) {
 		dom: dom_state_reducer$,
 		renderers: renderers_state_reducer$,
 		cameras: cameras_state_reducer$,
-		scenes: scenes_state_reducer$
+		scenes: scenes_state_reducer$,
+		render: render_function$
 	};
 }
 
@@ -184,6 +201,7 @@ Cycle.run(main, {
 	renderers: makeStateDriver('renderers'),
 	cameras: makeStateDriver('cameras'),
 	scenes: makeStateDriver('scenes'),
+	render: (source$) => source$.subscribe(fn => fn()),
 	windowSize: () => stream.fromEvent(window, 'resize')
 });
 
@@ -193,4 +211,19 @@ function polarToVector({ radius, theta, phi }) {
 		z: radius * Math.cos(phi) * Math.sin(theta),
 		y: radius * Math.cos(theta)
 	};
+}
+
+function renderFunction({ renderers, scenes, cameras, render_sets$ }) {
+	return render_sets$
+		.flatMap(arr => stream.from(arr))
+		.flatMap(({ render_id, scene_id, camera_id }) => { 
+			return combineLatestObj({
+				renderer: renderers.select({ name: render_id }).pluck('renderer'),
+				scene: scenes.select({ name: scene_id }).pluck('scene'),
+				_camera: cameras.select({ name: camera_id }).pluck('camera')
+			});
+		})
+		.map(({ renderer, scene, _camera }) => () => {
+			renderer.render(scene, _camera)
+		});
 }
