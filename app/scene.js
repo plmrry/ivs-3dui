@@ -14,47 +14,13 @@ const room_size = {
 	height: 3
 };
 
-THREE.Object3D.prototype.appendChild = function (c) { 
-	this.add(c); 
-	return c; 
-};
-
-THREE.Object3D.prototype.insertBefore = THREE.Object3D.prototype.appendChild;
-
-THREE.Object3D.prototype.querySelector = function(query) {
-	let key = Object.keys(query)[0];
-	return this.getObjectByProperty(key, query[key]);
-};
-
-THREE.Object3D.prototype.querySelectorAll = function (query) { 
-	if (typeof query === 'undefined') return this.children;
-	return this.children.filter(d => _.isMatch(d, query));
-};
-
 export function view(model$) {
 	return model$.map(state_reducer);
 }
 
 function state_reducer(model) {
   return function(selectable) {
-    const join = d3
-      .select(selectable)
-      .selectAll()
-      .data(model);
-      
-    const scenes = join
-      .enter()
-      .append(function({ name }) {
-				debug('scene')('new scene');
-				var scene = new THREE.Scene();
-				scene.add(getSpotlight());
-				scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
-				return {
-				  name,
-				  scene
-				};
-			})
-			.merge(join);
+    const scenes = updateScenes(selectable, model);
 			
 		const floors_join = scenes
 		  .select(function(d) { return this.scene; })
@@ -474,23 +440,19 @@ function cylinder_geometry_from_params(params) {
 	);
 }
 
-// function apply(o, fn) { return fn(o); }
+THREE.Object3D.prototype.appendChild = function (c) { 
+	this.add(c); 
+	return c; 
+};
 
-// THREE.Object3D.prototype.appendChild = function (c) { 
-// 	this.add(c); 
-// 	return c; 
-// };
+THREE.Object3D.prototype.insertBefore = THREE.Object3D.prototype.appendChild;
 
-// THREE.Object3D.prototype.insertBefore = THREE.Object3D.prototype.appendChild;
+THREE.Object3D.prototype.querySelector = function(query) {
+	let key = Object.keys(query)[0];
+	return this.getObjectByProperty(key, query[key]);
+};
 
-// THREE.Object3D.prototype.querySelector = function(query) {
-// 	let key = Object.keys(query)[0];
-// 	return this.getObjectByProperty(key, query[key]);
-// };
-
-// THREE.Object3D.prototype.querySelectorAll = function (query) { 
-// 	if (typeof query === 'undefined') return this.children;
-// 	return this.children.filter(d => _.isMatch(d, query));
-// };
-
-
+THREE.Object3D.prototype.querySelectorAll = function (query) { 
+	if (typeof query === 'undefined') return this.children;
+	return this.children.filter(d => _.isMatch(d, query));
+};

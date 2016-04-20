@@ -66,7 +66,7 @@ export function view(model$) {
 				.text(d => d.text);
 				
 			addObjectButton(controls_enter);
-			devControls(controls_enter);
+			// devControls(controls_enter);
 				
 			return dom;
 		});
