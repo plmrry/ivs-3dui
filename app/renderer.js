@@ -39,7 +39,7 @@ function state_reducer(model) {
 				const currentSize = this.renderer.getSize();
 				const diff = _.difference(_.values(currentSize), _.values(d.size));
 				if (diff.length > 0) {
-					debug('renderer')('set size');
+					debug('renderer')('update size');
 					this.renderer.setSize(d.size.width, d.size.height);
 				}
 			});
