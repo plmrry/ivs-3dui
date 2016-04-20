@@ -1,7 +1,7 @@
 import _ from 'underscore';
 import debug from 'debug';
 
-import apply from './apply.js';
+import apply from './utilities/apply.js';
 
 export default function makeStateDriver(name) {
 	return function stateDriver(state_reducer$) {

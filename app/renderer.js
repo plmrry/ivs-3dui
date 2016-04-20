@@ -8,37 +8,7 @@ import THREE from 'three/three.min.js';
 
 Object.assign(d3, selection);
 
-export default function Renderer(sources) {
-  const { main_size$ } = sources;
-	return view(model(intent(sources)));
-}
-
-function intent(sources) { return sources; }
-
-function model(actions) {
-	const { main_size$ } = actions;
-	return combineLatestObj
-		({
-			main_size$
-		})
-		.map(({ main_size, editor_size }) => {
-			return [
-				{
-					name: 'main',
-					size: main_size
-				},
-				{
-				  name: 'orbit',
-				  size: {
-				    height: 100,
-				    width: 100
-				  }
-				}
-			];
-		});
-}
-
-function view(model$) {
+export function view(model$) {
 	return model$.map(state_reducer);
 }
 

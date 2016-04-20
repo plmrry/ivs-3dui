@@ -2,7 +2,7 @@ import d3 from 'd3';
 import debug from 'debug';
 import { Observable as stream } from 'rx';
 
-import apply from './apply.js';
+import apply from './utilities/apply.js';
 
 export default function makeD3DomDriver(selector) {
 	return function d3DomDriver(state_reducer$) {

@@ -1045,3 +1045,5 @@ THREE.Object3D.prototype.querySelectorAll = function (query) {
 	if (typeof query === 'undefined') return this.children;
 	return this.children.filter(d => _.isMatch(d, query));
 };
+
+

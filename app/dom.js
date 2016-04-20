@@ -3,53 +3,11 @@ import 'd3-selection-multi';
 import d3 from 'd3';
 import combineLatestObj from 'rx-combine-latest-obj';
 
-import log from './log.js';
+import log from './utilities/log.js';
 
 Object.assign(d3, selection);
 
-export default function component(sources) {
-	const { main_size$, renderers } = sources;
-	return view(model(intent(sources)));
-}
-
-function intent(sources) {
-	return sources;
-}
-
-function model(actions) {
-	const { main_size$, renderers } = actions;
-	
-	const main_canvases$ = renderers
-		.select({ name: 'main' })
-		.first()
-		.pluck('renderer', 'domElement')
-		.map(d => [d])
-		.startWith([]);
-	
-	// return main_size$
-	// 	.withLatestFrom(
-	// 		main_canvases,
-	// 		(main_size, canvases) => ({ main_size, canvases }) 
-	// 	)
-	return combineLatestObj
-		({
-			main_size$,
-			canvases: main_canvases$
-		})
-		.map(({ main_size, canvases }) => ({
-			mains: [
-				{
-					styles: {
-						height: `${main_size.height}px`,
-						width: `${main_size.width}px`
-					},
-					canvases
-				}
-			]
-		}));
-}
-
-function view(model$) {
+export function view(model$) {
 	return model$
 		.map(model => dom => {
 			dom.datum(model);
