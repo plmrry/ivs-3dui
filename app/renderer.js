@@ -22,7 +22,7 @@ function state_reducer(model) {
 		const renderers = join
 			.enter()
 			.append(function({ name }) {
-				debug('renderer')('new renderer');
+				debug('reducer:renderer')('new renderer');
 				let renderer = new THREE.WebGLRenderer({
 					antialias: true
 				});
@@ -39,7 +39,7 @@ function state_reducer(model) {
 				const currentSize = this.renderer.getSize();
 				const diff = _.difference(_.values(currentSize), _.values(d.size));
 				if (diff.length > 0) {
-					debug('renderer')('update size');
+					debug('reducer:renderer')('update size');
 					this.renderer.setSize(d.size.width, d.size.height);
 				}
 			});

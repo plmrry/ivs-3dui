@@ -23,7 +23,7 @@ function state_reducer(model) {
     join
       .enter()
       .append(function({ name }) {
-        debug('camera')('new camera');
+        debug('reducer:camera')('new camera');
         const camera = new THREE.OrthographicCamera();
         return {
           name,
@@ -35,7 +35,7 @@ function state_reducer(model) {
         const { camera } = this;
         /** Update camera size if needed */
         if (! _.isMatch(this.size, d.size)) {
-        	debug('camera')('update size');
+        	debug('reducer:camera')('update size');
         	var s = d.size;
         	[ camera.left, camera.right ] = [-1,+1].map(d => d * s.width * 0.5);
         	[ camera.bottom, camera.top ] = [-1,+1].map(d => d * s.height * 0.5);
@@ -44,17 +44,18 @@ function state_reducer(model) {
         }
         /** Update position */
         if (! _.isMatch(camera.position, d.position)) {
-          debug('camera')('update position');
+          debug('reducer:camera')('update position');
           camera.position.copy(d.position);
         }
         /** Update lookAt */
         if (! _.isMatch(this.lookAt, d.lookAt)) {
+          debug('reducer:camera')('update lookAt');
           this.lookAt = d.lookAt;
           camera.lookAt(d.lookAt || new THREE.Vector3());
         }
         /** Update camera zoom */
         if (camera.zoom !== d.zoom) {
-        	debug('camera')('update zoom');
+        	debug('reducer:camera')('update zoom');
         	camera.zoom = d.zoom;
         	camera.updateProjectionMatrix();
         }

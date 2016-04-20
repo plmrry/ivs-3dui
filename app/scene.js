@@ -21,18 +21,8 @@ export function view(model$) {
 function state_reducer(model) {
   return function(selectable) {
     const scenes = updateScenes(selectable, model);
-			
-		const floors_join = scenes
-		  .select(function(d) { return this.scene; })
-			.selectAll({ name: 'floor' })
-			.data(d => d.floors || []);
-				
-		const floors = floors_join
-			.enter()
-			.append(d => {
-				return getFloor(room_size);
-			})
-			.merge(floors_join);
+    const floors = updateFloors(scenes);
+
 			
 		return selectable;
   };
@@ -46,7 +36,7 @@ function updateScenes(selectable, model) {
   return join
     .enter()
     .append(function({ name }) {
-			debug('scene')('new scene');
+			debug('reducer:scene')('new scene');
 			var scene = new THREE.Scene();
 			scene.add(getSpotlight());
 			scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
@@ -56,6 +46,20 @@ function updateScenes(selectable, model) {
 			};
 		})
 		.merge(join);
+}
+
+function updateFloors(scenes) {
+  const floors_join = scenes
+	  .select(function() { return this.scene; })
+		.selectAll({ name: 'floor' })
+		.data(d => d.floors || []);
+	const floors = floors_join
+		.enter()
+		.append(() => {
+			return getFloor(room_size);
+		})
+		.merge(floors_join);
+	return floors;
 }
 
 // function state_reducer(model) {

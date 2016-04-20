@@ -15,7 +15,7 @@ import * as Scene from './scene.js';
 import log from './utilities/log.js';
 
 Rx.config.longStackSupport = true;
-debug.enable('*');
+debug.enable('*,-driver:*');
 
 function main({ renderers, scenes, cameras, windowSize }) {
 	
@@ -98,15 +98,94 @@ function main({ renderers, scenes, cameras, windowSize }) {
 	const cameras_model$ = main_camera$
 		.map(c => [c]);
 		
+	const first = {
+		position: {
+			x: -5,
+			y: 1.5,
+			z: 1.8
+		},
+		trajectory: {
+			points: [
+				[+0,+0,+0], 
+				[+2,+1,-2], 
+				[+5,-1,-2], 
+				[+8,+2,+3], 
+				[+3,-1,+6]
+			].map(([x,y,z]) => ({x,y,z})),
+			splineType: 'CatmullRomCurve3'
+		}
+	}
+		
+	// const first = {
+	// 	key: 0,
+	// 	material: {
+	// 		color: 'ffffff'
+	// 	},
+	// 	name: 'sound_object',
+	// 	position: {
+	// 		x: -5,
+	// 		y: 1.5,
+	// 		z: 1.8
+	// 	},
+	// 	selected: true,
+	// 	volume: 1,
+	// 	t: 0
+	// };
+	
+	// first.trajectories = [
+	// 	{
+	// 		points: [
+	// 			[+0,+0,+0], 
+	// 			[+2,+1,-2], 
+	// 			[+5,-1,-2], 
+	// 			[+8,+2,+3], 
+	// 			[+3,-1,+6]
+	// 		].map(([x,y,z]) => ({x,y,z})),
+	// 		splineType: 'CatmullRomCurve3',
+	// 		parent: first
+	// 	}
+	// ];
+	
+	// const first_objects = [
+	// 	{
+	// 		points: [
+	// 			[+0,+0,+0], 
+	// 			[+2,+1,-2], 
+	// 			[+5,-1,-2], 
+	// 			[+8,+2,+3], 
+	// 			[+3,-1,+6]
+	// 		].map(([x,y,z]) => ({x,y,z})),
+	// 		splineType: 'CatmullRomCurve3'
+	// 	}
+	// ];
+	
+	// first.cones = [
+	// 	{
+	// 		parent: first,
+	// 		id: `${first.key}-0`,
+	// 		interactive: false,
+	// 		key: 0,
+	// 		lookAt: {
+	// 			x: 0.57,
+	// 			y: -0.1,
+	// 			z: 0.34
+	// 		},
+	// 		selected: true,
+	// 		spread: 0.5,
+	// 		volume: 2,
+	// 		name: 'cone',
+	// 		file: 'wetShort.wav',
+	// 		playing: true
+	// 	}
+	// ];
+		
 	const main_scene_model$ = stream
 		.just({
 			name: 'main',
 			floors: [
-				{
-					name: 'floor'
-				}
+				{}
 			],
-			sound_objects: [],
+			sound_objects: [first],
 			heads: []
 		});
 		
