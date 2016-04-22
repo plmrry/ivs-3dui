@@ -3,7 +3,9 @@ import debug from 'debug';
 import Rx, { Observable as stream } from 'rx';
 import combineLatestObj from 'rx-combine-latest-obj';
 import d3 from 'd3';
+import THREE from 'three/three.js';
 
+import OBJLoader from './OBJLoader.js';
 import makeD3DomDriver from './d3DomDriver.js';
 import makeStateDriver from './stateDriver.js';
 
@@ -17,7 +19,9 @@ import log from './utilities/log.js';
 Rx.config.longStackSupport = true;
 debug.enable('*,-driver:*');
 
-function main({ renderers, scenes, cameras, windowSize }) {
+function main({ renderers, scenes, cameras, windowSize, headObject }) {
+	
+	// headObject.subscribe(log);
 	
 	const main_size$ = mainSize(windowSize);
 	
@@ -32,6 +36,7 @@ function main({ renderers, scenes, cameras, windowSize }) {
 	const latitude$ = stream
 		.just(45)
 		.shareReplay(1);
+		
 	const longitude$ = stream
 		.just(45)
 		.shareReplay(1);
@@ -98,7 +103,7 @@ function main({ renderers, scenes, cameras, windowSize }) {
 	const cameras_model$ = main_camera$
 		.map(c => [c]);
 		
-	const first = {
+	const first_object = {
 		position: {
 			x: -5,
 			y: 1.5,
@@ -114,7 +119,7 @@ function main({ renderers, scenes, cameras, windowSize }) {
 			].map(([x,y,z]) => ({x,y,z})),
 			splineType: 'CatmullRomCurve3'
 		}
-	}
+	};
 		
 	// const first = {
 	// 	key: 0,
@@ -178,16 +183,51 @@ function main({ renderers, scenes, cameras, windowSize }) {
 	// 		playing: true
 	// 	}
 	// ];
+	
+	const heads$ = headObject
+		.map(head => ({
+			name: 'head',
+			position: {
+				x: -1,
+				y: 1,
+				z: 2
+			},
+			lookAt: {
+				x: 3,
+				y: 2,
+				z: 1
+			},
+			object: head
+		}))
+		.map(h => [h]);
 		
-	const main_scene_model$ = stream
-		.just({
+	const sound_objects$ = stream
+		.just([
+			first_object
+		]);
+		
+	const main_scene_model$ = combineLatestObj
+		({
+			sound_objects$,
+			heads$: heads$.startWith(Array(0))
+		})
+		.map(({ sound_objects, heads }) => ({
 			name: 'main',
-			floors: [
-				{}
-			],
-			sound_objects: [first],
-			heads: []
-		});
+			floors: Array(1),
+			sound_objects,
+			heads
+		}));
+	
+	// const heads$ = stream
+	// 	.just([ { name: 'main' }]);
+		
+	// const main_scene_model$ = stream
+	// 	.just({
+	// 		name: 'main',
+	// 		floors: Array(1),
+	// 		sound_objects: [first_object],
+	// 		heads: [ { name: 'main' } ]
+	// 	});
 		
 	const scenes_model$ = main_scene_model$
 		.map(s => [s]);
@@ -225,13 +265,13 @@ function main({ renderers, scenes, cameras, windowSize }) {
 					name: 'main',
 					size: main_size
 				},
-				{
-				  name: 'orbit',
-				  size: {
-				    height: 100,
-				    width: 100
-				  }
-				}
+				// {
+				//   name: 'orbit',
+				//   size: {
+				//     height: 100,
+				//     width: 100
+				//   }
+				// }
 			];
 		});
 		
@@ -281,8 +321,19 @@ Cycle.run(main, {
 	cameras: makeStateDriver('cameras'),
 	scenes: makeStateDriver('scenes'),
 	render: (source$) => source$.subscribe(fn => fn()),
-	windowSize: () => stream.fromEvent(window, 'resize')
+	windowSize: () => stream.fromEvent(window, 'resize'),
+	headObject: makeHeadObjectDriver()
 });
+
+function makeHeadObjectDriver() {
+	return function headObjectDriver() {
+		OBJLoader(THREE);
+		const loader = new THREE.OBJLoader();
+		return stream.create(observer => {
+			loader.load('assets/head.obj', d => { observer.onNext(d) });
+		});
+	};
+}
 
 function polarToVector({ radius, theta, phi }) {
 	return {

@@ -20,12 +20,65 @@ export function view(model$) {
 
 function state_reducer(model) {
   return function(selectable) {
-    const scenes = updateScenes(selectable, model);
+    const scenes = updateScenes(selectable, model)
+      .select(function() { return this.scene; });
     const floors = updateFloors(scenes);
-
+    const heads = updateHeads(scenes);
+    const object_parents = updateSoundObjectParents(scenes);
 			
 		return selectable;
   };
+}
+
+function updateHeads(scenes) {
+  const join = scenes
+    .selectAll({ name: 'head' })
+    .data(d => d.heads || []);
+  const heads = join
+    .enter()
+    .append(d => {
+      const head = d.object;
+      head.rotation.y += Math.PI;
+      head.children[0].castShadow = true;
+      const scale = 0.5;
+      head.scale.set(scale, scale, scale);
+      head.name = d.name;
+      return head;
+    })
+    .merge(join)
+		.each(function(d) {
+			this.position.copy(d.position);
+			// this.lookAt(d.lookAt);
+		});
+	return heads;
+}
+
+function updateTrajectories(parents) {
+  const join = parents
+    .selectAll({ name: 'trajectory' })
+    .data(d => { })
+}
+
+function updateSoundObjectParents(scenes) {
+  const join = scenes
+    .selectAll({ name: 'sound_object_parent' })
+    .data(d => d.sound_objects || []);
+  const objects = join
+    .enter()
+    .append(() => {
+      const object = new THREE.Object3D();
+      object.name = 'sound_object_parent';
+      return object;
+    })
+    .merge(join)
+    .each(function(d) {
+      /** Update position */
+			if (! _.isMatch(this.position, d.position)) {
+				debug('reducer:sound-object-parent')('set position', d.position);
+				this.position.copy(d.position);
+			}
+    });
+  return objects;
 }
 
 function updateScenes(selectable, model) {
@@ -50,7 +103,6 @@ function updateScenes(selectable, model) {
 
 function updateFloors(scenes) {
   const floors_join = scenes
-	  .select(function() { return this.scene; })
 		.selectAll({ name: 'floor' })
 		.data(d => d.floors || []);
 	const floors = floors_join
