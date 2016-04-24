@@ -114,8 +114,20 @@ function main(sources) {
 		[+0,+0,+0], 
 		[+2,+1,-2], 
 		[+5,-1,-2], 
-		[+8,+2,+3]
-	].map(([x,y,z]) => ({x,y,z}));
+		// [+8,+2,+3]
+	].map(([x,y,z]) => new THREE.Vector3(x, y, z));
+	
+	const first_cone = {
+		lookAt: {
+			x: 0.57,
+			y: -0.1,
+			z: 0.34
+		},
+		spread: 0.5,
+		volume: 1,
+		file: 'wetShort.wav',
+		playing: true
+	};
 		
 	const first_object = {
 		position: {
@@ -125,70 +137,13 @@ function main(sources) {
 		},
 		points: first_trajectory_points,
 		splineType: 'CatmullRomCurve3',
+		material: {
+			color: 'ffffff'
+		},
+		volume: 1,
+		t: 0.2,
+		cones: [ first_cone ]
 	};
-		
-	// const first = {
-	// 	key: 0,
-	// 	material: {
-	// 		color: 'ffffff'
-	// 	},
-	// 	name: 'sound_object',
-	// 	position: {
-	// 		x: -5,
-	// 		y: 1.5,
-	// 		z: 1.8
-	// 	},
-	// 	selected: true,
-	// 	volume: 1,
-	// 	t: 0
-	// };
-	
-	// first.trajectories = [
-	// 	{
-	// 		points: [
-	// 			[+0,+0,+0], 
-	// 			[+2,+1,-2], 
-	// 			[+5,-1,-2], 
-	// 			[+8,+2,+3], 
-	// 			[+3,-1,+6]
-	// 		].map(([x,y,z]) => ({x,y,z})),
-	// 		splineType: 'CatmullRomCurve3',
-	// 		parent: first
-	// 	}
-	// ];
-	
-	// const first_objects = [
-	// 	{
-	// 		points: [
-	// 			[+0,+0,+0], 
-	// 			[+2,+1,-2], 
-	// 			[+5,-1,-2], 
-	// 			[+8,+2,+3], 
-	// 			[+3,-1,+6]
-	// 		].map(([x,y,z]) => ({x,y,z})),
-	// 		splineType: 'CatmullRomCurve3'
-	// 	}
-	// ];
-	
-	// first.cones = [
-	// 	{
-	// 		parent: first,
-	// 		id: `${first.key}-0`,
-	// 		interactive: false,
-	// 		key: 0,
-	// 		lookAt: {
-	// 			x: 0.57,
-	// 			y: -0.1,
-	// 			z: 0.34
-	// 		},
-	// 		selected: true,
-	// 		spread: 0.5,
-	// 		volume: 2,
-	// 		name: 'cone',
-	// 		file: 'wetShort.wav',
-	// 		playing: true
-	// 	}
-	// ];
 	
 	const heads$ = headObject
 		.map(head => ({

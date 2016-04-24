@@ -27,9 +27,68 @@ function state_reducer(model) {
     const parents = updateSoundObjectParents(scenes);
     const trajectories = updateTrajectories(parents);
     const control_points = updateControlPoints(trajectories);
+    const sound_objects = updateSoundObjects(parents);
+    const cones = updateCones(sound_objects);
 			
 		return selectable;
   };
+}
+
+function updateSoundObjects(parents) {
+	const join = parents
+		.selectAll({ name: 'sound_object' })
+		.data(function(d) { return d.sound_objects || [] });
+		
+	join
+		.exit()
+		.each(function(d) {
+			this.parent.remove(this);
+		});
+			
+	const sound_objects = join
+		.enter()
+		.append(function(d) {
+			debug('reducer:sound-object')('new object');
+			const geometry = new THREE.SphereGeometry(0.1, 30, 30);
+			const PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
+			const material = new THREE.MeshPhongMaterial({
+				color: PARENT_SPHERE_COLOR,
+				transparent: true,
+				opacity: 0.3,
+				side: THREE.DoubleSide
+			});
+			const object = new THREE.Mesh(geometry, material);
+			object.castShadow = true;
+			object.receiveShadow = true;
+			object.name = 'sound_object';
+			object.renderOrder = 10;
+			return object;
+		})
+		.merge(join)
+		.each(function({ position, volume, material }) {
+			/** Update position */
+			if (! _.isMatch(this.position, position)) {
+				debug('sound object')('set position', position);
+				this.position.copy(position);
+			}
+			/** Update geometry */
+			let params = this.geometry.parameters;
+			if (! _.isMatch(params, { radius: volume })) {
+				debug('sound object')('set radius', volume);
+				Object.assign(params, { radius: volume });
+				let newGeom = new THREE.SphereGeometry(
+					params.radius,
+					params.widthSegments,
+					params.heightSegments
+				);
+				this.geometry.dispose();
+				this.geometry = newGeom;
+			}
+			/** Update color */
+			this.material.color = new THREE.Color(`#${material.color}`);
+		});
+		
+	return sound_objects;
 }
 
 function updateControlPoints(trajectories) {
@@ -111,26 +170,40 @@ function updateSoundObjectParents(scenes) {
     .enter()
     .append(d => {
       /** FIXME: Business logic in driver :/ */
-      d.vectors = d.points.map(v => (new THREE.Vector3()).copy(v));
-      d.curve = new THREE[d.splineType](d.vectors);
-      d.curve.closed = true;
-      d.trajectories = d.curve.points.length > 1 ? [
-        {
-          vectors: d.vectors,
-          curve: d.curve,
-          splineType: 'CatmullRomCurve3'
-        }
-      ] : [];
+      const { points, splineType } = d;
+      const curve = new THREE[splineType](points);
+      curve.closed = true;
+      d.curve = curve;
+      /** Create object */
       const object = new THREE.Object3D();
       object.name = 'sound_object_parent';
       return object;
     })
     .merge(join)
     .each(function(d) {
+      /** FIXME: Business logic in driver :/ */
+      const { curve, t, position, volume, material, cones } = d;
+      const { points } = curve;
+      d.trajectories = points.length > 1 ? [
+        {
+          curve
+        }
+      ] : [];
+      const trajectoryOffset = points.length > 1 ? 
+        curve.getPoint(t) : 
+        new THREE.Vector3();
+      d.sound_objects = [
+        {
+          position: trajectoryOffset,
+          volume,
+          material,
+          cones
+        }
+      ];
       /** Update position */
-			if (! _.isMatch(this.position, d.position)) {
-				debug('reducer:sound-object-parent')('set position', d.position);
-				this.position.copy(d.position);
+			if (! _.isMatch(this.position, position)) {
+				debug('reducer:sound-object-parent')('set position', position);
+				this.position.copy(position);
 			}
     });
   return objects;
@@ -436,103 +509,103 @@ function updateOneCone(d) {
 // 	cone.material.color = new THREE.Color(`#${d.material.color}`);
 }
 
-function updateSoundObjects(scenes) {
-	let sound_objects_join = scenes
-		.selectAll({ name: 'sound_object_parent' })
-		.data(function(d) { return d.sound_objects || [] });
+// function updateSoundObjects(scenes) {
+// 	let sound_objects_join = scenes
+// 		.selectAll({ name: 'sound_object_parent' })
+// 		.data(function(d) { return d.sound_objects || [] });
 		
-	sound_objects_join
-		.exit()
-		.each(function(d) {
-			this.parent.remove(this);
-		});
+// 	sound_objects_join
+// 		.exit()
+// 		.each(function(d) {
+// 			this.parent.remove(this);
+// 		});
 			
-	const sound_objects = sound_objects_join
-		.enter()
-		.append(function(d) {
-			debug('sound object')('new object');
-			var geometry = new THREE.SphereGeometry(0.1, 30, 30);
-			var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
-			var material = new THREE.MeshPhongMaterial({
-				color: PARENT_SPHERE_COLOR,
-				transparent: true,
-				opacity: 0.3,
-				side: THREE.DoubleSide
-			});
-			var sphere = new THREE.Mesh(geometry, material);
-			sphere.castShadow = true;
-			sphere.receiveShadow = true;
-			sphere.name = 'sound_object';
-			sphere._type = 'sound_object';
-			sphere._volume = 1;
-			sphere.renderOrder = 10;
-			const object_parent = new THREE.Object3D();
-			object_parent.name = 'sound_object_parent';
-			object_parent.add(sphere);
-			return object_parent;
-			// return sphere;
-		})
-		.merge(sound_objects_join)
-		.each(function(d) {
-			/** Update position */
-			if (! _.isMatch(this.position, d.position)) {
-				debug('sound object')('set position', d.position);
-				this.position.copy(d.position);
-			}
-		})
-		.select({ name: 'sound_object' })
-		.each(function(d) {
-		  /** Update quaternion */
-		  // if (! _.isMatch(this.quaternion, d.quaternion)) {
-		  //   this.quaternion.copy(d.quaternion);
-				// var vec = new THREE.Vector3(0,0,1);
-				// var m = this.matrixWorld;
-				// var mx = m.elements[12], my = m.elements[13], mz = m.elements[14];
-				// m.elements[12] = m.elements[13] = m.elements[14] = 0;
-				// vec.applyProjection(m);
-				// vec.normalize();
-				// m.elements[12] = mx;
-				// m.elements[13] = my;
-				// m.elements[14] = mz;
-		  // }
-		  /** FIXME: This is lame. DRY. */
-			/** FIXME: An object should be a point inside a trajectory */
-			d.trajectories = d.trajectories || [];
-			if (d.trajectories.length > 0) {
-				const traj = d.trajectories[0];
-				const vectors = traj.points.map(v => (new THREE.Vector3()).copy(v));
-				const curve = new THREE[traj.splineType](vectors);
-				curve.closed = true;
-				const trajectoryOffset = curve.getPoint(d.t);
-				if (! _.isMatch(this.position, trajectoryOffset)) {
-					debug('sound object')('set trajectory position', trajectoryOffset);
-					this.position.copy(trajectoryOffset);
-				}
-			}
-			// /** Update position */
-			// if (! _.isMatch(this.position, d.position)) {
-			// 	debug('sound object')('set position', d.position);
-			// 	this.position.copy(d.position);
-			// }
-			/** Update geometry */
-			let params = this.geometry.parameters;
-			if (! _.isMatch(params, { radius: d.volume })) {
-				debug('sound object')('set radius', d.volume);
-				Object.assign(params, { radius: d.volume });
-				let newGeom = new THREE.SphereGeometry(
-					params.radius,
-					params.widthSegments,
-					params.heightSegments
-				);
-				this.geometry.dispose();
-				this.geometry = newGeom;
-			}
-			/** Update color */
-			this.material.color = new THREE.Color(`#${d.material.color}`);
-		});
+// 	const sound_objects = sound_objects_join
+// 		.enter()
+// 		.append(function(d) {
+// 			debug('sound object')('new object');
+// 			var geometry = new THREE.SphereGeometry(0.1, 30, 30);
+// 			var PARENT_SPHERE_COLOR = new THREE.Color(0, 0, 0);
+// 			var material = new THREE.MeshPhongMaterial({
+// 				color: PARENT_SPHERE_COLOR,
+// 				transparent: true,
+// 				opacity: 0.3,
+// 				side: THREE.DoubleSide
+// 			});
+// 			var sphere = new THREE.Mesh(geometry, material);
+// 			sphere.castShadow = true;
+// 			sphere.receiveShadow = true;
+// 			sphere.name = 'sound_object';
+// 			sphere._type = 'sound_object';
+// 			sphere._volume = 1;
+// 			sphere.renderOrder = 10;
+// 			const object_parent = new THREE.Object3D();
+// 			object_parent.name = 'sound_object_parent';
+// 			object_parent.add(sphere);
+// 			return object_parent;
+// 			// return sphere;
+// 		})
+// 		.merge(sound_objects_join)
+// 		.each(function(d) {
+// 			/** Update position */
+// 			if (! _.isMatch(this.position, d.position)) {
+// 				debug('sound object')('set position', d.position);
+// 				this.position.copy(d.position);
+// 			}
+// 		})
+// 		.select({ name: 'sound_object' })
+// 		.each(function(d) {
+// 		  /** Update quaternion */
+// 		  // if (! _.isMatch(this.quaternion, d.quaternion)) {
+// 		  //   this.quaternion.copy(d.quaternion);
+// 				// var vec = new THREE.Vector3(0,0,1);
+// 				// var m = this.matrixWorld;
+// 				// var mx = m.elements[12], my = m.elements[13], mz = m.elements[14];
+// 				// m.elements[12] = m.elements[13] = m.elements[14] = 0;
+// 				// vec.applyProjection(m);
+// 				// vec.normalize();
+// 				// m.elements[12] = mx;
+// 				// m.elements[13] = my;
+// 				// m.elements[14] = mz;
+// 		  // }
+// 		  /** FIXME: This is lame. DRY. */
+// 			/** FIXME: An object should be a point inside a trajectory */
+// 			d.trajectories = d.trajectories || [];
+// 			if (d.trajectories.length > 0) {
+// 				const traj = d.trajectories[0];
+// 				const vectors = traj.points.map(v => (new THREE.Vector3()).copy(v));
+// 				const curve = new THREE[traj.splineType](vectors);
+// 				curve.closed = true;
+// 				const trajectoryOffset = curve.getPoint(d.t);
+// 				if (! _.isMatch(this.position, trajectoryOffset)) {
+// 					debug('sound object')('set trajectory position', trajectoryOffset);
+// 					this.position.copy(trajectoryOffset);
+// 				}
+// 			}
+// 			// /** Update position */
+// 			// if (! _.isMatch(this.position, d.position)) {
+// 			// 	debug('sound object')('set position', d.position);
+// 			// 	this.position.copy(d.position);
+// 			// }
+// 			/** Update geometry */
+// 			let params = this.geometry.parameters;
+// 			if (! _.isMatch(params, { radius: d.volume })) {
+// 				debug('sound object')('set radius', d.volume);
+// 				Object.assign(params, { radius: d.volume });
+// 				let newGeom = new THREE.SphereGeometry(
+// 					params.radius,
+// 					params.widthSegments,
+// 					params.heightSegments
+// 				);
+// 				this.geometry.dispose();
+// 				this.geometry = newGeom;
+// 			}
+// 			/** Update color */
+// 			this.material.color = new THREE.Color(`#${d.material.color}`);
+// 		});
 		
-	return sound_objects;
-}
+// 	return sound_objects;
+// }
 
 function cylinder_geometry_from_params(params) {
 	return new THREE.CylinderGeometry(
