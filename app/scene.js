@@ -24,10 +24,38 @@ function state_reducer(model) {
       .select(function() { return this.scene; });
     const floors = updateFloors(scenes);
     const heads = updateHeads(scenes);
-    const object_parents = updateSoundObjectParents(scenes);
+    const parents = updateSoundObjectParents(scenes);
+    const trajectories = updateTrajectories(parents);
+    const control_points = updateControlPoints(trajectories);
 			
 		return selectable;
   };
+}
+
+function updateControlPoints(trajectories) {
+  const join = trajectories
+    .selectAll({ name: 'trajectory_control_point' })
+    .data(d => d.curve.points || []);
+  const control_points = join
+		.enter()
+		.append(function(d) {
+			const geometry = new THREE.SphereGeometry(0.2, 30, 30);
+      const material = new THREE.MeshPhongMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.5
+      });
+      const controlPoint = new THREE.Mesh(geometry, material);
+      controlPoint.castShadow = true;
+      controlPoint.receiveShadow = true;
+      controlPoint.name = 'trajectory_control_point';
+      return controlPoint;
+		})
+		.merge(join)
+		.each(function(d) {
+			this.position.copy(d);
+		});
+	return control_points;
 }
 
 function updateHeads(scenes) {
@@ -56,7 +84,23 @@ function updateHeads(scenes) {
 function updateTrajectories(parents) {
   const join = parents
     .selectAll({ name: 'trajectory' })
-    .data(d => { })
+    .data(d => d.trajectories || []);
+  const trajectories = join
+		.enter()
+		.append(function(d) {
+			const geometry = new THREE.TubeGeometry(d.curve, 100, 0.05, 8, true);
+			const material = new THREE.MeshPhongMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.5
+      });
+      const trajectory = new THREE.Mesh(geometry, material);
+      trajectory.castShadow = true;
+      trajectory.name = 'trajectory';
+      return trajectory;
+		})
+		.merge(join);
+	return trajectories;
 }
 
 function updateSoundObjectParents(scenes) {
@@ -65,7 +109,18 @@ function updateSoundObjectParents(scenes) {
     .data(d => d.sound_objects || []);
   const objects = join
     .enter()
-    .append(() => {
+    .append(d => {
+      /** FIXME: Business logic in driver :/ */
+      d.vectors = d.points.map(v => (new THREE.Vector3()).copy(v));
+      d.curve = new THREE[d.splineType](d.vectors);
+      d.curve.closed = true;
+      d.trajectories = d.curve.points.length > 1 ? [
+        {
+          vectors: d.vectors,
+          curve: d.curve,
+          splineType: 'CatmullRomCurve3'
+        }
+      ] : [];
       const object = new THREE.Object3D();
       object.name = 'sound_object_parent';
       return object;
@@ -257,23 +312,17 @@ function getDirectionalLight() {
 	dirLight.color.setHSL( 0.1, 1, 0.95 );
 	dirLight.position.set( -1, 1.75, 1 );
 	dirLight.position.multiplyScalar( 50 );
-
 	dirLight.castShadow = true;
-
 	dirLight.shadowMapWidth = 2048;
 	dirLight.shadowMapHeight = 2048;
-
 	var d = 50;
-
 	dirLight.shadowCameraLeft = -d;
 	dirLight.shadowCameraRight = d;
 	dirLight.shadowCameraTop = d;
 	dirLight.shadowCameraBottom = -d;
-
 	dirLight.shadowCameraFar = 3500;
 	dirLight.shadowBias = -0.0001;
 	dirLight.shadowDarkness = 0.35;
-	
 	return dirLight;
 }
 

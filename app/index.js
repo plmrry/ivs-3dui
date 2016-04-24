@@ -17,11 +17,18 @@ import * as Scene from './scene.js';
 import log from './utilities/log.js';
 
 Rx.config.longStackSupport = true;
-debug.enable('*,-driver:*');
+// debug.enable('*,-driver:*');
+debug.enable('*');
 
-function main({ renderers, scenes, cameras, windowSize, headObject }) {
+function main(sources) {
 	
-	// headObject.subscribe(log);
+	const { 
+		renderers, scenes, cameras, windowSize, headObject, audioContexts 
+	} = sources;
+	
+	audioContexts
+		.select({ id: 'main' })
+		.subscribe(log);
 	
 	const main_size$ = mainSize(windowSize);
 	
@@ -102,6 +109,13 @@ function main({ renderers, scenes, cameras, windowSize, headObject }) {
 	
 	const cameras_model$ = main_camera$
 		.map(c => [c]);
+	
+	const first_trajectory_points = [
+		[+0,+0,+0], 
+		[+2,+1,-2], 
+		[+5,-1,-2], 
+		[+8,+2,+3]
+	].map(([x,y,z]) => ({x,y,z}));
 		
 	const first_object = {
 		position: {
@@ -109,16 +123,8 @@ function main({ renderers, scenes, cameras, windowSize, headObject }) {
 			y: 1.5,
 			z: 1.8
 		},
-		trajectory: {
-			points: [
-				[+0,+0,+0], 
-				[+2,+1,-2], 
-				[+5,-1,-2], 
-				[+8,+2,+3], 
-				[+3,-1,+6]
-			].map(([x,y,z]) => ({x,y,z})),
-			splineType: 'CatmullRomCurve3'
-		}
+		points: first_trajectory_points,
+		splineType: 'CatmullRomCurve3',
 	};
 		
 	// const first = {
@@ -186,6 +192,7 @@ function main({ renderers, scenes, cameras, windowSize, headObject }) {
 	
 	const heads$ = headObject
 		.map(head => ({
+			id: 'main',
 			name: 'head',
 			position: {
 				x: -1,
@@ -199,7 +206,8 @@ function main({ renderers, scenes, cameras, windowSize, headObject }) {
 			},
 			object: head
 		}))
-		.map(h => [h]);
+		.map(h => [h])
+		.shareReplay(1);
 		
 	const sound_objects$ = stream
 		.just([
@@ -217,6 +225,9 @@ function main({ renderers, scenes, cameras, windowSize, headObject }) {
 			sound_objects,
 			heads
 		}));
+		
+	const contexts_state_reducer$ = heads$
+		.map(context_state_reducer);
 	
 	// const heads$ = stream
 	// 	.just([ { name: 'main' }]);
@@ -264,14 +275,7 @@ function main({ renderers, scenes, cameras, windowSize, headObject }) {
 				{
 					name: 'main',
 					size: main_size
-				},
-				// {
-				//   name: 'orbit',
-				//   size: {
-				//     height: 100,
-				//     width: 100
-				//   }
-				// }
+				}
 			];
 		});
 		
@@ -301,8 +305,55 @@ function main({ renderers, scenes, cameras, windowSize, headObject }) {
 		renderers: renderers_state_reducer$,
 		cameras: cameras_state_reducer$,
 		scenes: scenes_state_reducer$,
-		render: render_function$
+		render: render_function$,
+		audioContexts: contexts_state_reducer$
 	};
+}
+
+Cycle.run(main, {
+	dom: makeD3DomDriver('#app'),
+	renderers: makeStateDriver('renderers'),
+	cameras: makeStateDriver('cameras'),
+	scenes: makeStateDriver('scenes'),
+	render: (source$) => source$.subscribe(fn => fn()),
+	windowSize: () => stream.fromEvent(window, 'resize'),
+	headObject: makeHeadObjectDriver(),
+	audioContexts: makeStateDriver('audioContexts')
+});
+
+function context_state_reducer(model) {
+	const AudioContext = window.AudioContext || window.webkitAudioContext;
+	return function(selectable) {
+		const join = d3
+			.select(selectable)
+			.selectAll()
+			.data(model);
+		const contexts = join
+			.enter()
+			.append(function({ id }) {
+				const context = new AudioContext();
+				const { destination, listener } = context;
+				return {
+					id,
+					context,
+					destination,
+					listener
+				};
+			})
+			.merge(join)
+			.each(function(d) {
+				const { destination, listener } = this;
+				/** Set orientation and position */
+				const vec = new THREE.Vector3();
+				vec.copy(d.lookAt);
+				vec.normalize();
+				listener.setOrientation(vec.x, vec.y, vec.z, 0, 1, 0);
+				const p = d.position;
+				listener.setPosition(p.x, p.y, p.z);
+			});
+			
+		return selectable;
+	}
 }
 
 function mainSize(windowSize$) {
@@ -314,16 +365,6 @@ function mainSize(windowSize$) {
       height: element.innerHeight
 		}));
 }
-
-Cycle.run(main, {
-	dom: makeD3DomDriver('#app'),
-	renderers: makeStateDriver('renderers'),
-	cameras: makeStateDriver('cameras'),
-	scenes: makeStateDriver('scenes'),
-	render: (source$) => source$.subscribe(fn => fn()),
-	windowSize: () => stream.fromEvent(window, 'resize'),
-	headObject: makeHeadObjectDriver()
-});
 
 function makeHeadObjectDriver() {
 	return function headObjectDriver() {
