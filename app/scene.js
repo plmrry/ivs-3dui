@@ -8,6 +8,8 @@ import combineLatestObj from 'rx-combine-latest-obj';
 import log from './utilities/log.js';
 import apply from './utilities/apply.js';
 
+debug.disable();
+
 const room_size = {
 	width: 20,
 	length: 18,
@@ -68,13 +70,13 @@ function updateSoundObjects(parents) {
 		.each(function({ position, volume, material }) {
 			/** Update position */
 			if (! _.isMatch(this.position, position)) {
-				debug('sound object')('set position', position);
+				debug('reducer:sound-object')('set position', position);
 				this.position.copy(position);
 			}
 			/** Update geometry */
 			let params = this.geometry.parameters;
 			if (! _.isMatch(params, { radius: volume })) {
-				debug('sound object')('set radius', volume);
+				debug('reducer:sound-object')('set radius', volume);
 				Object.assign(params, { radius: volume });
 				let newGeom = new THREE.SphereGeometry(
 					params.radius,
@@ -135,7 +137,7 @@ function updateHeads(scenes) {
     .merge(join)
 		.each(function(d) {
 			this.position.copy(d.position);
-			// this.lookAt(d.lookAt);
+			this.lookAt(d.lookAt);
 		});
 	return heads;
 }
