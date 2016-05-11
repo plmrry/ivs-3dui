@@ -167,7 +167,12 @@ function updateTrajectories(parents) {
 function updateSoundObjectParents(scenes) {
   const join = scenes
     .selectAll({ name: 'sound_object_parent' })
-    .data(d => d.sound_objects || []);
+    .data(d => d.sound_objects || [], d => d.key);
+  join
+		.exit()
+		.each(function(d) {
+			this.parent.remove(this);
+		});
   const objects = join
     .enter()
     .append(d => {
@@ -179,6 +184,7 @@ function updateSoundObjectParents(scenes) {
       /** Create object */
       const object = new THREE.Object3D();
       object.name = 'sound_object_parent';
+      object.key = d.key;
       return object;
     })
     .merge(join)

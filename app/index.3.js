@@ -34,10 +34,120 @@ function main(sources) {
 		.merge(
 			add$
 		);
+
+	const headObject$ = getHeadObject();
+	const windowSize = stream.fromEvent(window, 'resize');
+	const main_size$ = mainSize(windowSize);
+	const renderers = _Renderers({ main_size$ });
+	const cameras = _Cameras({ main_size$ });
+	const heads$ = heads({ headObject$ });
+	
+	const main_scene_model$ = main_scene_model({ heads$, action$ });
+	const scenes = _Scenes({ main_scene_model$ });
+	const render_sets$ = stream
+		.of([
+			{
+				render_id: 'main',
+				scene_id: 'main',
+				camera_id: 'main'
+			}
+		]);
+	const render_function$ = renderFunction({
+		renderers,
+		scenes,
+		cameras,
+		render_sets$
+	});
+	const dom_state_reducer$ = _DOM({ main_size$, renderers });
+	const audio_graph_model$ = _Audio({ main_scene_model$, heads$ });
+	return {
+		dom: dom_state_reducer$,
+		render: render_function$,
+		// audioGraph: audio_graph_model$
+	};
+}
+
+Cycle.run(main, {
+	dom: makeD3DomDriver('#app'),
+	audioGraph: source$ => source$.subscribe(),
+	render: source$ => source$.subscribe(fn => fn())
+});
+
+function heads({ headObject$ }) {
+	const heads$ = headObject$
+		.map(head => ({
+			id: 'main',
+			name: 'head',
+			position: {
+				x: -1,
+				y: 1,
+				z: 2
+			},
+			lookAt: {
+				x: 1,
+				y: 3,
+				z: 1
+			},
+			object: head
+		}))
+		.map(h => [h])
+		.shareReplay(1);
+	return heads$;
+}
+
+function main_scene_model({ heads$, action$ }) {
+	// const first_trajectory_points = [
+	// 	[+0,+0,+0], 
+	// 	[+2,+1,-2], 
+	// 	[+5,-1,-2], 
+	// 	// [+8,+2,+3]
+	// ].map(([x,y,z]) => new THREE.Vector3(x, y, z));
+	
+	// const first_cone = {
+	// 	key: 17,
+	// 	lookAt: {
+	// 		x: 0.57,
+	// 		y: -0.1,
+	// 		z: 0.34
+	// 	},
+	// 	spread: 0.5,
+	// 	volume: 1,
+	// 	file: 'wetShort.wav',
+	// 	playing: true
+	// };
 		
+	// const first_object = {
+	// 	key: 5,
+	// 	position: {
+	// 		x: -5,
+	// 		y: 1.5,
+	// 		z: 1.8
+	// 	},
+	// 	points: first_trajectory_points,
+	// 	splineType: 'CatmullRomCurve3',
+	// 	material: {
+	// 		color: 'ffffff'
+	// 	},
+	// 	volume: 1,
+	// 	t: 0.2,
+	// 	moving: true,
+	// 	cones: [ first_cone ]
+	// };
+	
+	// first_cone.parent = first_object;
+		
+	// const animation$ = stream
+	// 	.create(observer => {
+	// 		d3.timer(() => observer.onNext())
+	// 	})
+	// 	.timestamp()
+	// 	.pluck('timestamp')
+	// 	.map(time => time / 1e3);
+	
+	const sound_objects$ = new Rx.ReplaySubject(1);
+	
 	const tweenVolumeSubject = new Rx.ReplaySubject(1);
-	const eventSubject = new Rx.ReplaySubject(1);
-		
+	
 	const tweenObjectVolume$ = tweenVolumeSubject
 		.flatMap(({ destination, key }) => {
 			return d3TweenStream(100)
@@ -53,7 +163,7 @@ function main(sources) {
 					return state;
 				});
 		});
-		
+	
 	const addingEvents$ = action$
 		.filter(({ type }) => type === 'add-object')
 		.flatMap(({ position }) => {
@@ -62,17 +172,6 @@ function main(sources) {
 				{ type: 'select-last-added' },
 				{ type: 'tween-last-added' }
 			]);
-		});
-		
-	const selectLast$ = addingEvents$
-		.filter(({ type }) => type === 'select-last-added')
-		.map(() => state => {
-			const event = {
-				type: 'select-object',
-				key: state.lastAdded.key
-			};
-			eventSubject.onNext(event);
-			return state;
 		});
 		
 	const tweenLast$ = addingEvents$
@@ -127,73 +226,16 @@ function main(sources) {
 			tweenObjectVolume$,
 			delete_object$
 		);
-
-	const headObject$ = getHeadObject();
-	const windowSize = stream.fromEvent(window, 'resize');
-	const main_size$ = mainSize(windowSize);
-	const renderers = _Renderers({ main_size$ });
-	const cameras = _Cameras({ main_size$ });
-	const heads$ = heads({ headObject$ });
+		// .map(stateReducer => state => stream.just(stateReducer));
 	
-	const main_scene_model$ = main_scene_model({ heads$, action$, objectAction$ });
-	const scenes = _Scenes({ main_scene_model$ });
-	const render_sets$ = stream
-		.of([
-			{
-				render_id: 'main',
-				scene_id: 'main',
-				camera_id: 'main'
-			}
-		]);
-	const render_function$ = renderFunction({
-		renderers,
-		scenes,
-		cameras,
-		render_sets$
-	});
-	const dom_state_reducer$ = _DOM({ main_size$, renderers });
-	// const audio_graph_model$ = _Audio({ main_scene_model$, heads$ });
-	return {
-		dom: dom_state_reducer$,
-		render: render_function$,
-		// audioGraph: audio_graph_model$
-	};
-}
-
-Cycle.run(main, {
-	dom: makeD3DomDriver('#app'),
-	audioGraph: source$ => source$.subscribe(),
-	render: source$ => source$.subscribe(fn => fn())
-});
-
-function heads({ headObject$ }) {
-	const heads$ = headObject$
-		.map(head => ({
-			id: 'main',
-			name: 'head',
-			position: {
-				x: -1,
-				y: 1,
-				z: 2
-			},
-			lookAt: {
-				x: 1,
-				y: 3,
-				z: 1
-			},
-			object: head
-		}))
-		.map(h => [h])
-		.shareReplay(1);
-	return heads$;
-}
-
-function main_scene_model({ heads$, action$, objectAction$ }) {
+	// sound_objects$
+	// 	.subscribe(d => console.log('fah'))
 	
-	const sound_objects$ = objectAction$
+	objectAction$
 		.startWith({ sound_objects: [], max_id: 0, soundObjects: d3.map() })
 		.scan(apply)
-		.pluck('sound_objects');
+		.pluck('sound_objects')
+		.subscribe(sound_objects$);
 		
 	const main_scene_model$ = combineLatestObj
 		({
