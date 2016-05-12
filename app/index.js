@@ -108,17 +108,43 @@ function main() {
 		render_sets$
 	});
 
+	const mainScene$ = stream
+		.just(getMainScene());
+
+	function getMainScene() {
+		const room_size = {
+			width: 20,
+			length: 18,
+			height: 3
+		};
+		const scene = new THREE.Scene();
+		scene.add(getSpotlight());
+		scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
+		scene.add(getFloor(room_size));
+		return scene;
+	}
+
+	function getSpotlight() {
+		var spotLight = new THREE.SpotLight(0xffffff, 0.95);
+		spotLight.position.setY(100);
+		spotLight.castShadow = true;
+		spotLight.shadow.mapSize.width = 4000;
+		spotLight.shadow.mapSize.height = 4000;
+		spotLight.intensity = 1;
+		spotLight.exponent = 1;
+		return spotLight;
+	}
+
 	combineLatestObj({
 		renderer: renderers.select({ name: 'main' }).pluck('renderer'),
-		scene: scenes.select({ name: 'main' }).pluck('scene'),
+		// scene: scenes.select({ name: 'main' }).pluck('scene'),
+		scene: mainScene$,
 		camera: cameras.select({ name: 'main' }).pluck('camera')
 	})
 	.map(({ renderer, scene, camera }) => () => {
 		renderer.render(scene, camera);
 	})
 	.subscribe(fn => fn());
-
-
 
 	const updateCameraSize$ = editorSize$
 		.map(s => camera => {
@@ -776,4 +802,30 @@ function _Cameras({ main_size$ }) {
 		.scan(apply, new Selectable())
 		.let(makeSelectable);
 	return cameras$;
+}
+
+function getFloor(room_size) {
+	var FLOOR_SIZE = 100;
+	var floorGeom = new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE);
+	var c = 0.46;
+	var floorMat = new THREE.MeshPhongMaterial({
+		color: new THREE.Color(c, c, c),
+		side: THREE.DoubleSide,
+		depthWrite: false
+	});
+	var e = 0.5;
+	floorMat.emissive = new THREE.Color(e, e, e);
+	var floor = new THREE.Mesh(floorGeom, floorMat);
+	floor.name = 'floor';
+	floor.rotateX(Math.PI / 2);
+	floor.position.setY(-room_size.height / 2);
+	var grid = new THREE.GridHelper(FLOOR_SIZE / 2, 2);
+	grid.rotateX(Math.PI / 2);
+	grid.material.transparent = true;
+	grid.material.opacity = 0.2;
+	grid.material.linewidth = 2;
+	grid.material.depthWrite = false;
+	floor.add(grid);
+	floor.receiveShadow = true;
+	return floor;
 }
