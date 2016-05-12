@@ -25,6 +25,10 @@ Rx.config.longStackSupport = true;
 function main() {
 	const windowSize = stream.fromEvent(window, 'resize');
 	const main_size$ = mainSize(windowSize);
+	const editorSize$ = stream.just({
+  		width: 300,
+  		height: 300
+  	});
 	const renderers = _Renderers({ main_size$ });
 	const cameras = _Cameras({ main_size$ });
 	const add$ = fakeAdd();
