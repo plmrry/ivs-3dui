@@ -26,6 +26,8 @@ Rx.config.longStackSupport = true;
 function main() {
 	const windowSize = stream.fromEvent(window, 'resize');
 	const main_size$ = mainSize(windowSize);
+	
+	
 }
 
 main();
