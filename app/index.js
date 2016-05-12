@@ -108,6 +108,18 @@ function main() {
 		render_sets$
 	});
 
+	combineLatestObj({
+		renderer: renderers.select({ name: 'main' }).pluck('renderer'),
+		scene: scenes.select({ name: 'main' }).pluck('scene'),
+		camera: cameras.select({ name: 'main' }).pluck('camera')
+	})
+	.map(({ renderer, scene, camera }) => () => {
+		renderer.render(scene, camera);
+	})
+	.subscribe(fn => fn());
+
+
+
 	const updateCameraSize$ = editorSize$
 		.map(s => camera => {
 			[ camera.left, camera.right ] = [-1,+1].map(d => d * s.width * 0.5);
@@ -176,7 +188,7 @@ function main() {
 
 	// const audio_graph_model$ = _Audio({ main_scene_model$, heads$ });
 
-	render_function$.subscribe(fn => fn());
+	// render_function$.subscribe(fn => fn());
 
   makeD3DomDriver('#app')(dom_state_reducer$);
 
