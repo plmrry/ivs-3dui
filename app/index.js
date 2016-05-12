@@ -34,7 +34,6 @@ Rx.config.longStackSupport = true;
 main();
 
 function main() {
-	// const windowSize$ = stream.fromEvent(window, 'resize');
 	const windowSize$ = windowSize();
 
 	const updateRendererSize$ = windowSize$
@@ -68,19 +67,37 @@ function main() {
 			return dom;
 		});
 
+	const addLights$ = stream
+		.just(scene => {
+			scene.add(getSpotlight());
+			scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
+			return scene;
+		});
+
+	const addFloor$ = stream
+		.just(scene => {
+			const room_size = {
+				width: 20,
+				length: 18,
+				height: 3
+			};
+			scene.add(getFloor(room_size));
+			return scene;
+		});
+
+	const sceneUpdate$ = stream
+		.merge(
+			addLights$,
+			addFloor$
+		);
+
 	const mainScene$ = stream
-		.just(getMainScene());
+		.just(getMainScene())
+		.concat(sceneUpdate$)
+		.scan(apply);
 
 	function getMainScene() {
-		const room_size = {
-			width: 20,
-			length: 18,
-			height: 3
-		};
 		const scene = new THREE.Scene();
-		scene.add(getSpotlight());
-		scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
-		scene.add(getFloor(room_size));
 		return scene;
 	}
 
@@ -118,33 +135,25 @@ function main() {
 			};
 		})
 		.scan((vector, position) => vector.copy(position), new THREE.Vector3());
-
-	const lookAt$ = stream.just(new THREE.Vector3());
-		// .just([0,0,0])
-		// .map(([x,y,z]) => ({ x, y, z}));
-	// const lookAt$ = panning_offset$;
+	const lookAt$ = stream
+		.just(new THREE.Vector3())
+		.shareReplay(1);
 	const position$ = stream
 		.combineLatest(
 			relative_position$,
 			lookAt$,
 			(rel, look) => rel.add(look)
 		);
-
-	// const lat_lng$ = combineLatestObj
-	// 	({
-	// 		latitude$, longitude$
-	// 	});
-
 	const updateLookAt$ = lookAt$
 		.map(lookAt => camera => {
 			if (! _.isMatch(camera._lookAt, lookAt)) {
-				debug('reducer:camera')('update lookAt');
+				debug('reducer:camera')('update lookAt', lookAt);
 				camera._lookAt = lookAt;
 				camera.lookAt(lookAt || new THREE.Vector3());
+				// camera.updateProjectionMatrix();
 			}
 			return camera;
 		});
-
 	const updatePosition$ = position$
 		.map(position => camera => {
 			if (! _.isMatch(camera.position, position)) {
@@ -153,16 +162,14 @@ function main() {
 			}
 			return camera;
 		});
-
 	const updateSize$ = windowSize$
 		.map(s => camera => {
-			debug('reducer:camera')('update size');
+			debug('reducer:camera')('update size', s);
 			[ camera.left, camera.right ] = [-1,+1].map(d => d * s.width * 0.5);
 			[ camera.bottom, camera.top ] = [-1,+1].map(d => d * s.height * 0.5);
 			camera.updateProjectionMatrix();
 			return camera;
 		});
-
 	const updateZoom$ = stream
 		.just(50)
 		.map(zoom => camera => {
@@ -170,27 +177,17 @@ function main() {
 			camera.updateProjectionMatrix();
 			return camera;
 		});
-
 	const mainCameraUpdate$ = stream
 		.merge(
 			updateSize$,
 			updatePosition$,
-			updateLookAt$
-			// updateZoom$
+			updateLookAt$,
+			updateZoom$
 		);
-
 	const mainCamera$ = stream
 		.just(new THREE.OrthographicCamera())
 		.concat(mainCameraUpdate$)
 		.scan(apply);
-
-	// mainCamera$.subscribe();
-	//
-	// mainRenderer$.subscribe();
-		// .map(canvas => dom => dom
-		// 	.select('main')
-		// 	.append(() => canvas)
-		// );
 
 	combineLatestObj({
 			renderer: mainRenderer$,
@@ -212,7 +209,6 @@ function main() {
 		.concat(domUpdate$)
 		.scan(apply)
 		.subscribe();
-
 }
 
 function windowSize() {
@@ -241,6 +237,13 @@ function getSpotlight() {
 	spotLight.intensity = 1;
 	spotLight.exponent = 1;
 	return spotLight;
+}
+
+function getCube() {
+	var geometry = new THREE.BoxGeometry( 10, 10, 10 );
+	var material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } );
+	var cube = new THREE.Mesh( geometry, material );
+	return cube;
 }
 
 function getFloor(room_size) {
