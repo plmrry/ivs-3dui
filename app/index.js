@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 import Cycle from '@cycle/core';
 import debug from 'debug';
 import Rx, { Observable as stream } from 'rx';
@@ -29,7 +31,7 @@ function main() {
   		width: 300,
   		height: 300
   	});
-	const renderers = _Renderers({ main_size$ });
+	const renderers = _Renderers({ main_size$, editor_size$: editorSize$ });
 	const cameras = _Cameras({ main_size$ });
 	const add$ = fakeAdd();
 	const eventSubject = new Rx.ReplaySubject(1);
@@ -37,25 +39,56 @@ function main() {
 	const add_object$ = addObject({ action$, eventSubject });
 	const tweenObjectVolume$ = tweenObjectVolume({ action$ });
 	const deleteObject$ = deleteObject({ action$ });
-		
+
 	const objectAction$ = stream
 		.merge(
 			add_object$,
 			tweenObjectVolume$,
 			deleteObject$
 		);
-	
+
 	const objectsModel$ = objectAction$
 		.startWith({ sound_objects: [], max_id: 0, soundObjects: d3.map() })
 		.scan(apply)
 		.shareReplay(1);
-		
+
 	const sound_objects$ = objectsModel$.pluck('sound_objects');
+
 	const selected$ = objectsModel$
-	  .pluck('selectedObject')
-	  .distinctUntilChanged()
-	  .subscribe(log);
-	const dom_state_reducer$ = _DOM({ main_size$, renderers });
+	  .pluck('selected')
+	  .distinctUntilChanged();
+
+	const editorDom$ = editorDom({ selected$, renderers });
+
+	const main_canvases$ = renderers
+		.select({ name: 'main' })
+  	.first()
+  	.pluck('renderer', 'domElement')
+  	.map(d => [d]);
+
+	const main_dom_model$ = combineLatestObj
+  	({
+  		main_size$,
+  		canvases: main_canvases$.startWith([]),
+			editorDom$: editorDom$.startWith([])
+  	})
+  	.map(({ main_size, canvases, editorDom }) => ({
+  		mains: [
+  			{
+  				styles: {
+  					height: `${main_size.height}px`,
+  					width: `${main_size.width}px`
+  				},
+  				canvases
+  			}
+  		],
+			editorCards: editorDom
+  	}));
+
+	const dom_state_reducer$ = DOM.view(main_dom_model$);
+
+	// const dom_state_reducer$ = _DOM({ main_size$, renderers });
+
 	const headObject$ = getHeadObject();
 	const heads$ = heads({ headObject$ });
 	const main_scene_model$ = main_scene_model({ heads$, sound_objects$ });
@@ -74,17 +107,166 @@ function main() {
 		cameras,
 		render_sets$
 	});
-	
+
+	const updateCameraSize$ = editorSize$
+		.map(s => camera => {
+			[ camera.left, camera.right ] = [-1,+1].map(d => d * s.width * 0.5);
+			[ camera.bottom, camera.top ] = [-1,+1].map(d => d * s.height * 0.5);
+			camera.updateProjectionMatrix();
+			return camera;
+		});
+	const updateCameraPosition$ = stream
+		.just(new THREE.Vector3(0,0,10))
+		.map(position => camera => {
+			camera.position.copy(position);
+			return camera;
+		});
+	const updateCameraZoom$ = stream
+		.just(50)
+		.map(zoom => camera => {
+			camera.zoom = zoom;
+			camera.updateProjectionMatrix();
+			return camera;
+		});
+	const cameraUpdate$ = stream
+		.merge(
+			updateCameraSize$,
+			updateCameraPosition$,
+			updateCameraZoom$
+		);
+	const editorCamera$ = cameraUpdate$
+		.startWith(new THREE.OrthographicCamera())
+		.scan(apply);
+
+	// editorCamera$.subscribe(log);
+
+	const editor_sound_objects_model$ = selected$
+		.distinctUntilChanged()
+		.map(obj => {
+			if (typeof obj !== 'undefined') {
+				const position = new THREE.Vector3();
+				const trajectories = [];
+				return [Object.assign({}, obj, { position, trajectories })];
+			}
+			else return [];
+		});
+
+	const editor_scene_model$ = editor_sound_objects_model$
+		.map(sound_objects => {
+			return {
+				name: 'editor',
+				sound_objects,
+				screens: [
+					{}
+				]
+			};
+		});
+
+	stream
+		.just({
+			size: {
+				width: 300,
+	  		height: 300
+			},
+			position: {
+				x: 0, y: 0, z: 10
+			},
+			zoom: 50
+		});
+
 	// const audio_graph_model$ = _Audio({ main_scene_model$, heads$ });
-	
+
 	render_function$.subscribe(fn => fn());
 
   makeD3DomDriver('#app')(dom_state_reducer$);
-	
+
 	return;
 }
 
+function editorCamera() {
+	let camera = new THREE.OrthographicCamera();
+	[ this.left, this.right ] = [-1,+1].map(d => d * s.width * 0.5);
+	[ this.bottom, this.top ] = [-1,+1].map(d => d * s.height * 0.5);
+	this.updateProjectionMatrix();
+}
+
 main();
+
+function editorDom({ selected$, renderers }) {
+	/** FIXME: Could be a lot cleaner */
+	return selected$
+		.withLatestFrom(
+			renderers.select({ name: 'editor' }).pluck('renderer'),
+			(s, r) => ({ selected: s, renderer: r })
+		)
+		.map(({ selected, renderer }) => {
+			const size = renderer.getSize();
+			if (typeof selected === 'undefined') return [];
+			const selected_cones = selected.cones || [];
+			const selected_cone = selected_cones.filter(d => d.selected)[0];
+			const object_renderer_card = {
+					canvases: [ { node: renderer.domElement } ],
+					style: {
+						position: 'relative',
+						height: `${size.height}px`
+					},
+					buttons: [
+						{
+							id: 'add-cone',
+							text: 'add cone',
+							style: {
+								position: 'absolute',
+								right: 0,
+								bottom: 0
+							}
+						}
+					]
+				};
+			const cone_info_card_block = typeof selected_cone !== 'undefined' ?
+				{
+					id: 'cone-card',
+					header: `Cone ${selected.key}.${selected_cone.key}`
+				}
+				: undefined;
+			const object_info_card_block = selected.type === 'sound_object' ?
+				{
+					id: 'object-card',
+					header: `Object ${selected.key}`,
+					rows: getObjectInfoRows(selected)
+				} : undefined;
+			const info_card = {
+				card_blocks: [
+					object_info_card_block,
+					cone_info_card_block
+				].filter(d => typeof d !== 'undefined')
+			};
+			const cards = [
+				selected.type === 'sound_object' ? object_renderer_card : undefined,
+				info_card
+			].filter(d => typeof d !== 'undefined');
+			// return [{ cards, size }];
+			return cards;
+		});
+}
+
+function getObjectInfoRows(object) {
+	return [
+		{
+			columns: [
+				{
+					width: '6',
+					class: 'col-xs-6',
+					span_class: 'value delete-object',
+					span_style: {
+						cursor: 'pointer'
+					},
+					text: 'Delete',
+					id: 'delete-object'
+				}
+			]
+		}
+	];
+}
 
 function fakeAdd() {
   return stream
@@ -114,6 +296,7 @@ function addObject({ action$, eventSubject }) {
 			state.max_id = d3.max(state.sound_objects, d => d.key) || 0;
 			const newObjectKey = state.max_id + 1;
 			const new_object = {
+				type: 'sound_object',
 				key: newObjectKey,
 				position,
 				splineType: 'CatmullRomCurve3',
@@ -122,7 +305,6 @@ function addObject({ action$, eventSubject }) {
 				moving: true,
 				cones: [],
 				selected: true,
-				foo: 'bar'
 			};
 			state.soundObjects.set(newObjectKey, new_object);
 			state.sound_objects = state.sound_objects.concat(new_object);
@@ -138,7 +320,7 @@ function addObject({ action$, eventSubject }) {
 				key: state.lastAdded.key
 			};
 			eventSubject.onNext(selectEvent);
-			state.selectedObject = new_object;
+			state.selected = new_object;
 			return state;
 		});
 }
@@ -231,12 +413,12 @@ function _Audio({ main_scene_model$, heads$ }) {
 		.flatMap(arr => stream.from(arr))
 		.pluck('cones')
 		.flatMap(arr => stream.from(arr));
-		
+
 	const cone_file_names$ = cone$
 		.filter(({ file }) => typeof file !== 'undefined')
 		.pluck('file')
 		.distinctUntilChanged();
-		
+
 	const file$ = cone_file_names$
 		.flatMap(file => {
 			var request = new XMLHttpRequest();
@@ -255,16 +437,16 @@ function _Audio({ main_scene_model$, heads$ }) {
 			return response$;
 		})
 		.replay(null, 1);
-	
+
 	file$.connect();
-	
+
 	const audioContext$ = heads$
 		.map(context_state_reducer)
 		.scan(apply, new Selectable())
 		.map(d => d.querySelector({ id: 'main' }))
 		.pluck('context');
 		// .subscribe(d => { debugger });
-		
+
 	const audioBuffer$ = file$
 		.withLatestFrom(
 			audioContext$,
@@ -281,7 +463,7 @@ function _Audio({ main_scene_model$, heads$ }) {
 				buffer
 			}));
 		});
-		
+
 	const all_objects$ = main_scene_model$
 		.map(model => {
 			const objects = model.sound_objects;
@@ -291,7 +473,7 @@ function _Audio({ main_scene_model$, heads$ }) {
 			return { objects, cones };
 		})
 		.shareReplay(1);
-		
+
 	const audio_graph_model$ = all_objects$
 		.pluck('cones')
 		.filter(d => d.length > 0)
@@ -316,18 +498,18 @@ function _Audio({ main_scene_model$, heads$ }) {
 		)
 		.map(audio_graph_state_reducer)
 		.scan(apply, new Selectable());
-		
+
 	return audio_graph_model$;
 }
 
 function _DOM({ main_size$, renderers }) {
-	
+
 	const main_canvases$ = renderers
 		.select({ name: 'main' })
   	.first()
   	.pluck('renderer', 'domElement')
   	.map(d => [d]);
-  	
+
 	const main_dom_model$ = combineLatestObj
   	({
   		main_size$,
@@ -344,9 +526,9 @@ function _DOM({ main_size$, renderers }) {
   			}
   		]
   	}));
-  	
+
 	const dom_state_reducer$ = DOM.view(main_dom_model$);
-	
+
 	return dom_state_reducer$;
 }
 
@@ -357,7 +539,7 @@ function audio_graph_state_reducer(model) {
 			.select(selectable)
 			.selectAll()
 			.data([model]);
-			
+
 		const audio_graphs = join
 			.enter()
 			.append(function({ context }) {
@@ -367,7 +549,7 @@ function audio_graph_state_reducer(model) {
 			.merge(join)
 			.each(function({ model }) {
 				const { currentTime } = this;
-				console.log('up')
+				console.log('up');
 				const graph = {
 					0: ['gain', 'output', {gain: 0.2}],
 				  3: ['panner', 0, {
@@ -375,7 +557,7 @@ function audio_graph_state_reducer(model) {
 				  	coneInnerAngle: 0.01*180/Math.PI,
 				  	coneOuterAngle: 1*180/Math.PI,
 				  	coneOuterGain: 0.03
-				  	// position: 
+				  	// position:
 				  }],
 				  4: ['bufferSource', 0, {
 				  	buffer: model[0].buffer,
@@ -385,7 +567,7 @@ function audio_graph_state_reducer(model) {
 				};
 				this.update(graph);
 			});
-	}
+	};
 }
 
 function makeSelectable(observable$) {
@@ -430,9 +612,9 @@ function context_state_reducer(model) {
 				const p = d.position;
 				listener.setPosition(p.x, p.y, p.z);
 			});
-			
+
 		return selectable;
-	}
+	};
 }
 
 function mainSize(windowSize$) {
@@ -450,7 +632,7 @@ function makeHeadObjectDriver() {
 		OBJLoader(THREE);
 		const loader = new THREE.OBJLoader();
 		return stream.create(observer => {
-			loader.load('assets/head.obj', d => { observer.onNext(d) });
+			loader.load('assets/head.obj', d => observer.onNext(d));
 		});
 	};
 }
@@ -459,7 +641,7 @@ function getHeadObject() {
 	OBJLoader(THREE);
 	const loader = new THREE.OBJLoader();
 	return stream.create(observer => {
-		loader.load('assets/head.obj', d => { observer.onNext(d) });
+		loader.load('assets/head.obj', d => observer.onNext(d));
 	});
 }
 
@@ -474,7 +656,7 @@ function polarToVector({ radius, theta, phi }) {
 function renderFunction({ renderers, scenes, cameras, render_sets$ }) {
 	return render_sets$
 		.flatMap(arr => stream.from(arr))
-		.flatMap(({ render_id, scene_id, camera_id }) => { 
+		.flatMap(({ render_id, scene_id, camera_id }) => {
 			return combineLatestObj({
 				renderer: renderers.select({ name: 'main' }).pluck('renderer'),
 				scene: scenes.select({ name: scene_id }).pluck('scene'),
@@ -482,20 +664,26 @@ function renderFunction({ renderers, scenes, cameras, render_sets$ }) {
 			});
 		})
 		.map(({ renderer, scene, _camera }) => () => {
-			renderer.render(scene, _camera)
+			renderer.render(scene, _camera);
 		});
 }
 
-function _Renderers({ main_size$ }) {
+function _Renderers({ main_size$, editor_size$ }) {
+	/** FIXME: add and remove renderers? */
 	const renderers_model$ = combineLatestObj
 		({
-			main_size$
+			main_size$,
+			editor_size$
 		})
 		.map(({ main_size, editor_size }) => {
 			return [
 				{
 					name: 'main',
 					size: main_size
+				},
+				{
+					name: 'editor',
+					size: editor_size
 				}
 			];
 		});
