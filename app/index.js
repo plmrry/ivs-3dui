@@ -40,9 +40,6 @@ function main() {
 			tweenObjectVolume$,
 			deleteObject$
 		);
-
-	const headObject$ = getHeadObject();
-	const heads$ = heads({ headObject$ });
 	
 	const objectsModel$ = objectAction$
 		.startWith({ sound_objects: [], max_id: 0, soundObjects: d3.map() })
@@ -50,9 +47,13 @@ function main() {
 		.shareReplay(1);
 		
 	const sound_objects$ = objectsModel$.pluck('sound_objects');
-		
-	const selected$ = objectsModel$.pluck('selectedObject');
-	
+	const selected$ = objectsModel$
+	  .pluck('selectedObject')
+	  .distinctUntilChanged()
+	  .subscribe(log);
+	const dom_state_reducer$ = _DOM({ main_size$, renderers });
+	const headObject$ = getHeadObject();
+	const heads$ = heads({ headObject$ });
 	const main_scene_model$ = main_scene_model({ heads$, sound_objects$ });
 	const scenes = _Scenes({ main_scene_model$ });
 	const render_sets$ = stream
@@ -69,27 +70,17 @@ function main() {
 		cameras,
 		render_sets$
 	});
-	const dom_state_reducer$ = _DOM({ main_size$, renderers });
+	
 	// const audio_graph_model$ = _Audio({ main_scene_model$, heads$ });
 	
 	render_function$.subscribe(fn => fn());
 
   makeD3DomDriver('#app')(dom_state_reducer$);
 	
-	return {
-		// dom: dom_state_reducer$,
-		// render: render_function$,
-		// audioGraph: audio_graph_model$
-	};
+	return;
 }
 
 main();
-
-// Cycle.run(main, {
-// 	dom: makeD3DomDriver('#app'),
-// 	audioGraph: source$ => source$.subscribe(),
-// 	render: source$ => source$.subscribe(fn => fn())
-// });
 
 function fakeAdd() {
   return stream
@@ -122,13 +113,12 @@ function addObject({ action$, eventSubject }) {
 				key: newObjectKey,
 				position,
 				splineType: 'CatmullRomCurve3',
-				material: {
-					color: 'ffffff'
-				},
 				volume: 0.1,
 				t: 0.2,
 				moving: true,
-				cones: []
+				cones: [],
+				selected: true,
+				foo: 'bar'
 			};
 			state.soundObjects.set(newObjectKey, new_object);
 			state.sound_objects = state.sound_objects.concat(new_object);
@@ -144,7 +134,7 @@ function addObject({ action$, eventSubject }) {
 				key: state.lastAdded.key
 			};
 			eventSubject.onNext(selectEvent);
-			state.selected = new_object;
+			state.selectedObject = new_object;
 			return state;
 		});
 }
@@ -191,7 +181,7 @@ function heads({ headObject$ }) {
 }
 
 function main_scene_model({ heads$, sound_objects$ }) {
-	const main_scene_model$ = combineLatestObj
+	return combineLatestObj
 		({
 			sound_objects$: sound_objects$.startWith([]),
 			heads$: heads$.startWith(Array(0))
@@ -202,7 +192,6 @@ function main_scene_model({ heads$, sound_objects$ }) {
 			sound_objects,
 			heads
 		}));
-	return main_scene_model$;
 }
 
 function d3TweenStream(duration, name) {

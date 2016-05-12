@@ -87,7 +87,8 @@ function updateSoundObjects(parents) {
 				this.geometry = newGeom;
 			}
 			/** Update color */
-			this.material.color = new THREE.Color(`#${material.color}`);
+			if (! _.isMatch(this.material.color, material.color))
+			  this.material.color = material.color;
 		});
 		
 	return sound_objects;
@@ -190,7 +191,7 @@ function updateSoundObjectParents(scenes) {
     .merge(join)
     .each(function(d) {
       /** FIXME: Business logic in driver :/ */
-      const { curve, t, position, volume, material, cones } = d;
+      const { curve, t, position, volume, cones, selected } = d;
       const { points } = curve;
       d.trajectories = points.length > 1 ? [
         {
@@ -200,12 +201,18 @@ function updateSoundObjectParents(scenes) {
       const trajectoryOffset = points.length > 1 ? 
         curve.getPoint(t) : 
         new THREE.Vector3();
+      /** Set object color */
+      const SELECTED_COLOR = new THREE.Color("#66c2ff");
+      const material = {
+        color: selected ? SELECTED_COLOR : new THREE.Color('#ffffff')
+      };
       d.sound_objects = [
         {
           position: trajectoryOffset,
           volume,
           material,
-          cones
+          cones,
+          selected
         }
       ];
       /** Update position */
