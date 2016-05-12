@@ -22,73 +22,99 @@ import Selectable from './utilities/selectable.js';
 
 Rx.config.longStackSupport = true;
 
-function main(sources) {
-	const add$ = stream
+function main() {
+	const windowSize = stream.fromEvent(window, 'resize');
+	const main_size$ = mainSize(windowSize);
+	const renderers = _Renderers({ main_size$ });
+	const cameras = _Cameras({ main_size$ });
+	const add$ = fakeAdd();
+	const eventSubject = new Rx.ReplaySubject(1);
+	const action$ = stream.merge( add$, eventSubject );
+	const add_object$ = addObject({ action$, eventSubject });
+	const tweenObjectVolume$ = tweenObjectVolume({ action$ });
+	const deleteObject$ = deleteObject({ action$ });
+		
+	const objectAction$ = stream
+		.merge(
+			add_object$,
+			tweenObjectVolume$,
+			deleteObject$
+		);
+
+	const headObject$ = getHeadObject();
+	const heads$ = heads({ headObject$ });
+	
+	const objectsModel$ = objectAction$
+		.startWith({ sound_objects: [], max_id: 0, soundObjects: d3.map() })
+		.scan(apply)
+		.shareReplay(1);
+		
+	const sound_objects$ = objectsModel$.pluck('sound_objects');
+		
+	const selected$ = objectsModel$.pluck('selectedObject');
+	
+	const main_scene_model$ = main_scene_model({ heads$, sound_objects$ });
+	const scenes = _Scenes({ main_scene_model$ });
+	const render_sets$ = stream
+		.of([
+			{
+				render_id: 'main',
+				scene_id: 'main',
+				camera_id: 'main'
+			}
+		]);
+	const render_function$ = renderFunction({
+		renderers,
+		scenes,
+		cameras,
+		render_sets$
+	});
+	const dom_state_reducer$ = _DOM({ main_size$, renderers });
+	// const audio_graph_model$ = _Audio({ main_scene_model$, heads$ });
+	
+	render_function$.subscribe(fn => fn());
+
+  makeD3DomDriver('#app')(dom_state_reducer$);
+	
+	return {
+		// dom: dom_state_reducer$,
+		// render: render_function$,
+		// audioGraph: audio_graph_model$
+	};
+}
+
+main();
+
+// Cycle.run(main, {
+// 	dom: makeD3DomDriver('#app'),
+// 	audioGraph: source$ => source$.subscribe(),
+// 	render: source$ => source$.subscribe(fn => fn())
+// });
+
+function fakeAdd() {
+  return stream
 		.timer(500)
 		.map(() => ({
 			type: 'add-object',
 			position: new THREE.Vector3(1, 1, 1)
 		}));
-		
-	const action$ = stream
-		.merge(
-			add$
-		);
-		
-	const tweenVolumeSubject = new Rx.ReplaySubject(1);
-	const eventSubject = new Rx.ReplaySubject(1);
-		
-	const tweenObjectVolume$ = tweenVolumeSubject
-		.flatMap(({ destination, key }) => {
-			return d3TweenStream(100)
-				.scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
-				.map(({ t, dt }) => state => {
-					const object = state.soundObjects.get(key);
-					const { volume } = object;
-					const current = volume;
-					let speed = (1-t) === 0 ? 0 : (destination - current)/(1 - t);
-          let step = current + dt * speed;
-          let next = t === 1 || step > destination ? destination : step;
-          object.volume = next;
-					return state;
-				});
+}
+
+function deleteObject({ action$ }) {
+  return action$
+		.filter(({ type }) => type === 'delete-object')
+		.do(log)
+		.map(({ key }) => state => {
+			const predicate = d => d.key === key;
+			const index = _.findIndex(state.sound_objects, predicate);
+			state.sound_objects.splice(index, 1);
+			return state;
 		});
-		
-	const addingEvents$ = action$
+}
+
+function addObject({ action$, eventSubject }) {
+	return action$
 		.filter(({ type }) => type === 'add-object')
-		.flatMap(({ position }) => {
-			return stream.from([
-				{ type: 'insert-object', position },
-				{ type: 'select-last-added' },
-				{ type: 'tween-last-added' }
-			]);
-		});
-		
-	const selectLast$ = addingEvents$
-		.filter(({ type }) => type === 'select-last-added')
-		.map(() => state => {
-			const event = {
-				type: 'select-object',
-				key: state.lastAdded.key
-			};
-			eventSubject.onNext(event);
-			return state;
-		});
-		
-	const tweenLast$ = addingEvents$
-		.filter(({ type }) => type === 'tween-last-added')
-		.map(() => state => {
-			const event = {
-				type: 'tween-object-volume',
-				key: state.lastAdded.key,
-				destination: 1
-			};
-			tweenVolumeSubject.onNext(event);
-			return state;
-		});
-	
-	const add_object$ = addingEvents$
-		.filter(({ type }) => type === 'insert-object')
 		.map(({ position }) => state => {
 			state.max_id = d3.max(state.sound_objects, d => d.key) || 0;
 			const newObjectKey = state.max_id + 1;
@@ -107,64 +133,40 @@ function main(sources) {
 			state.soundObjects.set(newObjectKey, new_object);
 			state.sound_objects = state.sound_objects.concat(new_object);
 			state.lastAdded = new_object;
+			const tweenEvent = {
+				type: 'tween-object-volume',
+				key: state.lastAdded.key,
+				destination: 1
+			};
+			eventSubject.onNext(tweenEvent);
+			const selectEvent = {
+				type: 'select-object',
+				key: state.lastAdded.key
+			};
+			eventSubject.onNext(selectEvent);
+			state.selected = new_object;
 			return state;
 		});
-		
-	const delete_object$ = action$
-		.filter(({ type }) => type === 'delete-object')
-		.do(log)
-		.map(({ key }) => state => {
-			const predicate = d => d.key === key;
-			const index = _.findIndex(state.sound_objects, predicate);
-			state.sound_objects.splice(index, 1);
-			return state;
-		});
-		
-	const objectAction$ = stream
-		.merge(
-			add_object$,
-			tweenLast$,
-			tweenObjectVolume$,
-			delete_object$
-		);
-
-	const headObject$ = getHeadObject();
-	const windowSize = stream.fromEvent(window, 'resize');
-	const main_size$ = mainSize(windowSize);
-	const renderers = _Renderers({ main_size$ });
-	const cameras = _Cameras({ main_size$ });
-	const heads$ = heads({ headObject$ });
-	
-	const main_scene_model$ = main_scene_model({ heads$, action$, objectAction$ });
-	const scenes = _Scenes({ main_scene_model$ });
-	const render_sets$ = stream
-		.of([
-			{
-				render_id: 'main',
-				scene_id: 'main',
-				camera_id: 'main'
-			}
-		]);
-	const render_function$ = renderFunction({
-		renderers,
-		scenes,
-		cameras,
-		render_sets$
-	});
-	const dom_state_reducer$ = _DOM({ main_size$, renderers });
-	// const audio_graph_model$ = _Audio({ main_scene_model$, heads$ });
-	return {
-		dom: dom_state_reducer$,
-		render: render_function$,
-		// audioGraph: audio_graph_model$
-	};
 }
 
-Cycle.run(main, {
-	dom: makeD3DomDriver('#app'),
-	audioGraph: source$ => source$.subscribe(),
-	render: source$ => source$.subscribe(fn => fn())
-});
+function tweenObjectVolume({ action$ }) {
+	return action$
+		.filter(({ type }) => type === 'tween-object-volume')
+		.flatMap(({ destination, key }) => {
+			return d3TweenStream(100)
+				.scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
+				.map(({ t, dt }) => state => {
+					const object = state.soundObjects.get(key);
+					const { volume } = object;
+					const current = volume;
+					let speed = (1-t) === 0 ? 0 : (destination - current)/(1 - t);
+          let step = current + dt * speed;
+          let next = t === 1 || step > destination ? destination : step;
+          object.volume = next;
+					return state;
+				});
+		});
+}
 
 function heads({ headObject$ }) {
 	const heads$ = headObject$
@@ -188,13 +190,7 @@ function heads({ headObject$ }) {
 	return heads$;
 }
 
-function main_scene_model({ heads$, action$, objectAction$ }) {
-	
-	const sound_objects$ = objectAction$
-		.startWith({ sound_objects: [], max_id: 0, soundObjects: d3.map() })
-		.scan(apply)
-		.pluck('sound_objects');
-		
+function main_scene_model({ heads$, sound_objects$ }) {
 	const main_scene_model$ = combineLatestObj
 		({
 			sound_objects$: sound_objects$.startWith([]),
@@ -205,9 +201,7 @@ function main_scene_model({ heads$, action$, objectAction$ }) {
 			floors: Array(1),
 			sound_objects,
 			heads
-		}))
-		.shareReplay(1);
-		
+		}));
 	return main_scene_model$;
 }
 
