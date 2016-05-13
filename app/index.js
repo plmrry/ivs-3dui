@@ -27,6 +27,7 @@ import log from './utilities/log.js';
 import apply from './utilities/apply.js';
 // import Selectable from './utilities/selectable.js';
 
+selectableTHREEJS(THREE);
 debug.enable('*');
 
 Rx.config.longStackSupport = true;
@@ -48,28 +49,7 @@ function main() {
 			actionSubject
 		);
 
-	const addObjectAction$ = action$
-		.filter(action => action.type === 'add-object')
-		.map(({ object: { key, position } }) => scene => {
-			const geometry = new THREE.SphereGeometry(0.1, 30, 30);
-			const material = new THREE.MeshPhongMaterial({
-				color: new THREE.Color(0, 0, 0),
-				transparent: true,
-				opacity: 0.3,
-				side: THREE.DoubleSide
-			});
-			const newObject = new THREE.Mesh(geometry, material);
-			newObject.castShadow = true;
-			newObject.receiveShadow = true;
-			newObject.name = `object-${key}`;
-			// newObject.renderOrder = 10;
-			const parent = new THREE.Object3D();
-			parent.name = `object-parent-${key}`;
-			parent.position.copy(position);
-			parent.add(newObject);
-			scene.add(parent);
-			return scene;
-		});
+	const tweenObjectVolume$ = tweenObjectVolume({ action$ });
 
 	const requestObjectAction$ = key$
 		.filter(code => code === 'O')
@@ -84,36 +64,34 @@ function main() {
 			const key = model.maxId + 1;
 			const newObject = {
 				position,
-				key
+				key,
+				volume: 0.1
 			};
-			actionSubject.onNext({
-				type: 'add-object',
-				object: newObject
-			});
-			// actionSubject.onNext({
-			// 	type: 'move-object',
-			// 	position,
-			// 	name: `object-${key}`
-			// });
+
 			model.objects.set(key, newObject);
 			model.selected = newObject;
+			actionSubject.onNext({
+				type: 'tween-object-volume',
+				key,
+				destination: 1
+			});
+			actionSubject.onNext({
+				type: 'select-object',
+				key
+			});
 			return model;
 		});
 
 	const modelUpdate$ = stream
 		.merge(
-			requestObjectAction$
+			requestObjectAction$,
+			tweenObjectVolume$
 		);
 
 	const model$ = stream
 		.just({ objects: d3.map() })
 		.concat(modelUpdate$)
-		.scan(apply)
-		.subscribe(log);
-
-	// const insertObject$ = addObjectAction$
-	// 	.map()
-		// .subscribe(log);
+		.scan(apply);
 
 	const updateRendererSize$ = windowSize$
 		.map(size => renderer => {
@@ -164,11 +142,81 @@ function main() {
 			return scene;
 		});
 
+	const enterExitObjects$ = model$
+		.map(({ objects }) => objects.values())
+		.map(objects => scene => {
+			const sceneSelection = d3.select(scene);
+
+			const join = sceneSelection
+				.selectAll()
+				.filter(function(d) {
+					if (typeof d === 'undefined') return false;
+					return d.type === 'object-parent';
+				})
+				.data(objects, d => d.key);
+
+			const exit = join
+				.exit()
+				.remove();
+
+			const enter = join
+				.enter()
+				.append(getNewObjectParent)
+				.each(d => d.type = 'object-parent');
+
+			enter
+				.merge(join)
+				.select(function() {
+					return this.getObjectByProperty('_type', 'object');
+				})
+				.each(function({ volume }) {
+					const params = this.geometry.parameters;
+					if (! _.isMatch(params, { radius: volume })) {
+						debug('reducer:sound-object')('set radius', volume);
+						Object.assign(params, { radius: volume });
+						const newGeom = new THREE.SphereGeometry(
+							params.radius,
+							params.widthSegments,
+							params.heightSegments
+						);
+						this.geometry.dispose();
+						this.geometry = newGeom;
+					}
+				});
+
+			return scene;
+		});
+
+	function getNewObjectParent({ position, key }) {
+		const geometry = new THREE.SphereGeometry(0.1, 30, 30);
+		const material = new THREE.MeshPhongMaterial({
+			color: new THREE.Color(0, 0, 0),
+			transparent: true,
+			opacity: 0.3,
+			side: THREE.DoubleSide
+		});
+		const newObject = new THREE.Mesh(geometry, material);
+		newObject.castShadow = true;
+		newObject.receiveShadow = true;
+		newObject.name = `object-${key}`;
+		/** FIXME: Custom property. Is this a good idea? Probably not */
+		/** But how else can we select children by type? */
+		newObject._type = 'object';
+		const parent = new THREE.Object3D();
+		parent.name = `object-parent-${key}`;
+		parent.position.copy(position);
+		parent.add(newObject);
+		// parent.type = 'object-parent';
+		// parent.key = key;
+		return parent;
+	}
+
 	const sceneUpdate$ = stream
 		.merge(
 			addLights$,
 			addFloor$,
-			addObjectAction$
+			enterExitObjects$
+			// addObjectAction$
 		);
 
 	const mainScene$ = stream
@@ -289,6 +337,41 @@ function main() {
 		.concat(domUpdate$)
 		.scan(apply)
 		.subscribe();
+}
+
+function tweenObjectVolume({ action$ }) {
+	return action$
+		.filter(({ type }) => type === 'tween-object-volume')
+		.flatMap(({ destination, key }) => {
+			return d3TweenStream(100)
+				.scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
+				.map(({ t, dt }) => model => {
+					const object = model.objects.get(key);
+					const { volume } = object;
+					const current = volume;
+					let speed = (1-t) === 0 ? 0 : (destination - current)/(1 - t);
+          let step = current + dt * speed;
+          let next = t === 1 || step > destination ? destination : step;
+          object.volume = next;
+					return model;
+				});
+		});
+}
+
+function d3TweenStream(duration, name) {
+  return stream.create(function(observer) {
+    return d3.transition()
+      .duration(duration)
+      .ease(d3.easeLinear)
+      .tween(name, function() {
+        return function(t) {
+          return observer.onNext(t);
+        };
+      })
+      .on("end", function() {
+        return observer.onCompleted();
+      });
+  });
 }
 
 function windowSize() {
@@ -474,4 +557,23 @@ function getControlsData() {
 			}
 		}
 	];
+}
+
+function selectableTHREEJS(THREE) {
+	THREE.Object3D.prototype.appendChild = function (c) {
+		this.add(c);
+		return c;
+	};
+
+	THREE.Object3D.prototype.insertBefore = THREE.Object3D.prototype.appendChild;
+
+	THREE.Object3D.prototype.querySelector = function(query) {
+		let key = Object.keys(query)[0];
+		return this.getObjectByProperty(key, query[key]);
+	};
+
+	THREE.Object3D.prototype.querySelectorAll = function (query) {
+		if (typeof query === 'undefined') return this.children;
+		return this.children.filter(d => _.isMatch(d, query));
+	};
 }
