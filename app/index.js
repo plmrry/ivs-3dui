@@ -1,7 +1,7 @@
 /* jshint esversion: 6 */
 /* jshint unused: true */
 /* jshint undef: true */
-/* global window, console */
+/* global window, console, document */
 
 import debug from 'debug';
 import Rx, { Observable as stream } from 'rx';
@@ -35,6 +35,85 @@ main();
 
 function main() {
 	const windowSize$ = windowSize();
+
+	const key$ = stream
+		.fromEvent(document, 'keydown')
+		.pluck('code')
+		.map(code => code.replace('Key', ''));
+
+	const actionSubject = new Rx.ReplaySubject(1);
+
+	const action$ = stream
+		.merge(
+			actionSubject
+		);
+
+	const addObjectAction$ = action$
+		.filter(action => action.type === 'add-object')
+		.map(({ object: { key, position } }) => scene => {
+			const geometry = new THREE.SphereGeometry(0.1, 30, 30);
+			const material = new THREE.MeshPhongMaterial({
+				color: new THREE.Color(0, 0, 0),
+				transparent: true,
+				opacity: 0.3,
+				side: THREE.DoubleSide
+			});
+			const newObject = new THREE.Mesh(geometry, material);
+			newObject.castShadow = true;
+			newObject.receiveShadow = true;
+			newObject.name = `object-${key}`;
+			// newObject.renderOrder = 10;
+			const parent = new THREE.Object3D();
+			parent.name = `object-parent-${key}`;
+			parent.position.copy(position);
+			parent.add(newObject);
+			scene.add(parent);
+			return scene;
+		});
+
+	const requestObjectAction$ = key$
+		.filter(code => code === 'O')
+		.map(() => new THREE.Vector3(
+			Math.random() * 10 - 5,
+			1.5,
+			Math.random() * 10 - 5
+		))
+		.map(position => model => {
+			const { objects } = model;
+			model.maxId = d3.max(objects.values(), d => d.key) || 0;
+			const key = model.maxId + 1;
+			const newObject = {
+				position,
+				key
+			};
+			actionSubject.onNext({
+				type: 'add-object',
+				object: newObject
+			});
+			// actionSubject.onNext({
+			// 	type: 'move-object',
+			// 	position,
+			// 	name: `object-${key}`
+			// });
+			model.objects.set(key, newObject);
+			model.selected = newObject;
+			return model;
+		});
+
+	const modelUpdate$ = stream
+		.merge(
+			requestObjectAction$
+		);
+
+	const model$ = stream
+		.just({ objects: d3.map() })
+		.concat(modelUpdate$)
+		.scan(apply)
+		.subscribe(log);
+
+	// const insertObject$ = addObjectAction$
+	// 	.map()
+		// .subscribe(log);
 
 	const updateRendererSize$ = windowSize$
 		.map(size => renderer => {
@@ -88,7 +167,8 @@ function main() {
 	const sceneUpdate$ = stream
 		.merge(
 			addLights$,
-			addFloor$
+			addFloor$,
+			addObjectAction$
 		);
 
 	const mainScene$ = stream
