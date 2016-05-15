@@ -103,10 +103,30 @@ function main() {
 		.shareReplay(1);
 		/** NOTE: shareReplay */
 
-	const selected$ = model$
+	const editorDom$ = model$
 		.pluck('selected')
 		.distinctUntilChanged()
-		.subscribe(log);
+		.map(selected => {
+			if (typeof selected === 'undefined') return { cards: [] };
+			const { key } = selected;
+			if (selected.type === 'object-parent') {
+				return {
+					cards: [
+						{
+							id: 'selected-info-card',
+							card_blocks: [
+								{
+									id: 'object-info-card-block',
+									header: `Object ${key}`
+								}
+							]
+						}
+					]
+				};
+			}
+			debugger;
+		});
+		// .subscribe(log);
 
 	const updateRendererSize$ = windowSize$
 		.map(size => renderer => {
@@ -128,6 +148,62 @@ function main() {
 		.just(getFirstRenderer())
 		.concat(rendererUpdate$)
 		.scan(apply);
+
+	const setEditorDom$ = editorDom$
+		.map(model => dom => {
+			// const join = dom
+			// 	.select('#scene-controls')
+			// 	.selectAll('.card')
+			// 	.data(model.cards, d => d.key);
+			// join
+			// 	.exit()
+			// 	.remove();
+			// join
+			// 	.enter()
+			// 	.append('div')
+			// 	.classed('card', true);
+			const cards = joinEditorCards(model.cards, dom);
+			const cardBlocks = joinCardBlocks(cards);
+			return dom;
+		});
+
+	function joinCardBlocks(editor_cards) {
+		const join = editor_cards
+			.selectAll('.card-block')
+			.data(d => d.card_blocks || [], d => d.id);
+		join
+			.exit()
+			.remove();
+		const enter = join
+			.enter()
+			.append('div')
+			.classed('card-block', true);
+		enter
+			.append('h6')
+			.classed('card-title', true);
+		const cardBlocks = enter
+			.merge(join);
+		cardBlocks
+			.select('.card-title')
+			.attr('id', d => d.id)
+			.text(d => d.header);
+		return cardBlocks;
+	}
+
+	function joinEditorCards(cards, dom) {
+		const join = dom
+			.select('#scene-controls')
+			.selectAll('.card')
+			.data(cards, d => d.key);
+		join
+			.exit()
+			.remove();
+		const enter = join
+			.enter()
+			.append('div')
+			.classed('card', true);
+		return enter.merge(join);
+	}
 
 	const setMainCanvas$ = mainRenderer$
 		.first()
@@ -191,7 +267,7 @@ function main() {
 				.filter(function(d) {
 					return d.type === 'object';
 				})
-				.data(d => d.children);
+				.data(d => d.children, d => d.key);
 
 			const enter = join
 				.enter()
@@ -349,7 +425,8 @@ function main() {
 
 	const domUpdate$ = stream
 		.merge(
-			setMainCanvas$
+			setMainCanvas$,
+			setEditorDom$
 		);
 
 	const dom$ = stream
@@ -532,6 +609,7 @@ function addObjectButton(controls_enter) {
 }
 
 function getControlsData() {
+	const SCENE_CONTROLS_WIDTH = '30vw';
 	return [
 		{
 			id: 'file-controls',
@@ -548,7 +626,8 @@ function getControlsData() {
 			class: 'container',
 			styles: {
 				right: 0,
-				top: 0
+				top: 0,
+				width: SCENE_CONTROLS_WIDTH
 			}
 		},
 		{
