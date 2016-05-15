@@ -28,7 +28,7 @@ import apply from './utilities/apply.js';
 // import Selectable from './utilities/selectable.js';
 
 selectableTHREEJS(THREE);
-debug.enable('*');
+debug.enable('*,-reducer:*');
 
 Rx.config.longStackSupport = true;
 
@@ -65,9 +65,17 @@ function main() {
 			const newObject = {
 				position,
 				key,
-				volume: 0.1
+				type: 'object-parent',
+				children: [
+					{
+						type: 'object',
+						key,
+						volume: 0.1,
+						name: `object-${key}`
+					}
+				]
 			};
-
+			newObject.childObject = newObject.children[0];
 			model.objects.set(key, newObject);
 			model.selected = newObject;
 			actionSubject.onNext({
@@ -91,7 +99,14 @@ function main() {
 	const model$ = stream
 		.just({ objects: d3.map() })
 		.concat(modelUpdate$)
-		.scan(apply);
+		.scan(apply)
+		.shareReplay(1);
+		/** NOTE: shareReplay */
+
+	const selected$ = model$
+		.pluck('selected')
+		.distinctUntilChanged()
+		.subscribe(log);
 
 	const updateRendererSize$ = windowSize$
 		.map(size => renderer => {
@@ -142,36 +157,66 @@ function main() {
 			return scene;
 		});
 
+	function joinObjectParents({ objects, sceneSelection }) {
+		const join = sceneSelection
+			.selectAll()
+			.filter(function(d) {
+				if (typeof d === 'undefined') return false;
+				return d.type === 'object-parent';
+			})
+			.data(objects, d => d.key);
+		const exit = join
+			.exit()
+			.remove();
+		const enter = join
+			.enter()
+			.append(() => new THREE.Object3D());
+		const parents = enter
+			.merge(join)
+			.each(function(d) {
+				this.position.copy(d.position);
+			});
+		return parents;
+	}
+
 	const enterExitObjects$ = model$
 		.map(({ objects }) => objects.values())
 		.map(objects => scene => {
 			const sceneSelection = d3.select(scene);
 
-			const join = sceneSelection
+			const parents = joinObjectParents({ objects, sceneSelection });
+
+			const join = parents
 				.selectAll()
 				.filter(function(d) {
-					if (typeof d === 'undefined') return false;
-					return d.type === 'object-parent';
+					return d.type === 'object';
 				})
-				.data(objects, d => d.key);
-
-			const exit = join
-				.exit()
-				.remove();
+				.data(d => d.children);
 
 			const enter = join
 				.enter()
-				.append(getNewObjectParent)
-				.each(d => d.type = 'object-parent');
+				.append(function(d) {
+					const geometry = new THREE.SphereGeometry(0.1, 30, 30);
+					const material = new THREE.MeshPhongMaterial({
+						color: new THREE.Color(0, 0, 0),
+						transparent: true,
+						opacity: 0.3,
+						side: THREE.DoubleSide
+					});
+					const newObject = new THREE.Mesh(geometry, material);
+					newObject.castShadow = true;
+					newObject.receiveShadow = true;
+					return newObject;
+				});
 
 			enter
 				.merge(join)
-				.select(function() {
-					return this.getObjectByProperty('_type', 'object');
-				})
-				.each(function({ volume }) {
-					const params = this.geometry.parameters;
+				.each(function(d) {
+					const { volume } = d;
+					const object = this;
+					const params = object.geometry.parameters;
 					if (! _.isMatch(params, { radius: volume })) {
+						object.geometry.dispose();
 						debug('reducer:sound-object')('set radius', volume);
 						Object.assign(params, { radius: volume });
 						const newGeom = new THREE.SphereGeometry(
@@ -179,33 +224,35 @@ function main() {
 							params.widthSegments,
 							params.heightSegments
 						);
-						this.geometry.dispose();
-						this.geometry = newGeom;
+						object.geometry = newGeom;
 					}
 				});
 
 			return scene;
 		});
 
-	function getNewObjectParent({ position, key }) {
-		const geometry = new THREE.SphereGeometry(0.1, 30, 30);
-		const material = new THREE.MeshPhongMaterial({
-			color: new THREE.Color(0, 0, 0),
-			transparent: true,
-			opacity: 0.3,
-			side: THREE.DoubleSide
-		});
-		const newObject = new THREE.Mesh(geometry, material);
-		newObject.castShadow = true;
-		newObject.receiveShadow = true;
-		newObject.name = `object-${key}`;
-		/** FIXME: Custom property. Is this a good idea? Probably not */
-		/** But how else can we select children by type? */
-		newObject._type = 'object';
+	function getNewObjectParent(d) {
+		const { position, key } = d;
+		// const geometry = new THREE.SphereGeometry(0.1, 30, 30);
+		// const material = new THREE.MeshPhongMaterial({
+		// 	color: new THREE.Color(0, 0, 0),
+		// 	transparent: true,
+		// 	opacity: 0.3,
+		// 	side: THREE.DoubleSide
+		// });
+		// const newObject = new THREE.Mesh(geometry, material);
+		// newObject.castShadow = true;
+		// newObject.receiveShadow = true;
+		// d3.select(newObject)
+		// 	.datum(d.children[0])
+		// 	.property('name', d => d.name);
+		// /** FIXME: Custom property. Is this a good idea? Probably not */
+		// /** But how else can we select children by type? */
+		// newObject._type = 'object';
 		const parent = new THREE.Object3D();
-		parent.name = `object-parent-${key}`;
-		parent.position.copy(position);
-		parent.add(newObject);
+		// parent.name = `object-parent-${key}`;
+		// parent.position.copy(position);
+		// parent.add(newObject);
 		// parent.type = 'object-parent';
 		// parent.key = key;
 		return parent;
@@ -346,7 +393,7 @@ function tweenObjectVolume({ action$ }) {
 			return d3TweenStream(100)
 				.scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
 				.map(({ t, dt }) => model => {
-					const object = model.objects.get(key);
+					const object = model.objects.get(key).children[0];
 					const { volume } = object;
 					const current = volume;
 					let speed = (1-t) === 0 ? 0 : (destination - current)/(1 - t);
