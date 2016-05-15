@@ -1,7 +1,7 @@
 /* jshint esversion: 6 */
 /* jshint unused: true */
 /* jshint undef: true */
-/* global window, console, document */
+/* global window, document */
 
 import debug from 'debug';
 import Rx, { Observable as stream } from 'rx';
@@ -195,7 +195,7 @@ function main() {
 
 			const enter = join
 				.enter()
-				.append(function(d) {
+				.append(function() {
 					const geometry = new THREE.SphereGeometry(0.1, 30, 30);
 					const material = new THREE.MeshPhongMaterial({
 						color: new THREE.Color(0, 0, 0),
@@ -230,33 +230,6 @@ function main() {
 
 			return scene;
 		});
-
-	function getNewObjectParent(d) {
-		const { position, key } = d;
-		// const geometry = new THREE.SphereGeometry(0.1, 30, 30);
-		// const material = new THREE.MeshPhongMaterial({
-		// 	color: new THREE.Color(0, 0, 0),
-		// 	transparent: true,
-		// 	opacity: 0.3,
-		// 	side: THREE.DoubleSide
-		// });
-		// const newObject = new THREE.Mesh(geometry, material);
-		// newObject.castShadow = true;
-		// newObject.receiveShadow = true;
-		// d3.select(newObject)
-		// 	.datum(d.children[0])
-		// 	.property('name', d => d.name);
-		// /** FIXME: Custom property. Is this a good idea? Probably not */
-		// /** But how else can we select children by type? */
-		// newObject._type = 'object';
-		const parent = new THREE.Object3D();
-		// parent.name = `object-parent-${key}`;
-		// parent.position.copy(position);
-		// parent.add(newObject);
-		// parent.type = 'object-parent';
-		// parent.key = key;
-		return parent;
-	}
 
 	const sceneUpdate$ = stream
 		.merge(
@@ -447,13 +420,6 @@ function getSpotlight() {
 	spotLight.intensity = 1;
 	spotLight.exponent = 1;
 	return spotLight;
-}
-
-function getCube() {
-	var geometry = new THREE.BoxGeometry( 10, 10, 10 );
-	var material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } );
-	var cube = new THREE.Mesh( geometry, material );
-	return cube;
 }
 
 function getFloor(room_size) {
