@@ -1,6 +1,7 @@
 /* jshint esversion: 6 */
 /* jshint unused: true */
 /* jshint undef: true */
+/* jshint -W087 */
 /* global window, document */
 
 import debug from 'debug';
@@ -105,11 +106,12 @@ function main() {
 
 	const editorDom$ = model$
 		.pluck('selected')
-		.distinctUntilChanged()
+		// .distinctUntilChanged()
 		.map(selected => {
 			if (typeof selected === 'undefined') return { cards: [] };
 			const { key } = selected;
 			if (selected.type === 'object-parent') {
+				const object = selected.childObject;
 				return {
 					cards: [
 						{
@@ -117,7 +119,8 @@ function main() {
 							card_blocks: [
 								{
 									id: 'object-info-card-block',
-									header: `Object ${key}`
+									header: `Object ${key}`,
+									rows: getObjectInfoRows(object)
 								}
 							]
 						}
@@ -127,6 +130,56 @@ function main() {
 			debugger;
 		});
 		// .subscribe(log);
+
+		function getObjectInfoRows(object) {
+			return [
+				{
+					columns: [
+						{
+							class: 'col-xs-3',
+							span_class: 'key',
+							text: 'File'
+						},
+						{
+							class: 'col-xs-3',
+							span_class: 'value set-object-file',
+							span_styles: {
+								cursor: 'pointer'
+							},
+							text: object.file || 'None',
+							id: 'set-object-file'
+						},
+						{
+							class: 'col-xs-3',
+							span_class: 'key',
+							text: 'Volume'
+						},
+						{
+							class: 'col-xs-3',
+							span_class: 'value set-object-volume',
+							span_styles: {
+								cursor: 'pointer'
+							},
+							text: `${d3.format(".1f")(object.volume)} dB` || '0 dB',
+							id: 'set-object-volume'
+						}
+					]
+				},
+				{
+					columns: [
+						{
+							class: 'col-xs-6',
+							span_class: 'value delete-object',
+							span_styles: {
+								cursor: 'pointer'
+							},
+							text: 'Delete',
+							id: 'delete-object'
+						}
+					]
+				}
+			];
+		}
 
 	const updateRendererSize$ = windowSize$
 		.map(size => renderer => {
@@ -164,8 +217,42 @@ function main() {
 			// 	.classed('card', true);
 			const cards = joinEditorCards(model.cards, dom);
 			const cardBlocks = joinCardBlocks(cards);
+			joinInfoRowsCols(cardBlocks);
+
+				// .merge(card_blocks_rows_join);
 			return dom;
 		});
+
+	function joinInfoRowsCols(cardBlocks) {
+		const rowsJoin = cardBlocks
+			.selectAll('.row')
+			.data(d => d.rows || []); /** NOTE: Rows don't have a key */
+		const rowsEnter = rowsJoin
+			.enter()
+			.append('div')
+			.classed('row parameter', true);
+		const rows = rowsJoin.merge(rowsEnter);
+		const colsJoin = rows
+			.selectAll('.column')
+			.data(d => d.columns || []);
+		const colsEnter = colsJoin
+			.enter()
+			.append('div')
+			.attr('class', d => d.class)
+			.classed('column', true)
+			.attr('id', d => d.id);
+		colsEnter
+			.append('span')
+			.attr('class', d => d.span_class)
+			.each(function(d) {
+				d3.select(this)
+					.styles(d.span_styles);
+			});
+		colsEnter
+			.merge(colsJoin)
+			.select('span')
+			.text(d => d.text);
+	}
 
 	function joinCardBlocks(editor_cards) {
 		const join = editor_cards
@@ -440,7 +527,7 @@ function tweenObjectVolume({ action$ }) {
 	return action$
 		.filter(({ type }) => type === 'tween-object-volume')
 		.flatMap(({ destination, key }) => {
-			return d3TweenStream(100)
+			return d3TweenStream(1000)
 				.scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
 				.map(({ t, dt }) => model => {
 					const object = model.objects.get(key).children[0];
@@ -609,7 +696,7 @@ function addObjectButton(controls_enter) {
 }
 
 function getControlsData() {
-	const SCENE_CONTROLS_WIDTH = '30vw';
+	const SCENE_CONTROLS_WIDTH = '40vw';
 	return [
 		{
 			id: 'file-controls',
