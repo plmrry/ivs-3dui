@@ -52,7 +52,7 @@ function main() {
 	
 	const updateSelectedObjectVolume$ = updateSelectedObjectVolume({ action$ });
 
-	const requestObjectAction$ = key$
+	const newObjectAction$ = key$
 		.filter(code => code === 'O')
 		.map(() => new THREE.Vector3(
 			Math.random() * 10 - 5,
@@ -91,12 +91,17 @@ function main() {
 		// 	});
 			return model;
 		});
+		
+	const updateParentObjectPosition$ = action$
+	  .filter(d => d.actionType === 'update-selected-parent-object-position')
+	  .pluck('updateFunc')
 
 	const modelUpdate$ = stream
 		.merge(
-			requestObjectAction$,
+			newObjectAction$,
 			tweenObjectVolume$,
-			updateSelectedObjectVolume$
+			updateSelectedObjectVolume$,
+			updateParentObjectPosition$
 		);
 
 	const model$ = stream
@@ -113,7 +118,8 @@ function main() {
 			if (typeof selected === 'undefined') return { cards: [] };
 			const { key } = selected;
 			if (selected.type === 'object-parent') {
-				const object = selected.childObject;
+			  const parent = selected;
+				// const object = selected.childObject;
 				return {
 					cards: [
 						{
@@ -122,7 +128,7 @@ function main() {
 								{
 									id: 'object-info-card-block',
 									header: `Object ${key}`,
-									rows: getObjectInfoRows(object)
+									rows: getObjectInfoRows(parent)
 								}
 							]
 						}
@@ -163,7 +169,7 @@ function main() {
 								cursor: 'ew-resize'
 							},
 							object,
-							text: `${d3.format(".1f")(object.volume)} dB` || '0 dB',
+							text: `${d3.format(".1f")(object.childObject.volume)} dB` || '0 dB',
 							id: 'set-object-volume',
 							registerAction: function({ node, datum, actionSubject }) {
 							  const dragHandler = d3.drag();
@@ -182,9 +188,25 @@ function main() {
   							  .pairwise()
   							  .map(arr => ({
   							    key: arr[0].datum.object.key,
-  							    dx: arr.map(d => d.event.x).reduce((a,b) => b-a),
-  							    actionType: 'update-selected-object-volume'
+  							    dx: arr.map(d => d.event.x).reduce((a,b) => b-a)
+  							   // actionType: 'update-selected-object-volume'
   							  }))
+  							  .map(({ key, dx }) => model => {
+                    const object = model.selected;
+                    if (object.type === 'object-parent') {
+                      const child = object.childObject;
+                      const newVolume = child.volume + dx * 0.01;
+                      const MAX_VOLUME = 1;
+                      const MIN_VOLUME = 0.1;
+                      if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
+                        child.volume = newVolume;
+                    }
+                    return model;
+                  })
+                  .map(updateFunc => ({
+                    actionType: 'update-selected-object-volume',
+                    updateFunc
+                  }))
   							 .subscribe(actionSubject);
                   
 							  d3.select(node).call(dragHandler);
@@ -192,7 +214,67 @@ function main() {
 						}
 					]
 				},
-				{
+				{ /** New row */
+					columns: [
+						{
+							class: 'col-xs-3',
+							span_class: 'key',
+							text: 'x'
+						},
+						{
+						  object,
+							class: 'col-xs-3',
+							span_class: 'value set-object-x',
+							span_styles: {
+								cursor: 'ew-resize'
+							},
+							text: d3.format(".1f")(object.position.x),
+							id: 'set-object-x',
+							registerAction: function({ node, datum, actionSubject }) {
+							  const dragHandler = d3.drag();
+							  
+							  stream
+  							  .create(observer => {
+  							    dragHandler
+    							    .on('drag', function(d) {
+    							      observer.onNext({
+    							        datum: d,
+    							        node: this,
+    							        event: d3.event
+    							      });
+                      });
+  							  })
+  							  .pairwise()
+  							  .map(arr => ({
+  							    key: arr[0].datum.object.key,
+  							    dx: arr.map(d => d.event.x).reduce((a,b) => b-a)
+  							   // actionType: 'update-selected-parent-object-position'
+  							  }))
+  							  .map(({ key, dx }) => model => {
+                    const object = model.selected;
+                    if (object.type === 'object-parent') {
+                      // const child = object.childObject;
+                      // const newX = child.position.x + dx * 0.01;
+                      object.position.x += dx * 0.01;
+                      // const MAX_VOLUME = 1;
+                      // const MIN_VOLUME = 0.1;
+                      // if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
+                      //   child.volume = newVolume;
+                    }
+                    return model;
+                  })
+                  .map(updateFunc => ({
+                    actionType: 'update-selected-parent-object-position',
+                    updateFunc
+                  }))
+  							 .subscribe(actionSubject);
+                  
+							  d3.select(node).call(dragHandler);
+							}
+						}
+					]
+				},
+				{ /** New row */
 					columns: [
 						{
 							class: 'col-xs-6',
@@ -590,18 +672,19 @@ function main() {
 function updateSelectedObjectVolume({ action$ }) {
   return action$
     .filter(d => d.actionType === 'update-selected-object-volume')
-    .map(({ key, dx }) => model => {
-      const object = model.selected;
-      if (object.type === 'object-parent') {
-        const child = object.childObject;
-        const newVolume = child.volume + dx * 0.01;
-        const MAX_VOLUME = 1;
-        const MIN_VOLUME = 0.1;
-        if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
-          child.volume = newVolume;
-      }
-      return model;
-    });
+    .pluck('updateFunc');
+    // .map(({ key, dx }) => model => {
+    //   const object = model.selected;
+    //   if (object.type === 'object-parent') {
+    //     const child = object.childObject;
+    //     const newVolume = child.volume + dx * 0.01;
+    //     const MAX_VOLUME = 1;
+    //     const MIN_VOLUME = 0.1;
+    //     if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
+    //       child.volume = newVolume;
+    //   }
+    //   return model;
+    // });
 }
 
 function tweenObjectVolume({ action$ }) {
