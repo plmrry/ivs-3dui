@@ -493,14 +493,12 @@ function main() {
 			object.geometry = newGeom;
 		}
 	}
-
 	const sceneUpdate$ = stream
 		.merge(
 			addLights$,
 			addFloor$,
 			enterExitObjectsUpdate$
 		);
-		
 	const mainScene$ = stream
 		.just(new THREE.Scene())
 		.concat(sceneUpdate$)
