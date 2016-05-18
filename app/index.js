@@ -41,12 +41,13 @@ function main() {
 		.map(code => code.replace('Key', ''));
 
 	const actionSubject = new Rx.ReplaySubject(1);
+  // const actionSubject = new Rx.Subject();
 
 	const action$ = stream
 		.merge(
 			actionSubject
 		)
-		.do(action => console.log(action));
+		// .do(action => console.log(action));
 
 	const tweenObjectVolume$ = tweenObjectVolume({ action$ });
 	
@@ -231,35 +232,34 @@ function main() {
 							text: d3.format(".1f")(object.position.x),
 							id: 'set-object-x',
 							registerAction: function({ node, datum, actionSubject }) {
-							  const dragHandler = d3.drag();
+							  const subject = { x: 0, y: 0 };
+							  const dragHandler = d3.drag()
+							    .subject(subject);
 							  
-							  stream
-  							  .create(observer => {
-  							    dragHandler
-    							    .on('drag', function(d) {
-    							      observer.onNext({
-    							        datum: d,
-    							        node: this,
-    							        event: d3.event
-    							      });
+                const drag$ = stream
+                  .create(observer => {
+                    dragHandler
+                      .on('drag', function(d) {
+                        subject.x = d3.event.x;
+                        observer.onNext({
+                          datum: d,
+                          node: this,
+                          event: d3.event
+                        });
                       });
-  							  })
-  							  .pairwise()
+                  })
+                  
+                drag$
+                  .pairwise()
   							  .map(arr => ({
   							    key: arr[0].datum.object.key,
   							    dx: arr.map(d => d.event.x).reduce((a,b) => b-a)
-  							   // actionType: 'update-selected-parent-object-position'
   							  }))
   							  .map(({ key, dx }) => model => {
                     const object = model.selected;
                     if (object.type === 'object-parent') {
-                      // const child = object.childObject;
-                      // const newX = child.position.x + dx * 0.01;
-                      object.position.x += dx * 0.01;
-                      // const MAX_VOLUME = 1;
-                      // const MIN_VOLUME = 0.1;
-                      // if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
-                      //   child.volume = newVolume;
+                      const delta = dx * 0.01;
+                      object.position.x += delta;
                     }
                     return model;
                   })
@@ -557,8 +557,28 @@ function main() {
 		const scene = new THREE.Scene();
 		return scene;
 	}
+	
+	const mainCamera$ = mainCamera(windowSize$);
 
-	const latitude_to_theta = d3.scaleLinear()
+	/** RENDER */
+	combineAndRender(mainRenderer$, mainScene$, mainCamera$);
+	/** DOM */
+	const domUpdate$ = stream.merge(setMainCanvas$, setEditorDom$);
+	stream
+		.just(getFirstDom())
+		.concat(domUpdate$)
+		.scan(apply)
+		.subscribe();
+}
+
+/**
+ * CAMERA
+ * 
+ * 
+ */
+ 
+function mainCamera(windowSize$) {
+  const latitude_to_theta = d3.scaleLinear()
 		.domain([90, 0, -90])
 		.range([0, Math.PI/2, Math.PI]);
 	const longitude_to_phi = d3.scaleLinear()
@@ -607,7 +627,6 @@ function main() {
 				debug('reducer:camera')('update lookAt', lookAt);
 				camera._lookAt = lookAt;
 				camera.lookAt(lookAt || new THREE.Vector3());
-				// camera.updateProjectionMatrix();
 			}
 			return camera;
 		});
@@ -645,46 +664,25 @@ function main() {
 		.just(new THREE.OrthographicCamera())
 		.concat(mainCameraUpdate$)
 		.scan(apply);
+	return mainCamera$;
+}
 
+function combineAndRender(renderer$, scene$, camera$) {
 	combineLatestObj({
-			renderer: mainRenderer$,
-			scene: mainScene$,
-			camera: mainCamera$
-		})
-		.map(({ renderer, scene, camera }) => () => {
-			renderer.render(scene, camera);
-		})
-		.subscribe(fn => fn());
-
-	const domUpdate$ = stream
-		.merge(
-			setMainCanvas$,
-			setEditorDom$
-		);
-
-	const dom$ = stream
-		.just(getFirstDom())
-		.concat(domUpdate$)
-		.scan(apply)
-		.subscribe();
+		renderer$,
+		scene$,
+		camera$
+	})
+	.map(({ renderer, scene, camera }) => () => {
+		renderer.render(scene, camera);
+	})
+	.subscribe(fn => fn());
 }
 
 function updateSelectedObjectVolume({ action$ }) {
   return action$
     .filter(d => d.actionType === 'update-selected-object-volume')
     .pluck('updateFunc');
-    // .map(({ key, dx }) => model => {
-    //   const object = model.selected;
-    //   if (object.type === 'object-parent') {
-    //     const child = object.childObject;
-    //     const newVolume = child.volume + dx * 0.01;
-    //     const MAX_VOLUME = 1;
-    //     const MIN_VOLUME = 0.1;
-    //     if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
-    //       child.volume = newVolume;
-    //   }
-    //   return model;
-    // });
 }
 
 function tweenObjectVolume({ action$ }) {
@@ -829,13 +827,6 @@ function setStyles(accessor) {
   };
 }
 
-// function setStyles({ styles }) {
-//   const s = d3.select(this);
-//   for (let key in styles) {
-//     s.style(key, styles[key]);
-//   }
-// }
-
 function addControlButtons(controls_enter) {
 	controls_enter
 		.selectAll('button')
@@ -929,3 +920,30 @@ function selectableTHREEJS(THREE) {
 		return this.children.filter(d => _.isMatch(d, query));
 	};
 }
+
+
+// .shareReplay(1);
+
+// const dragStart$ = stream
+//   .create(observer => {
+//     dragHandler
+//       .on('start', function(d) {
+//         observer.onNext({
+//           datum: d,
+//           node: this,
+//           event: d3.event
+//         });
+//       });
+//   });
+
+// const dragEnd$ = stream
+//   .create(observer => {
+//     dragHandler
+//       .on('end', function(d) {
+//         observer.onNext({
+//           datum: d,
+//           node: this,
+//           event: d3.event
+//         });
+//       });
+//   });
