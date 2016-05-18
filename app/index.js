@@ -7,10 +7,7 @@
 import debug from 'debug';
 import Rx, { Observable as stream } from 'rx';
 import combineLatestObj from 'rx-combine-latest-obj';
-import selection from 'd3-selection';
-import 'd3-selection-multi';
 import d3 from 'd3';
-Object.assign(d3, selection);
 import THREE from 'three/three.js';
 // import createVirtualAudioGraph from 'virtual-audio-graph';
 import _ from 'underscore';
@@ -30,8 +27,8 @@ import apply from './utilities/apply.js';
 
 selectableTHREEJS(THREE);
 debug.enable('*,-reducer:*');
-
 Rx.config.longStackSupport = true;
+const MIN_VOLUME = 0.1;
 
 main();
 
@@ -48,9 +45,12 @@ function main() {
 	const action$ = stream
 		.merge(
 			actionSubject
-		);
+		)
+		.do(action => console.log(action));
 
 	const tweenObjectVolume$ = tweenObjectVolume({ action$ });
+	
+	const updateSelectedObjectVolume$ = updateSelectedObjectVolume({ action$ });
 
 	const requestObjectAction$ = key$
 		.filter(code => code === 'O')
@@ -80,21 +80,23 @@ function main() {
 			model.objects.set(key, newObject);
 			model.selected = newObject;
 			actionSubject.onNext({
-				type: 'tween-object-volume',
+				actionType: 'tween-object-volume',
 				key,
-				destination: 1
+				destination: 1,
+				duration: 200
 			});
-			actionSubject.onNext({
-				type: 'select-object',
-				key
-			});
+		// 	actionSubject.onNext({
+		// 		type: 'select-object',
+		// 		key
+		// 	});
 			return model;
 		});
 
 	const modelUpdate$ = stream
 		.merge(
 			requestObjectAction$,
-			tweenObjectVolume$
+			tweenObjectVolume$,
+			updateSelectedObjectVolume$
 		);
 
 	const model$ = stream
@@ -158,10 +160,35 @@ function main() {
 							class: 'col-xs-3',
 							span_class: 'value set-object-volume',
 							span_styles: {
-								cursor: 'pointer'
+								cursor: 'ew-resize'
 							},
+							object,
 							text: `${d3.format(".1f")(object.volume)} dB` || '0 dB',
-							id: 'set-object-volume'
+							id: 'set-object-volume',
+							registerAction: function({ node, datum, actionSubject }) {
+							  const dragHandler = d3.drag();
+							  
+							  stream
+  							  .create(observer => {
+  							    dragHandler
+    							    .on('drag', function(d) {
+    							      observer.onNext({
+    							        datum: d,
+    							        node: this,
+    							        event: d3.event
+    							      });
+                      });
+  							  })
+  							  .pairwise()
+  							  .map(arr => ({
+  							    key: arr[0].datum.object.key,
+  							    dx: arr.map(d => d.event.x).reduce((a,b) => b-a),
+  							    actionType: 'update-selected-object-volume'
+  							  }))
+  							 .subscribe(actionSubject);
+                  
+							  d3.select(node).call(dragHandler);
+							}
 						}
 					]
 				},
@@ -201,23 +228,20 @@ function main() {
 		.just(getFirstRenderer())
 		.concat(rendererUpdate$)
 		.scan(apply);
+		
+// 	const editorDomActionSubject = new Rx.ReplaySubject(1);
+	
+// 	editorDomActionSubject
+// 	  .subscribe(actionSubject);
+	 // .subscribe(d => {
+	 //   console.log('editor action', d);
+	 // });
 
 	const setEditorDom$ = editorDom$
 		.map(model => dom => {
-			// const join = dom
-			// 	.select('#scene-controls')
-			// 	.selectAll('.card')
-			// 	.data(model.cards, d => d.key);
-			// join
-			// 	.exit()
-			// 	.remove();
-			// join
-			// 	.enter()
-			// 	.append('div')
-			// 	.classed('card', true);
 			const cards = joinEditorCards(model.cards, dom);
 			const cardBlocks = joinCardBlocks(cards);
-			joinInfoRowsCols(cardBlocks);
+			const columns = joinInfoRowsCols(cardBlocks);
 
 				// .merge(card_blocks_rows_join);
 			return dom;
@@ -241,17 +265,57 @@ function main() {
 			.attr('class', d => d.class)
 			.classed('column', true)
 			.attr('id', d => d.id);
+		const dragHandler = d3.drag()
+		  .container(function(d) {
+		    return this;
+		  })
+		  .subject(function(d) {
+		    return {};
+		  })
+		  .on('drag', function(d) {
+		    console.log(d3.event.x);
+		  });
 		colsEnter
 			.append('span')
 			.attr('class', d => d.span_class)
+			.each(setStyles(d => d.span_styles))
 			.each(function(d) {
-				d3.select(this)
-					.styles(d.span_styles);
+			  if (d.registerAction) d.registerAction({
+			    node: this,
+			    datum: d,
+			    actionSubject: actionSubject
+			  });
 			});
+		// 	.call(dragHandler);
+		// 	.each(function(d) {
+		
+		// 	  const dragHandler = d3.drag()
+  //   		  .container(function(d) {
+  //   		    return this;
+  //   		  })
+  //   		  .subject(function(d) {
+  //   		    return {};
+  //   		  })
+  //   		  .on('drag', function(d) {
+  //   		    console.log(d3.event.x);
+  //   		  });
+		// 	})
 		colsEnter
 			.merge(colsJoin)
 			.select('span')
 			.text(d => d.text);
+		
+		// const canvasJoin = rows.selectAll('canvas').data(Array(1));
+		  
+		// const canvasEnter = canvasJoin
+		//   .enter()
+		//   .append('canvas')
+		//   .style('border', '1px solid green')
+		//   .on('click', function(d) { console.log('click') })
+		//   .call(dragHandler);
+
+		const columns = colsEnter.merge(colsJoin);
+		return columns;
 	}
 
 	function joinCardBlocks(editor_cards) {
@@ -523,11 +587,28 @@ function main() {
 		.subscribe();
 }
 
+function updateSelectedObjectVolume({ action$ }) {
+  return action$
+    .filter(d => d.actionType === 'update-selected-object-volume')
+    .map(({ key, dx }) => model => {
+      const object = model.selected;
+      if (object.type === 'object-parent') {
+        const child = object.childObject;
+        const newVolume = child.volume + dx * 0.01;
+        const MAX_VOLUME = 1;
+        const MIN_VOLUME = 0.1;
+        if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
+          child.volume = newVolume;
+      }
+      return model;
+    });
+}
+
 function tweenObjectVolume({ action$ }) {
 	return action$
-		.filter(({ type }) => type === 'tween-object-volume')
-		.flatMap(({ destination, key }) => {
-			return d3TweenStream(1000)
+		.filter(({ actionType }) => actionType === 'tween-object-volume')
+		.flatMap(({ destination, key, duration }) => {
+			return d3TweenStream(duration)
 				.scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
 				.map(({ t, dt }) => model => {
 					const object = model.objects.get(key).children[0];
@@ -649,14 +730,28 @@ function getFirstDom() {
 		.classed('controls', true)
 		.attr('id', d => d.id)
 		.style('position', 'absolute')
-		.each(function(d) {
-			d3.select(this)
-				.styles(d.styles);
-		});
+		.each(setStyles(d => d.styles));
 	addControlButtons(controls_enter);
 	addObjectButton(controls_enter);
 	return dom;
 }
+
+function setStyles(accessor) {
+  return function(d) {
+    const s = d3.select(this);
+    const styles = accessor(d);
+    for (let key in styles) {
+      s.style(key, styles[key]);
+    }
+  };
+}
+
+// function setStyles({ styles }) {
+//   const s = d3.select(this);
+//   for (let key in styles) {
+//     s.style(key, styles[key]);
+//   }
+// }
 
 function addControlButtons(controls_enter) {
 	controls_enter
@@ -664,10 +759,8 @@ function addControlButtons(controls_enter) {
 		.data(d => d.buttons || [])
 		.enter()
 		.append('button')
-		.styles({
-			background: 'none',
-			border: 'none'
-		})
+		.style('background', 'none')
+		.style('border', 'none')
 		.classed('btn btn-lg btn-secondary', true)
 		.append('i')
 		.classed('material-icons', true)
@@ -743,14 +836,11 @@ function selectableTHREEJS(THREE) {
 		this.add(c);
 		return c;
 	};
-
 	THREE.Object3D.prototype.insertBefore = THREE.Object3D.prototype.appendChild;
-
 	THREE.Object3D.prototype.querySelector = function(query) {
 		let key = Object.keys(query)[0];
 		return this.getObjectByProperty(key, query[key]);
 	};
-
 	THREE.Object3D.prototype.querySelectorAll = function (query) {
 		if (typeof query === 'undefined') return this.children;
 		return this.children.filter(d => _.isMatch(d, query));
