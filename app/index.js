@@ -41,7 +41,6 @@ function main() {
 		.map(code => code.replace('Key', ''));
 
 	const actionSubject = new Rx.ReplaySubject(1);
-  // const actionSubject = new Rx.Subject();
 
 	const action$ = stream
 		.merge(
@@ -86,10 +85,6 @@ function main() {
 				destination: 1,
 				duration: 200
 			});
-		// 	actionSubject.onNext({
-		// 		type: 'select-object',
-		// 		key
-		// 	});
 			return model;
 		});
 		
@@ -310,22 +305,12 @@ function main() {
 		.just(getFirstRenderer())
 		.concat(rendererUpdate$)
 		.scan(apply);
-		
-// 	const editorDomActionSubject = new Rx.ReplaySubject(1);
-	
-// 	editorDomActionSubject
-// 	  .subscribe(actionSubject);
-	 // .subscribe(d => {
-	 //   console.log('editor action', d);
-	 // });
 
 	const setEditorDom$ = editorDom$
 		.map(model => dom => {
 			const cards = joinEditorCards(model.cards, dom);
 			const cardBlocks = joinCardBlocks(cards);
-			const columns = joinInfoRowsCols(cardBlocks);
-
-				// .merge(card_blocks_rows_join);
+			joinInfoRowsCols(cardBlocks);
 			return dom;
 		});
 
@@ -347,16 +332,6 @@ function main() {
 			.attr('class', d => d.class)
 			.classed('column', true)
 			.attr('id', d => d.id);
-		const dragHandler = d3.drag()
-		  .container(function(d) {
-		    return this;
-		  })
-		  .subject(function(d) {
-		    return {};
-		  })
-		  .on('drag', function(d) {
-		    console.log(d3.event.x);
-		  });
 		colsEnter
 			.append('span')
 			.attr('class', d => d.span_class)
@@ -368,34 +343,10 @@ function main() {
 			    actionSubject: actionSubject
 			  });
 			});
-		// 	.call(dragHandler);
-		// 	.each(function(d) {
-		
-		// 	  const dragHandler = d3.drag()
-  //   		  .container(function(d) {
-  //   		    return this;
-  //   		  })
-  //   		  .subject(function(d) {
-  //   		    return {};
-  //   		  })
-  //   		  .on('drag', function(d) {
-  //   		    console.log(d3.event.x);
-  //   		  });
-		// 	})
 		colsEnter
 			.merge(colsJoin)
 			.select('span')
 			.text(d => d.text);
-		
-		// const canvasJoin = rows.selectAll('canvas').data(Array(1));
-		  
-		// const canvasEnter = canvasJoin
-		//   .enter()
-		//   .append('canvas')
-		//   .style('border', '1px solid green')
-		//   .on('click', function(d) { console.log('click') })
-		//   .call(dragHandler);
-
 		const columns = colsEnter.merge(colsJoin);
 		return columns;
 	}
@@ -466,6 +417,15 @@ function main() {
 			return scene;
 		});
 
+	const enterExitObjectsUpdate$ = model$
+		.map(({ objects }) => objects.values())
+		.map(objects => scene => {
+			const sceneSelection = d3.select(scene);
+			const parents = joinObjectParents({ objects, sceneSelection });
+			joinObjects(parents);
+			return scene;
+		});
+		
 	function joinObjectParents({ objects, sceneSelection }) {
 		const join = sceneSelection
 			.selectAll()
@@ -487,79 +447,66 @@ function main() {
 			});
 		return parents;
 	}
-
-	const enterExitObjects$ = model$
-		.map(({ objects }) => objects.values())
-		.map(objects => scene => {
-			const sceneSelection = d3.select(scene);
-
-			const parents = joinObjectParents({ objects, sceneSelection });
-
-			const join = parents
-				.selectAll()
-				.filter(function(d) {
-					return d.type === 'object';
-				})
-				.data(d => d.children, d => d.key);
-
-			const enter = join
-				.enter()
-				.append(function() {
-					const geometry = new THREE.SphereGeometry(0.1, 30, 30);
-					const material = new THREE.MeshPhongMaterial({
-						color: new THREE.Color(0, 0, 0),
-						transparent: true,
-						opacity: 0.3,
-						side: THREE.DoubleSide
-					});
-					const newObject = new THREE.Mesh(geometry, material);
-					newObject.castShadow = true;
-					newObject.receiveShadow = true;
-					return newObject;
-				});
-
-			enter
-				.merge(join)
-				.each(function(d) {
-					const { volume } = d;
-					const object = this;
-					const params = object.geometry.parameters;
-					if (! _.isMatch(params, { radius: volume })) {
-						object.geometry.dispose();
-						debug('reducer:sound-object')('set radius', volume);
-						Object.assign(params, { radius: volume });
-						const newGeom = new THREE.SphereGeometry(
-							params.radius,
-							params.widthSegments,
-							params.heightSegments
-						);
-						object.geometry = newGeom;
-					}
-				});
-
-			return scene;
+		
+	function joinObjects(parents) {
+	  const join = parents
+			.selectAll()
+			.filter(function(d) {
+				return d.type === 'object';
+			})
+			.data(d => d.children || [], d => d.key);
+		const enter = join
+			.enter()
+			.append(getNewObject);
+		enter
+			.merge(join)
+			.each(updateObject);
+	}
+		
+	function getNewObject() {
+	  const geometry = new THREE.SphereGeometry(0.1, 30, 30);
+		const material = new THREE.MeshPhongMaterial({
+			color: new THREE.Color(0, 0, 0),
+			transparent: true,
+			opacity: 0.3,
+			side: THREE.DoubleSide
 		});
+		const newObject = new THREE.Mesh(geometry, material);
+		newObject.castShadow = true;
+		newObject.receiveShadow = true;
+		return newObject;
+	}
+		
+	function updateObject(d) {
+	  const { volume } = d;
+		const object = this;
+		const params = object.geometry.parameters;
+		if (! _.isMatch(params, { radius: volume })) {
+			object.geometry.dispose();
+			debug('reducer:sound-object')('set radius', volume);
+			Object.assign(params, { radius: volume });
+			const newGeom = new THREE.SphereGeometry(
+				params.radius,
+				params.widthSegments,
+				params.heightSegments
+			);
+			object.geometry = newGeom;
+		}
+	}
 
 	const sceneUpdate$ = stream
 		.merge(
 			addLights$,
 			addFloor$,
-			enterExitObjects$
-			// addObjectAction$
+			enterExitObjectsUpdate$
 		);
-
+		
 	const mainScene$ = stream
-		.just(getMainScene())
+		.just(new THREE.Scene())
 		.concat(sceneUpdate$)
 		.scan(apply);
-
-	function getMainScene() {
-		const scene = new THREE.Scene();
-		return scene;
-	}
-	
+	/** CAMERA */
 	const mainCamera$ = mainCamera(windowSize$);
-
 	/** RENDER */
 	combineAndRender(mainRenderer$, mainScene$, mainCamera$);
 	/** DOM */
@@ -920,30 +867,3 @@ function selectableTHREEJS(THREE) {
 		return this.children.filter(d => _.isMatch(d, query));
 	};
 }
-
-
-// .shareReplay(1);
-
-// const dragStart$ = stream
-//   .create(observer => {
-//     dragHandler
-//       .on('start', function(d) {
-//         observer.onNext({
-//           datum: d,
-//           node: this,
-//           event: d3.event
-//         });
-//       });
-//   });
-
-// const dragEnd$ = stream
-//   .create(observer => {
-//     dragHandler
-//       .on('end', function(d) {
-//         observer.onNext({
-//           datum: d,
-//           node: this,
-//           event: d3.event
-//         });
-//       });
-//   });
