@@ -302,24 +302,114 @@ function main() {
 		.just(getFirstRenderer())
 		.concat(rendererUpdate$)
 		.scan(apply);
-
 	
 	const setMainCanvas$ = mainRenderer$
 		.first()
 		.pluck('domElement')
 		.map(canvas => dom => {
-			dom
+		  const dragHandler = d3.drag()
+		    .subject(function() { return { x: d3.event.x, y: d3.event.y }; })
+		    .container(function() { return this; });
+			const canvasSelection = dom
 				.select('main')
-				.append(() => canvas);
+				.append(() => canvas)
+				.attr('id', 'main-canvas')
+				.call(dragHandler);
+			
+		  const drag$ = observableFromDragEvent(dragHandler)('drag');
+		  const dragStart$ = observableFromDragEvent(dragHandler)('start');
+		  const dragEnd$ = observableFromDragEvent(dragHandler)('end');
+      const mousemove$ = observableFromD3Event(canvasSelection)('mousemove');
+        
+      const event$ = stream
+        .merge(
+          drag$,
+          dragStart$,
+          dragEnd$,
+          mousemove$
+        )
+        .map(eventObj => {
+          const { event: { x, y, type }, node } = eventObj;
+          const { width, height } = node;
+          const mouse = d3.mouse(node);
+          const ndcScale = {
+            x: d3.scaleLinear().domain([0, width]).range([-1, +1]),
+            y: d3.scaleLinear().domain([0, height]).range([+1, -1])
+          };
+          eventObj.ndc = {
+            x: ndcScale.x(mouse[0]), 
+  				  y: ndcScale.y(mouse[1]) 
+          };
+          eventObj.actionType = 'main-mouse-action';
+          return eventObj;
+        })
+        .subscribe(actionSubject);
 			return dom;
 		});
+		
+	function observableFromD3Event(selection) {
+	  return function(type) {
+	    return stream
+	      .create(observer => {
+	        selection
+	          .on(type, function(d) {
+	            observer.onNext({
+	              datum: d,
+	              node: this,
+	              event: d3.event
+	            });
+	          });
+	      });
+	  };
+	}
+		
+	function observableFromDragEvent(dragHandler) {
+	  return function(type) {
+	    return stream
+        .create(observer => {
+          dragHandler
+            .on(type, function(d) {
+              d3.event.subject.x = d3.event.x;
+              d3.event.subject.y = d3.event.y;
+              observer.onNext({
+                datum: d,
+                node: this,
+                event: d3.event
+              });
+            });
+        });
+	  };
+	}
 	const addLightsReducer$ = stream
 		.just(scene => {
 			scene.add(getSpotlight());
 			scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
 			return scene;
 		});
-	const addFloorReducer$ = stream
+	const addFloorReducer$ = getAddFloorReducer();
+	const joinObjectsReducer$ = getJoinObjectsReducer(model$);
+	const sceneReducer$ = stream
+		.merge( 
+		  addLightsReducer$, 
+		  addFloorReducer$, 
+		  joinObjectsReducer$ 
+		);
+	const mainScene$ = stream
+		.just(new THREE.Scene())
+		.concat(sceneReducer$)
+		.scan(apply);
+	/** CAMERA */
+	const mainCamera$ = mainCamera(windowSize$);
+	/** RENDER */
+	combineAndRender(mainRenderer$, mainScene$, mainCamera$);
+	/** DOM */
+	const editorDomReducer$ = getEditorDomReducer({ editorDom$, actionSubject });
+	const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
+	updateDom(domReducer$);
+}
+
+function getAddFloorReducer() {
+  return stream
 		.just(scene => {
 			const room_size = {
 				width: 20,
@@ -329,7 +419,10 @@ function main() {
 			scene.add(getFloor(room_size));
 			return scene;
 		});
-	const joinObjectsReducer$ = model$
+}
+
+function getJoinObjectsReducer(model$) {
+  return model$
 		.map(({ objects }) => objects.values())
 		.map(objects => scene => {
 			const sceneSelection = d3.select(scene);
@@ -337,34 +430,24 @@ function main() {
 			joinObjects(parents);
 			return scene;
 		});
-	const sceneUpdate$ = stream
-		.merge(
-			addLightsReducer$,
-			addFloorReducer$,
-			joinObjectsReducer$
-		);
-	const mainScene$ = stream
-		.just(new THREE.Scene())
-		.concat(sceneUpdate$)
-		.scan(apply);
-	/** CAMERA */
-	const mainCamera$ = mainCamera(windowSize$);
-	/** RENDER */
-	combineAndRender(mainRenderer$, mainScene$, mainCamera$);
-	/** DOM */
-	const editorDomReducer$ = editorDom$
+}
+
+function updateDom(domUpdate$) {
+  stream
+		.just(getFirstDom())
+		.concat(domUpdate$)
+		.scan(apply)
+		.subscribe();
+}
+
+function getEditorDomReducer({ editorDom$, actionSubject }) {
+  return editorDom$
 		.map(model => dom => {
 			const cards = joinEditorCards(model.cards, dom);
 			const cardBlocks = joinCardBlocks(cards);
 			joinInfoRowsCols({ cardBlocks, actionSubject });
 			return dom;
 		});
-	const domUpdate$ = stream.merge(setMainCanvas$, editorDomReducer$);
-	stream
-		.just(getFirstDom())
-		.concat(domUpdate$)
-		.scan(apply)
-		.subscribe();
 }
 
 /**
