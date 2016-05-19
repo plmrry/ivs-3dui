@@ -45,8 +45,7 @@ function main() {
 	const action$ = stream
 		.merge(
 			actionSubject
-		)
-		// .do(action => console.log(action));
+		);
 
 	const tweenObjectVolume$ = tweenObjectVolume({ action$ });
 	
@@ -109,7 +108,6 @@ function main() {
 
 	const editorDom$ = model$
 		.pluck('selected')
-		// .distinctUntilChanged()
 		.map(selected => {
 			if (typeof selected === 'undefined') return { cards: [] };
 			const { key } = selected;
@@ -133,7 +131,6 @@ function main() {
 			}
 			debugger;
 		});
-		// .subscribe(log);
 
 		function getObjectInfoRows(object) {
 			return [
@@ -306,89 +303,7 @@ function main() {
 		.concat(rendererUpdate$)
 		.scan(apply);
 
-	const setEditorDom$ = editorDom$
-		.map(model => dom => {
-			const cards = joinEditorCards(model.cards, dom);
-			const cardBlocks = joinCardBlocks(cards);
-			joinInfoRowsCols(cardBlocks);
-			return dom;
-		});
-
-	function joinInfoRowsCols(cardBlocks) {
-		const rowsJoin = cardBlocks
-			.selectAll('.row')
-			.data(d => d.rows || []); /** NOTE: Rows don't have a key */
-		const rowsEnter = rowsJoin
-			.enter()
-			.append('div')
-			.classed('row parameter', true);
-		const rows = rowsJoin.merge(rowsEnter);
-		const colsJoin = rows
-			.selectAll('.column')
-			.data(d => d.columns || []);
-		const colsEnter = colsJoin
-			.enter()
-			.append('div')
-			.attr('class', d => d.class)
-			.classed('column', true)
-			.attr('id', d => d.id);
-		colsEnter
-			.append('span')
-			.attr('class', d => d.span_class)
-			.each(setStyles(d => d.span_styles))
-			.each(function(d) {
-			  if (d.registerAction) d.registerAction({
-			    node: this,
-			    datum: d,
-			    actionSubject: actionSubject
-			  });
-			});
-		colsEnter
-			.merge(colsJoin)
-			.select('span')
-			.text(d => d.text);
-		const columns = colsEnter.merge(colsJoin);
-		return columns;
-	}
-
-	function joinCardBlocks(editor_cards) {
-		const join = editor_cards
-			.selectAll('.card-block')
-			.data(d => d.card_blocks || [], d => d.id);
-		join
-			.exit()
-			.remove();
-		const enter = join
-			.enter()
-			.append('div')
-			.classed('card-block', true);
-		enter
-			.append('h6')
-			.classed('card-title', true);
-		const cardBlocks = enter
-			.merge(join);
-		cardBlocks
-			.select('.card-title')
-			.attr('id', d => d.id)
-			.text(d => d.header);
-		return cardBlocks;
-	}
-
-	function joinEditorCards(cards, dom) {
-		const join = dom
-			.select('#scene-controls')
-			.selectAll('.card')
-			.data(cards, d => d.key);
-		join
-			.exit()
-			.remove();
-		const enter = join
-			.enter()
-			.append('div')
-			.classed('card', true);
-		return enter.merge(join);
-	}
-
+	
 	const setMainCanvas$ = mainRenderer$
 		.first()
 		.pluck('domElement')
@@ -398,15 +313,13 @@ function main() {
 				.append(() => canvas);
 			return dom;
 		});
-
-	const addLights$ = stream
+	const addLightsReducer$ = stream
 		.just(scene => {
 			scene.add(getSpotlight());
 			scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
 			return scene;
 		});
-
-	const addFloor$ = stream
+	const addFloorReducer$ = stream
 		.just(scene => {
 			const room_size = {
 				width: 20,
@@ -416,8 +329,7 @@ function main() {
 			scene.add(getFloor(room_size));
 			return scene;
 		});
-
-	const enterExitObjectsUpdate$ = model$
+	const joinObjectsReducer$ = model$
 		.map(({ objects }) => objects.values())
 		.map(objects => scene => {
 			const sceneSelection = d3.select(scene);
@@ -425,79 +337,11 @@ function main() {
 			joinObjects(parents);
 			return scene;
 		});
-		
-	function joinObjectParents({ objects, sceneSelection }) {
-		const join = sceneSelection
-			.selectAll()
-			.filter(function(d) {
-				if (typeof d === 'undefined') return false;
-				return d.type === 'object-parent';
-			})
-			.data(objects, d => d.key);
-		const exit = join
-			.exit()
-			.remove();
-		const enter = join
-			.enter()
-			.append(() => new THREE.Object3D());
-		const parents = enter
-			.merge(join)
-			.each(function(d) {
-				this.position.copy(d.position);
-			});
-		return parents;
-	}
-		
-	function joinObjects(parents) {
-	  const join = parents
-			.selectAll()
-			.filter(function(d) {
-				return d.type === 'object';
-			})
-			.data(d => d.children || [], d => d.key);
-		const enter = join
-			.enter()
-			.append(getNewObject);
-		enter
-			.merge(join)
-			.each(updateObject);
-	}
-		
-	function getNewObject() {
-	  const geometry = new THREE.SphereGeometry(0.1, 30, 30);
-		const material = new THREE.MeshPhongMaterial({
-			color: new THREE.Color(0, 0, 0),
-			transparent: true,
-			opacity: 0.3,
-			side: THREE.DoubleSide
-		});
-		const newObject = new THREE.Mesh(geometry, material);
-		newObject.castShadow = true;
-		newObject.receiveShadow = true;
-		return newObject;
-	}
-		
-	function updateObject(d) {
-	  const { volume } = d;
-		const object = this;
-		const params = object.geometry.parameters;
-		if (! _.isMatch(params, { radius: volume })) {
-			object.geometry.dispose();
-			debug('reducer:sound-object')('set radius', volume);
-			Object.assign(params, { radius: volume });
-			const newGeom = new THREE.SphereGeometry(
-				params.radius,
-				params.widthSegments,
-				params.heightSegments
-			);
-			object.geometry = newGeom;
-		}
-	}
 	const sceneUpdate$ = stream
 		.merge(
-			addLights$,
-			addFloor$,
-			enterExitObjectsUpdate$
+			addLightsReducer$,
+			addFloorReducer$,
+			joinObjectsReducer$
 		);
 	const mainScene$ = stream
 		.just(new THREE.Scene())
@@ -508,7 +352,14 @@ function main() {
 	/** RENDER */
 	combineAndRender(mainRenderer$, mainScene$, mainCamera$);
 	/** DOM */
-	const domUpdate$ = stream.merge(setMainCanvas$, setEditorDom$);
+	const editorDomReducer$ = editorDom$
+		.map(model => dom => {
+			const cards = joinEditorCards(model.cards, dom);
+			const cardBlocks = joinCardBlocks(cards);
+			joinInfoRowsCols({ cardBlocks, actionSubject });
+			return dom;
+		});
+	const domUpdate$ = stream.merge(setMainCanvas$, editorDomReducer$);
 	stream
 		.just(getFirstDom())
 		.concat(domUpdate$)
@@ -681,6 +532,74 @@ function windowSize() {
  *
  *
  */
+ 
+function joinObjectParents({ objects, sceneSelection }) {
+	const join = sceneSelection
+		.selectAll()
+		.filter(function(d) {
+			if (typeof d === 'undefined') return false;
+			return d.type === 'object-parent';
+		})
+		.data(objects, d => d.key);
+	const exit = join
+		.exit()
+		.remove();
+	const enter = join
+		.enter()
+		.append(() => new THREE.Object3D());
+	const parents = enter
+		.merge(join)
+		.each(function(d) {
+			this.position.copy(d.position);
+		});
+	return parents;
+}
+	
+function joinObjects(parents) {
+  const join = parents
+		.selectAll()
+		.filter(function(d) {
+			return d.type === 'object';
+		})
+		.data(d => d.children || [], d => d.key);
+	const enter = join
+		.enter()
+		.append(getNewObject);
+	enter
+		.merge(join)
+		.each(updateObject);
+}
+	
+function getNewObject() {
+  const geometry = new THREE.SphereGeometry(0.1, 30, 30);
+	const material = new THREE.MeshPhongMaterial({
+		color: new THREE.Color(0, 0, 0),
+		transparent: true,
+		opacity: 0.3,
+		side: THREE.DoubleSide
+	});
+	const newObject = new THREE.Mesh(geometry, material);
+	newObject.castShadow = true;
+	newObject.receiveShadow = true;
+	return newObject;
+}
+	
+function updateObject(d) {
+  const { volume } = d;
+	const object = this;
+	const params = object.geometry.parameters;
+	if (! _.isMatch(params, { radius: volume })) {
+		object.geometry.dispose();
+		debug('reducer:sound-object')('set radius', volume);
+		Object.assign(params, { radius: volume });
+		const newGeom = new THREE.SphereGeometry(
+			params.radius,
+			params.widthSegments,
+			params.heightSegments
+		);
+		object.geometry = newGeom;
+	}
+}
 
 function getSpotlight() {
 	var spotLight = new THREE.SpotLight(0xffffff, 0.95);
@@ -742,6 +661,81 @@ function getFirstRenderer() {
  *
  *
  */
+ 
+function joinInfoRowsCols({ cardBlocks, actionSubject }) {
+	const rowsJoin = cardBlocks
+		.selectAll('.row')
+		.data(d => d.rows || []); /** NOTE: Rows don't have a key */
+	const rowsEnter = rowsJoin
+		.enter()
+		.append('div')
+		.classed('row parameter', true);
+	const rows = rowsJoin.merge(rowsEnter);
+	const colsJoin = rows
+		.selectAll('.column')
+		.data(d => d.columns || []);
+	const colsEnter = colsJoin
+		.enter()
+		.append('div')
+		.attr('class', d => d.class)
+		.classed('column', true)
+		.attr('id', d => d.id);
+	colsEnter
+		.append('span')
+		.attr('class', d => d.span_class)
+		.each(setStyles(d => d.span_styles))
+		.each(function(d) {
+		  if (d.registerAction) d.registerAction({
+		    node: this,
+		    datum: d,
+		    actionSubject: actionSubject
+		  });
+		});
+	colsEnter
+		.merge(colsJoin)
+		.select('span')
+		.text(d => d.text);
+	const columns = colsEnter.merge(colsJoin);
+	return columns;
+}
+
+function joinCardBlocks(editor_cards) {
+	const join = editor_cards
+		.selectAll('.card-block')
+		.data(d => d.card_blocks || [], d => d.id);
+	join
+		.exit()
+		.remove();
+	const enter = join
+		.enter()
+		.append('div')
+		.classed('card-block', true);
+	enter
+		.append('h6')
+		.classed('card-title', true);
+	const cardBlocks = enter
+		.merge(join);
+	cardBlocks
+		.select('.card-title')
+		.attr('id', d => d.id)
+		.text(d => d.header);
+	return cardBlocks;
+}
+
+function joinEditorCards(cards, dom) {
+	const join = dom
+		.select('#scene-controls')
+		.selectAll('.card')
+		.data(cards, d => d.key);
+	join
+		.exit()
+		.remove();
+	const enter = join
+		.enter()
+		.append('div')
+		.classed('card', true);
+	return enter.merge(join);
+}
 
 function getFirstDom() {
 	const dom = d3.select('#app');
