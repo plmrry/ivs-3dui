@@ -58,65 +58,7 @@ function main() {
       1.5,
       Math.random() * 10 - 5
     ))
-    .map(position => model => {
-      const { objects } = model;
-      model.maxId = d3.max(objects.values(), d => d.key) || 0;
-      const key = model.maxId + 1;
-      const newObject = {
-        position,
-        key,
-        type: 'object-parent',
-        children: [
-          {
-            type: 'object',
-            key,
-            volume: 0.1,
-            name: `object-${key}`
-          }
-        ]
-      };
-      newObject.childObject = newObject.children[0];
-      model.objects.set(key, newObject);
-      model.selected = newObject;
-      actionSubject.onNext({
-        actionType: 'tween-object-volume',
-        key,
-        destination: 1,
-        duration: 200
-      });
-      return model;
-    });
-    
-  function getAddObjectReducer(actionSubject) {
-    return position => model => {
-      const { objects } = model;
-      model.maxId = d3.max(objects.values(), d => d.key) || 0;
-      const key = model.maxId + 1;
-      const newObject = {
-        position,
-        key,
-        type: 'object-parent',
-        children: [
-          {
-            type: 'object',
-            key,
-            volume: 0.1,
-            name: `object-${key}`
-          }
-        ]
-      };
-      newObject.childObject = newObject.children[0];
-      model.objects.set(key, newObject);
-      model.selected = newObject;
-      actionSubject.onNext({
-        actionType: 'tween-object-volume',
-        key,
-        destination: 1,
-        duration: 200
-      });
-      return model;
-    }
-  }
+    .map(getAddObjectReducer(actionSubject));
     
   const updateParentObjectPosition$ = action$
     .filter(d => d.actionType === 'update-selected-parent-object-position')
@@ -198,6 +140,37 @@ function main() {
   const editorDomReducer$ = getEditorDomReducer({ editorDomModel$, actionSubject });
   const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
   updateDom(domReducer$);
+}
+
+function getAddObjectReducer(actionSubject) {
+  return position => model => {
+    const { objects } = model;
+    model.maxId = d3.max(objects.values(), d => d.key) || 0;
+    const key = model.maxId + 1;
+    const newObject = {
+      position,
+      key,
+      type: 'object-parent',
+      children: [
+        {
+          type: 'object',
+          key,
+          volume: 0.1,
+          name: `object-${key}`
+        }
+      ]
+    };
+    newObject.childObject = newObject.children[0];
+    model.objects.set(key, newObject);
+    model.selected = newObject;
+    actionSubject.onNext({
+      actionType: 'tween-object-volume',
+      key,
+      destination: 1,
+      duration: 200
+    });
+    return model;
+  };
 }
 
 function getEditorDomModel$(mainSceneModel$) {
