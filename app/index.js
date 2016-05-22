@@ -58,7 +58,20 @@ function main() {
       1.5,
       Math.random() * 10 - 5
     ))
-    .map(getAddObjectReducer(actionSubject));
+    .map(getAddObjectReducer(actionSubject))
+    .map(compose(updateSelected));
+    
+  function compose(second) {
+    return function(first) {
+      return _.compose(second, first);
+    };
+  }
+    
+  function updateSelected(model) {
+    const selectedArray = model.objects.values().filter(d => d.selected);
+    model.selected = selectedArray[0];
+    return model;
+  }
     
   const updateParentObjectPosition$ = action$
     .filter(d => d.actionType === 'update-selected-parent-object-position')
@@ -145,12 +158,15 @@ function main() {
 function getAddObjectReducer(actionSubject) {
   return position => model => {
     const { objects } = model;
+    /** NOTE: Un-select all */
+    objects.each(d => d.selected = false);
     model.maxId = d3.max(objects.values(), d => d.key) || 0;
     const key = model.maxId + 1;
     const newObject = {
       position,
       key,
       type: 'object-parent',
+      selected: true,
       children: [
         {
           type: 'object',
@@ -162,7 +178,6 @@ function getAddObjectReducer(actionSubject) {
     };
     newObject.childObject = newObject.children[0];
     model.objects.set(key, newObject);
-    model.selected = newObject;
     actionSubject.onNext({
       actionType: 'tween-object-volume',
       key,
@@ -204,6 +219,7 @@ function getEditorDomModel$(mainSceneModel$) {
 
 /**
  * Get all of the textual key and value rows and columns for an Object Parent.
+ * TODO: Still needs a lot of DRY-ing
  */
 function getObjectInfoRows(parent) {
   return [
@@ -353,6 +369,25 @@ function getObjectInfoRows(parent) {
           },
           text: 'Delete',
           id: 'delete-object'
+        }
+      ]
+    },
+    { /** New row */
+      columns: [
+        {
+          class: 'col-xs-6',
+          span_class: 'value',
+          span_styles: {
+            cursor: 'pointer'
+          },
+          text: 'Add Cone',
+          registerAction: ({ node, actionSubject }) => {
+            observableFromD3Event(d3.select(node))('click')
+              .map(() => ({
+                actionType: 'add-cone-to-selected'
+              }))
+              .subscribe(actionSubject);
+          }
         }
       ]
     }
