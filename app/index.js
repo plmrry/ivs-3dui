@@ -46,6 +46,7 @@ function main() {
 		.merge(
 			actionSubject
 		);
+		// .do(log);
 
 	const tweenObjectVolume$ = tweenObjectVolume({ action$ });
 	
@@ -307,79 +308,14 @@ function main() {
 		.first()
 		.pluck('domElement')
 		.map(canvas => dom => {
-		  const dragHandler = d3.drag()
-		    .subject(function() { return { x: d3.event.x, y: d3.event.y }; })
-		    .container(function() { return this; });
 			const canvasSelection = dom
 				.select('main')
 				.append(() => canvas)
-				.attr('id', 'main-canvas')
-				.call(dragHandler);
-			
-		  const drag$ = observableFromDragEvent(dragHandler)('drag');
-		  const dragStart$ = observableFromDragEvent(dragHandler)('start');
-		  const dragEnd$ = observableFromDragEvent(dragHandler)('end');
-      const mousemove$ = observableFromD3Event(canvasSelection)('mousemove');
-        
-      const event$ = stream
-        .merge(
-          drag$,
-          dragStart$,
-          dragEnd$,
-          mousemove$
-        )
-        .map(eventObj => {
-          const { event: { x, y, type }, node } = eventObj;
-          const { width, height } = node;
-          const mouse = d3.mouse(node);
-          const ndcScale = {
-            x: d3.scaleLinear().domain([0, width]).range([-1, +1]),
-            y: d3.scaleLinear().domain([0, height]).range([+1, -1])
-          };
-          eventObj.ndc = {
-            x: ndcScale.x(mouse[0]), 
-  				  y: ndcScale.y(mouse[1]) 
-          };
-          eventObj.actionType = 'main-mouse-action';
-          return eventObj;
-        })
-        .subscribe(actionSubject);
+				.attr('id', 'main-canvas');
+			getMainDomAction$(canvasSelection).subscribe(actionSubject);
 			return dom;
 		});
-		
-	function observableFromD3Event(selection) {
-	  return function(type) {
-	    return stream
-	      .create(observer => {
-	        selection
-	          .on(type, function(d) {
-	            observer.onNext({
-	              datum: d,
-	              node: this,
-	              event: d3.event
-	            });
-	          });
-	      });
-	  };
-	}
-		
-	function observableFromDragEvent(dragHandler) {
-	  return function(type) {
-	    return stream
-        .create(observer => {
-          dragHandler
-            .on(type, function(d) {
-              d3.event.subject.x = d3.event.x;
-              d3.event.subject.y = d3.event.y;
-              observer.onNext({
-                datum: d,
-                node: this,
-                event: d3.event
-              });
-            });
-        });
-	  };
-	}
+
 	const addLightsReducer$ = stream
 		.just(scene => {
 			scene.add(getSpotlight());
@@ -406,6 +342,76 @@ function main() {
 	const editorDomReducer$ = getEditorDomReducer({ editorDom$, actionSubject });
 	const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
 	updateDom(domReducer$);
+}
+
+function getMainDomAction$(canvasSelection) {
+  const dragHandler = d3.drag()
+    .subject(function() { return { x: d3.event.x, y: d3.event.y }; })
+    .container(function() { return this; });
+  canvasSelection.call(dragHandler);
+  const drag$ = observableFromDragEvent(dragHandler)('drag');
+  const dragStart$ = observableFromDragEvent(dragHandler)('start');
+  const dragEnd$ = observableFromDragEvent(dragHandler)('end');
+  const mousemove$ = observableFromD3Event(canvasSelection)('mousemove');
+  const click$ = observableFromD3Event(canvasSelection)('click');
+  const action$ = stream
+    .merge(
+      drag$,
+      dragStart$,
+      dragEnd$,
+      mousemove$,
+      click$
+    )
+    .map(eventObj => {
+      const { event: { x, y }, node } = eventObj;
+      const { width, height } = node;
+      const mouse = d3.mouse(node);
+      const ndcScale = {
+        x: d3.scaleLinear().domain([0, width]).range([-1, +1]),
+        y: d3.scaleLinear().domain([0, height]).range([+1, -1])
+      };
+      eventObj.ndc = {
+        x: ndcScale.x(mouse[0]), 
+			  y: ndcScale.y(mouse[1]) 
+      };
+      eventObj.actionType = 'main-mouse-action';
+      return eventObj;
+    });
+  return action$;
+}
+
+function observableFromD3Event(selection) {
+  return function(type) {
+    return stream
+      .create(observer => {
+        selection
+          .on(type, function(d) {
+            observer.onNext({
+              datum: d,
+              node: this,
+              event: d3.event
+            });
+          });
+      });
+  };
+}
+
+function observableFromDragEvent(dragHandler) {
+  return function(type) {
+    return stream
+      .create(observer => {
+        dragHandler
+          .on(type, function(d) {
+            d3.event.subject.x = d3.event.x;
+            d3.event.subject.y = d3.event.y;
+            observer.onNext({
+              datum: d,
+              node: this,
+              event: d3.event
+            });
+          });
+      });
+  };
 }
 
 function getAddFloorReducer() {
