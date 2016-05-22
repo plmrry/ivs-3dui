@@ -205,9 +205,9 @@ function getEditorDomModel$(mainSceneModel$) {
 /**
  * Get all of the textual key and value rows and columns for an Object Parent.
  */
-function getObjectInfoRows(object) {
+function getObjectInfoRows(parent) {
   return [
-    {
+    { /** New row */
       columns: [
         {
           class: 'col-xs-3',
@@ -220,7 +220,7 @@ function getObjectInfoRows(object) {
           span_styles: {
             cursor: 'pointer'
           },
-          text: object.file || 'None',
+          text: parent.file || 'None',
           id: 'set-object-file'
         },
         {
@@ -234,8 +234,8 @@ function getObjectInfoRows(object) {
           span_styles: {
             cursor: 'ew-resize'
           },
-          object,
-          text: `${d3.format(".1f")(object.childObject.volume)} dB` || '0 dB',
+          parent,
+          text: `${d3.format(".1f")(parent.childObject.volume)} dB` || '0 dB',
           id: 'set-object-volume',
           registerAction: registerTextDragAction(
             'update-selected-object-volume',
@@ -263,13 +263,13 @@ function getObjectInfoRows(object) {
           text: 'x'
         },
         {
-          object,
+          parent,
           class: 'col-xs-3',
           span_class: 'value set-object-x',
           span_styles: {
             cursor: 'ew-resize'
           },
-          text: d3.format(".1f")(object.position.x),
+          text: d3.format(".1f")(parent.position.x),
           id: 'set-object-x',
           registerAction: registerTextDragAction(
             'update-selected-parent-object-position',
@@ -278,6 +278,64 @@ function getObjectInfoRows(object) {
               if (object.type === 'object-parent') {
                 const delta = dx * 0.01;
                 object.position.x += delta;
+              }
+              return model;
+            }
+          )
+        }
+      ]
+    },
+    { /** New row */
+      columns: [
+        {
+          class: 'col-xs-3',
+          span_class: 'key',
+          text: 'y'
+        },
+        {
+          parent,
+          class: 'col-xs-3',
+          span_class: 'value',
+          span_styles: {
+            cursor: 'ew-resize'
+          },
+          text: d3.format(".1f")(parent.position.y),
+          registerAction: registerTextDragAction(
+            'update-selected-parent-object-position',
+            dx => model => {
+              const object = model.selected;
+              if (object.type === 'object-parent') {
+                const delta = dx * 0.01;
+                object.position.y += delta;
+              }
+              return model;
+            }
+          )
+        }
+      ]
+    },
+    { /** New row */
+      columns: [
+        {
+          class: 'col-xs-3',
+          span_class: 'key',
+          text: 'z'
+        },
+        {
+          parent,
+          class: 'col-xs-3',
+          span_class: 'value',
+          span_styles: {
+            cursor: 'ew-resize'
+          },
+          text: d3.format(".1f")(parent.position.z),
+          registerAction: registerTextDragAction(
+            'update-selected-parent-object-position',
+            dx => model => {
+              const object = model.selected;
+              if (object.type === 'object-parent') {
+                const delta = dx * 0.01;
+                object.position.z += delta;
               }
               return model;
             }
@@ -753,7 +811,7 @@ function joinInfoRowsCols({ cardBlocks, actionSubject }) {
   const rows = rowsJoin.merge(rowsEnter);
   const colsJoin = rows
     .selectAll('.column')
-    .data(d => d.columns || []);
+    .data(d => d.columns || []); /** NOTE: Cols don't have a key */
   const colsEnter = colsJoin
     .enter()
     .append('div')
