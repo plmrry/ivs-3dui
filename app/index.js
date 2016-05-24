@@ -34,11 +34,20 @@ const MIN_VOLUME = 0.1;
 
 const latitude_to_theta = d3.scaleLinear()
   .domain([90, 0, -90])
-  .range([0, Math.PI/2, Math.PI]);
+  .range([0, Math.PI/2, Math.PI])
+  .clamp(true);
+  
+const latitudeToTheta = latitude_to_theta;
   
 const longitude_to_phi = d3.scaleLinear()
   .domain([-180, 0, 180])
   .range([0, Math.PI, 2 * Math.PI]);
+  
+const longitudeToPhi = longitude_to_phi;
+  
+const degToRad = d3.scaleLinear()
+  .domain([0, 360])
+  .range([0, 2 * Math.PI]);
 
 main();
 
@@ -117,7 +126,24 @@ function main() {
       updateSelectedObjectVolume$,
       updateParentObjectPosition$,
       addConeToSelected$
-    );
+    )
+    .map(compose(model => {
+      model.objects.values().forEach(object => {
+        object.cones = object.cones || [];
+        object.cones.forEach(setConeLookAt);
+      });
+      return model;
+    }));
+    
+  function setConeLookAt(cone) {
+    const { latitude, longitude } = cone;
+    const theta = latitudeToTheta(latitude);
+    const phi = longitudeToPhi(longitude);
+    const radius = 1;
+    const lookAt = polarToVector({ radius, theta, phi });
+    cone.lookAt = lookAt;
+    return cone;
+  }
 
   const mainSceneModel$ = stream
     .just({ objects: d3.map() })
@@ -305,11 +331,8 @@ function getObjectInfoRows(parent) {
           registerAction: registerTextDragAction(
             'update-selected-object-volume',
             dx => model => {
-              // const object = model.selected;
               const object = getSelected(model.objects);
-              // console.log(object)
               if (object.type === 'object-parent') {
-                // const child = object.childObject;
                 const newVolume = object.volume + dx * 0.01;
                 const MAX_VOLUME = 1;
                 const MIN_VOLUME = 0.1;
@@ -586,6 +609,14 @@ function getEditorDomReducer({ editorDomModel$, actionSubject }) {
  * 
  */
  
+function polarToVector({ radius, theta, phi }) {
+  return {
+    x: radius * Math.sin(phi) * Math.sin(theta),
+    z: radius * Math.cos(phi) * Math.sin(theta),
+    y: radius * Math.cos(theta)
+  };
+}
+ 
 function mainCamera(windowSize$) {
   const latitude$ = stream
     .just(45)
@@ -607,13 +638,7 @@ function mainCamera(windowSize$) {
       (radius, theta, phi) => ({ radius, theta, phi })
     );
   const relative_position$ = polar_position$
-    .map(function polarToVector({ radius, theta, phi }) {
-      return {
-        x: radius * Math.sin(phi) * Math.sin(theta),
-        z: radius * Math.cos(phi) * Math.sin(theta),
-        y: radius * Math.cos(theta)
-      };
-    })
+    .map(polarToVector)
     .scan((vector, position) => vector.copy(position), new THREE.Vector3());
   const lookAt$ = stream
     .just(new THREE.Vector3())
