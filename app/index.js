@@ -72,22 +72,46 @@ function main() {
     model.selected = selectedArray[0];
     return model;
   }
+  
+  const addConeToSelected$ = action$
+    .filter(d => d.actionType === 'add-cone-to-selected')
+    .map(addConeToSelected);
+    
+  function addConeToSelected() {
+    return function(model) {
+      const { selected } = model;
+      selected.cones = selected.cones || [];
+      const maxKey = d3.max(selected.cones, d => d.key) || 0;
+      const key = maxKey + 1;
+      const newCone = {
+        key,
+        latitude: Math.random() * 180 - 90,
+        longitude: Math.random() * 360 - 180,
+        volume: 2,
+        spread: 0.5,
+        type: 'cone'
+      };
+      selected.cones.push(newCone);
+      return model;
+    };
+  }
     
   const updateParentObjectPosition$ = action$
     .filter(d => d.actionType === 'update-selected-parent-object-position')
     .pluck('modelReducer');
 
-  const modelUpdate$ = stream
+  const modelReducer$ = stream
     .merge(
       newObjectAction$,
       tweenObjectVolume$,
       updateSelectedObjectVolume$,
-      updateParentObjectPosition$
+      updateParentObjectPosition$,
+      addConeToSelected$
     );
 
   const mainSceneModel$ = stream
     .just({ objects: d3.map() })
-    .concat(modelUpdate$)
+    .concat(modelReducer$)
     .scan(apply)
     .shareReplay(1);
     /** NOTE: shareReplay */
@@ -127,6 +151,7 @@ function main() {
       return dom;
     });
 
+  /** SCENE */
   const addLightsReducer$ = stream
     .just(scene => {
       scene.add(getSpotlight());
@@ -155,6 +180,10 @@ function main() {
   updateDom(domReducer$);
 }
 
+function getSelected(objects) {
+  return objects.values().filter(d => d.selected)[0];
+};
+
 function getAddObjectReducer(actionSubject) {
   return position => model => {
     const { objects } = model;
@@ -167,14 +196,24 @@ function getAddObjectReducer(actionSubject) {
       key,
       type: 'object-parent',
       selected: true,
+      volume: 0.1,
       children: [
         {
-          type: 'object',
-          key,
-          volume: 0.1,
-          name: `object-${key}`
+          // type: 'object',
+          // key,
+          // volume: 0.1,
+          // name: `object-${key}`
         }
-      ]
+      ],
+      trajectoryPoints: [
+				[+0,+0,+0], 
+				[+2,+1,-2], 
+				[+5,-1,-2], 
+				[+8,+2,+3], 
+				[+3,-1,+6]
+			].map(([x,y,z]) => ({x,y,z})),
+			closedTrajectory: true,
+			velocity: 1
     };
     newObject.childObject = newObject.children[0];
     model.objects.set(key, newObject);
@@ -251,19 +290,21 @@ function getObjectInfoRows(parent) {
             cursor: 'ew-resize'
           },
           parent,
-          text: `${d3.format(".1f")(parent.childObject.volume)} dB` || '0 dB',
+          text: `${d3.format(".1f")(parent.volume)} dB` || '0 dB',
           id: 'set-object-volume',
           registerAction: registerTextDragAction(
             'update-selected-object-volume',
             dx => model => {
-              const object = model.selected;
+              // const object = model.selected;
+              const object = getSelected(model.objects);
+              // console.log(object)
               if (object.type === 'object-parent') {
-                const child = object.childObject;
-                const newVolume = child.volume + dx * 0.01;
+                // const child = object.childObject;
+                const newVolume = object.volume + dx * 0.01;
                 const MAX_VOLUME = 1;
                 const MIN_VOLUME = 0.1;
                 if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
-                  child.volume = newVolume;
+                  object.volume = newVolume;
               }
               return model;
             }
@@ -511,17 +552,6 @@ function getAddFloorReducer() {
     });
 }
 
-function getJoinObjectsReducer(model$) {
-  return model$
-    .map(({ objects }) => objects.values())
-    .map(objects => scene => {
-      const sceneSelection = d3.select(scene);
-      const parents = joinObjectParents({ objects, sceneSelection });
-      joinObjects(parents);
-      return scene;
-    });
-}
-
 function updateDom(domUpdate$) {
   stream
     .just(getFirstDom())
@@ -661,8 +691,9 @@ function tweenObjectVolume({ action$ }) {
       return d3TweenStream(duration)
         .scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
         .map(({ t, dt }) => model => {
-          const object = model.objects.get(key).children[0];
+          const object = model.objects.get(key);
           const { volume } = object;
+          if (typeof volume === 'undefined') throw new Error('volume undefined');
           const current = volume;
           let speed = (1-t) === 0 ? 0 : (destination - current)/(1 - t);
           let step = current + dt * speed;
@@ -706,6 +737,110 @@ function windowSize() {
  *
  */
  
+function getJoinObjectsReducer(model$) {
+  return model$
+    .map(({ objects }) => objects.values())
+    .map(objects => scene => {
+      // objects.forEach(o => console.log(o.cones))
+      const sceneSelection = d3.select(scene);
+      const parents = joinObjectParents({ objects, sceneSelection });
+      // const _objects = joinChildObjects(parents);
+      // const cones = joinCones(parents);
+      // parents.each(function(parent) {
+      //   d3.select(this)
+      //     .selectAll()
+      // });
+      return scene;
+    });
+}
+
+function joinCones(objects) {
+  let join = objects
+		.selectAll()
+		.data(function(d) { return d.cones || [] });
+		// .data(function(d) { debugger })
+	join
+		.exit()
+		.each(function(d) {
+		  console.warn('exit');
+			this.parent.remove(this);
+		});
+	const enter = join
+	  .enter()
+	  .append(getNewCone);
+	const cones = enter
+    .merge(join)
+	  .each(updateOneCone);
+}
+
+function getNewCone(d) {
+	let CONE_BOTTOM = 0.01;
+	let CONE_RADIAL_SEGMENTS = 50;
+	let params = {
+		radiusBottom: CONE_BOTTOM,
+		openEnded: true,
+		radialSegments: CONE_RADIAL_SEGMENTS
+	};
+	let geometry = new THREE.CylinderGeometry(
+		params.radiusTop,
+		params.radiusBottom,
+		params.height,
+		params.radialSegments,
+		params.heightSegments,
+		params.openEnded
+	);
+	let material = new THREE.MeshPhongMaterial({
+		transparent: true,
+		opacity: 0.5,
+		side: THREE.DoubleSide
+	});
+	let cone = new THREE.Mesh(geometry, material);
+	cone.name = 'cone';
+	cone._type = 'cone';
+	cone.castShadow = true;
+	cone.receiveShadow = true;
+	d3.select(cone).datum(d);
+	let coneParent = new THREE.Object3D();
+	coneParent.name = 'cone_parent';
+	coneParent.add(cone);
+	return coneParent;	
+}
+
+function updateOneCone(d) {
+	/** Update rotation */
+	this.lookAt(d.lookAt || new THREE.Vector3());
+	/** If params change, update geometry */
+	let cone = this.children[0];
+	let params = cone.geometry.parameters;
+	let newParams = { height: d.volume, radiusTop: d.spread };
+	if (! _.isMatch(params, newParams)) {
+		debug('cone')('new geometry');
+		Object.assign(params, newParams);
+		let newGeom = cylinder_geometry_from_params(params);
+		cone.geometry.dispose();
+		cone.geometry = newGeom;
+		cone.rotation.x = Math.PI/2;
+		cone.position.z = cone.geometry.parameters.height / 2;
+	}
+	/** Update color */
+	let SELECTED_COLOR = new THREE.Color("#66c2ff");
+	if (d.selected === true) cone.material.color = SELECTED_COLOR;
+	else cone.material.color = new THREE.Color('#ffffff');
+	/** Update color */
+// 	cone.material.color = new THREE.Color(`#${d.material.color}`);
+}
+
+function cylinder_geometry_from_params(params) {
+	return new THREE.CylinderGeometry(
+		params.radiusTop,
+		params.radiusBottom,
+		params.height,
+		params.radialSegments,
+		params.heightSegments,
+		params.openEnded
+	);
+}
+ 
 function joinObjectParents({ objects, sceneSelection }) {
   const join = sceneSelection
     .selectAll()
@@ -720,15 +855,27 @@ function joinObjectParents({ objects, sceneSelection }) {
   const enter = join
     .enter()
     .append(() => new THREE.Object3D());
+  /** Add child object, i.e. the sphere */
+  enter
+    .append(getNewObject)
+    .each(function(d) {
+      this._type = 'object';
+    });
   const parents = enter
     .merge(join)
-    .each(function(d) {
-      this.position.copy(d.position);
+    .each(function(parent) {
+      this.position.copy(parent.position);
     });
+  const childObjects = parents
+    .select(function(d) {
+      return this.getObjectByProperty('_type', 'object');
+    })
+    .each(updateObjectRadius);
+  joinCones(childObjects);
   return parents;
 }
   
-function joinObjects(parents) {
+function joinChildObjects(parents) {
   const join = parents
     .selectAll()
     .filter(function(d) {
@@ -738,9 +885,13 @@ function joinObjects(parents) {
   const enter = join
     .enter()
     .append(getNewObject);
-  enter
+  const objects = enter
     .merge(join)
-    .each(updateObject);
+    .each(updateObjectRadius);
+    // .each(function(d) {
+    //   const object = this;
+    // });
+  return objects;
 }
   
 function getNewObject() {
@@ -757,7 +908,7 @@ function getNewObject() {
   return newObject;
 }
   
-function updateObject(d) {
+function updateObjectRadius(d) {
   const { volume } = d;
   const object = this;
   const params = object.geometry.parameters;
