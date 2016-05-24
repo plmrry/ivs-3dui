@@ -28,7 +28,17 @@ import apply from './utilities/apply.js';
 selectableTHREEJS(THREE);
 debug.enable('*,-reducer:*');
 Rx.config.longStackSupport = true;
+
+/** GLOBALS */
 const MIN_VOLUME = 0.1;
+
+const latitude_to_theta = d3.scaleLinear()
+  .domain([90, 0, -90])
+  .range([0, Math.PI/2, Math.PI]);
+  
+const longitude_to_phi = d3.scaleLinear()
+  .domain([-180, 0, 180])
+  .range([0, Math.PI, 2 * Math.PI]);
 
 main();
 
@@ -182,7 +192,7 @@ function main() {
 
 function getSelected(objects) {
   return objects.values().filter(d => d.selected)[0];
-};
+}
 
 function getAddObjectReducer(actionSubject) {
   return position => model => {
@@ -577,12 +587,6 @@ function getEditorDomReducer({ editorDomModel$, actionSubject }) {
  */
  
 function mainCamera(windowSize$) {
-  const latitude_to_theta = d3.scaleLinear()
-    .domain([90, 0, -90])
-    .range([0, Math.PI/2, Math.PI]);
-  const longitude_to_phi = d3.scaleLinear()
-    .domain([0, 360])
-    .range([0, 2 * Math.PI]);
   const latitude$ = stream
     .just(45)
     .shareReplay(1);
