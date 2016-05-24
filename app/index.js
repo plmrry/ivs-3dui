@@ -108,7 +108,8 @@ function main() {
         longitude: Math.random() * 360 - 180,
         volume: 2,
         spread: 0.5,
-        type: 'cone'
+        type: 'cone',
+        selected: true
       };
       selected.cones.push(newCone);
       return model;
@@ -151,8 +152,12 @@ function main() {
     .scan(apply)
     .shareReplay(1);
     /** NOTE: shareReplay */
+    
+  const selected$ = mainSceneModel$
+    .pluck('objects')
+    .map(getSelected);
 
-  const editorDomModel$ = getEditorDomModel$(mainSceneModel$);
+  const editorDomModel$ = getEditorDomModel$(selected$);
 
   const updateRendererSize$ = windowSize$
     .map(size => renderer => {
@@ -263,9 +268,10 @@ function getAddObjectReducer(actionSubject) {
   };
 }
 
-function getEditorDomModel$(mainSceneModel$) {
-  const editorDomModel$ = mainSceneModel$
-    .pluck('selected')
+function getEditorDomModel$(selected$) {
+  const editorDomModel$ = selected$
+    // .pluck('selected')
+    // .map(model => { debugger })
     .map(selected => {
       if (typeof selected === 'undefined') return { cards: [] };
       const { key } = selected;
@@ -899,42 +905,48 @@ function joinObjectParents({ objects, sceneSelection }) {
     .select(function(d) {
       return this.getObjectByProperty('_type', 'object');
     })
-    .each(updateObjectRadius);
+    .each(updateObjectRadius)
+    .each(updateObjectOpacity);
   joinCones(childObjects);
   return parents;
 }
   
-function joinChildObjects(parents) {
-  const join = parents
-    .selectAll()
-    .filter(function(d) {
-      return d.type === 'object';
-    })
-    .data(d => d.children || [], d => d.key);
-  const enter = join
-    .enter()
-    .append(getNewObject);
-  const objects = enter
-    .merge(join)
-    .each(updateObjectRadius);
-    // .each(function(d) {
-    //   const object = this;
-    // });
-  return objects;
-}
+// function joinChildObjects(parents) {
+//   const join = parents
+//     .selectAll()
+//     .filter(function(d) {
+//       return d.type === 'object';
+//     })
+//     .data(d => d.children || [], d => d.key);
+//   const enter = join
+//     .enter()
+//     .append(getNewObject);
+//   const objects = enter
+//     .merge(join)
+//     .each(updateObjectRadius)
+//     .each(updateObjectOpacity);
+//     // .each(function(d) {
+//     //   const object = this;
+//     // });
+//   return objects;
+// }
   
 function getNewObject() {
   const geometry = new THREE.SphereGeometry(0.1, 30, 30);
   const material = new THREE.MeshPhongMaterial({
     color: new THREE.Color(0, 0, 0),
     transparent: true,
-    opacity: 0.3,
+    opacity: 0.1,
     side: THREE.DoubleSide
   });
   const newObject = new THREE.Mesh(geometry, material);
   newObject.castShadow = true;
   newObject.receiveShadow = true;
   return newObject;
+}
+
+function updateObjectOpacity({ selected }) {
+  this.material.opacity = selected ? 0.3 : 0.1;
 }
   
 function updateObjectRadius(d) {
