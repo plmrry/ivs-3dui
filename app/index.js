@@ -272,24 +272,53 @@ function getAddObjectReducer(actionSubject) {
 
 function getEditorDomModel$(selected$) {
   const editorDomModel$ = selected$
-    // .pluck('selected')
-    // .map(model => { debugger })
     .map(selected => {
       if (typeof selected === 'undefined') return { cards: [] };
-      const { key } = selected;
+      // const parentKey = selected.key;
+      // const { key } = selected;
       if (selected.type === 'object-parent') {
+        const parentKey = selected.key;
         const parent = selected;
+        const { cones } = parent;
+        const hasCones = parent.cones.length > 0;
+        let coneCardBlock = [];
+        if (hasCones) {
+          const selectedCone = cones.filter(d => d.selected)[0];
+          if (selectedCone) {
+            coneCardBlock = [
+              {
+                id: 'cone-info-card-block',
+                header: `Cone ${parentKey}.${selectedCone.key}`
+              }
+            ]
+          }
+        }
+        // const coneCardBlock = hasCones ? [
+        //   {
+        //     id: 'cone-info-card-block',
+        //     header: `
+        //   }
+        // ]
+        const objectCardBlock = [
+          {
+            id: 'object-info-card-block',
+            header: `Object ${parentKey}`,
+            rows: getObjectInfoRows(parent)
+          }
+        ];
+        
         return {
           cards: [
             {
               id: 'selected-info-card',
-              card_blocks: [
-                {
-                  id: 'object-info-card-block',
-                  header: `Object ${key}`,
-                  rows: getObjectInfoRows(parent)
-                }
-              ]
+              card_blocks: coneCardBlock.concat(objectCardBlock)
+              // card_blocks: [
+              //   {
+              //     id: 'object-info-card-block',
+              //     header: `Object ${parentKey}`,
+              //     rows: getObjectInfoRows(parent)
+              //   }
+              // ]
             }
           ]
         };
