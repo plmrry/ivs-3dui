@@ -100,6 +100,8 @@ function main() {
     return function(model) {
       const { selected } = model;
       selected.cones = selected.cones || [];
+      /** NOTE: Un-select all */
+      selected.cones.forEach(d => d.selected = false);
       const maxKey = d3.max(selected.cones, d => d.key) || 0;
       const key = maxKey + 1;
       const newCone = {
