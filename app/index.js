@@ -115,6 +115,21 @@ function main() {
       }
       return model;
     });
+  const animation$ = stream
+		.create(observer => {
+			d3.timer(() => observer.onNext())
+		})
+		.timestamp()
+		.pluck('timestamp')
+		.map(time => time / 1e3);
+	const distanceReducer$ = animation$
+	  .map(seconds => model => {
+	    const moving = model.objects.values().filter(d => d.velocity > 0);
+	    moving.forEach(object => {
+	      object.distance += object.velocity;
+	    });
+	    return model;
+	  });
   const modelReducer$ = stream
     .merge(
       newObjectAction$,
@@ -122,25 +137,33 @@ function main() {
       objectVolumeReducer$,
       objectPositionReducer$,
       addConeReducer$,
-      coneVolumeReducer$
-    )
-    .map(compose(model => {
-      model.objects.values().forEach(object => {
-        object.cones = object.cones || [];
-        object.cones.forEach(setConeLookAt);
-      });
-      return model;
-    }))
-    // .map(compose(model => {
-    //   model.objects.values().forEach(object => {
-    //     console.log(object.curve);
-    //   });
-    //   return model;
-    // }));
+      coneVolumeReducer$,
+      distanceReducer$
+    );
+  function setTrajectoryOffset(object) {
+    const { curve, distance } = object;
+    const t = (distance / curve.getLength()) % 1
+    const trajectoryOffset = curve.getPoint(t);
+    object.trajectoryOffset = trajectoryOffset;
+    return object;
+  }
+  function setConesLookAt(object) {
+    object.cones = object.cones || [];
+    object.cones.forEach(setConeLookAt);
+    return object;
+  }
   const mainSceneModel$ = stream
     .just({ objects: d3.map() })
     .concat(modelReducer$)
     .scan(apply)
+    .map(model => {
+      /** NOTE: This happens every time a model is emitted */
+      model.objects.values().forEach(object => {
+        setConesLookAt(object);
+        setTrajectoryOffset(object);
+      });
+      return model;
+    })
     .shareReplay(1);
     /** NOTE: shareReplay */
   /** RENDERER */
@@ -317,7 +340,7 @@ function getAddObjectReducer(actionSubject) {
     const splineType = 'CatmullRomCurve3';
     const vectors = [
       [+0,+0,+0],
-			[+2,+1,-2], 
+			[+2,+1,-2],
 			[+5,-1,-2]
 		].map(([x,y,z]) => new THREE.Vector3(x, y, z));
     const curve = new THREE[splineType](vectors);
@@ -329,7 +352,8 @@ function getAddObjectReducer(actionSubject) {
       selected: true,
       volume: 0.1,
       curve,
-			velocity: 1
+			velocity: 0.05, /** NOTE: per tick */
+			distance: 0
     };
     model.objects.set(key, newObject);
     actionSubject.onNext({
@@ -825,13 +849,13 @@ function joinTrajectories(parents) {
       .filter(function(d) {
         return d.type === 'trajectory';
       })
-      /** NOTE: Key function is important! */
-      .data(({ curve }) => [curve], d => d.type); 
+      /** NOTE: Key function is very important! */
+      .data(({ curve }) => [{ type: 'trajectory', curve }], d => d.type); 
     const enter = join
       .enter()
-      .append(function(curve) {
+      .append(function({ curve }) {
         debug('reducer:curve')('enter curve');
-        const geometry = new THREE.TubeGeometry(curve, 100, 0.05, 8, true);
+        const geometry = new THREE.TubeGeometry(curve, 100, 0.05, 8, curve.closed);
   			const material = new THREE.MeshPhongMaterial({
           color: 0x000000,
           transparent: true,
@@ -840,8 +864,7 @@ function joinTrajectories(parents) {
         const trajectory = new THREE.Mesh(geometry, material);
         trajectory.castShadow = true;
         return trajectory;
-      })
-      .each(d => d.type = 'trajectory');
+      });
   }
 }
 
@@ -964,9 +987,14 @@ function joinObjectParents({ objects, sceneSelection }) {
       return this.getObjectByProperty('_type', 'object');
     })
     .each(updateObjectRadius)
-    .each(updateObjectOpacity);
+    .each(updateObjectOpacity)
+    .each(updateObjectPosition)
   joinCones(childObjects);
   return parents;
+}
+
+function updateObjectPosition(d) {
+  this.position.copy(d.trajectoryOffset);
 }
   
 function getNewObject() {
