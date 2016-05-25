@@ -676,12 +676,6 @@ function combineAndRender(renderer$, scene$, camera$) {
   .subscribe(fn => fn());
 }
 
-function updateSelectedObjectVolume({ action$ }) {
-  return action$
-    .filter(d => d.actionType === 'update-selected-object-volume')
-    .pluck('modelReducer');
-}
-
 function tweenObjectVolume({ action$ }) {
   return action$
     .filter(({ actionType }) => actionType === 'tween-object-volume')
@@ -739,7 +733,6 @@ function getJoinObjectsReducer(model$) {
   return model$
     .map(({ objects }) => objects.values())
     .map(objects => scene => {
-      // objects.forEach(o => console.log(o.cones))
       const sceneSelection = d3.select(scene);
       const parents = joinObjectParents({ objects, sceneSelection });
       // const _objects = joinChildObjects(parents);
@@ -756,7 +749,6 @@ function joinCones(objects) {
   let join = objects
 		.selectAll()
 		.data(function(d) { return d.cones || [] });
-		// .data(function(d) { debugger })
 	join
 		.exit()
 		.each(function(d) {
@@ -824,8 +816,6 @@ function updateOneCone(d) {
 	let SELECTED_COLOR = new THREE.Color("#66c2ff");
 	if (d.selected === true) cone.material.color = SELECTED_COLOR;
 	else cone.material.color = new THREE.Color('#ffffff');
-	/** Update color */
-// 	cone.material.color = new THREE.Color(`#${d.material.color}`);
 }
 
 function cylinder_geometry_from_params(params) {
@@ -873,26 +863,6 @@ function joinObjectParents({ objects, sceneSelection }) {
   joinCones(childObjects);
   return parents;
 }
-  
-// function joinChildObjects(parents) {
-//   const join = parents
-//     .selectAll()
-//     .filter(function(d) {
-//       return d.type === 'object';
-//     })
-//     .data(d => d.children || [], d => d.key);
-//   const enter = join
-//     .enter()
-//     .append(getNewObject);
-//   const objects = enter
-//     .merge(join)
-//     .each(updateObjectRadius)
-//     .each(updateObjectOpacity);
-//     // .each(function(d) {
-//     //   const object = this;
-//     // });
-//   return objects;
-// }
   
 function getNewObject() {
   const geometry = new THREE.SphereGeometry(0.1, 30, 30);
