@@ -12,7 +12,7 @@ import THREE from 'three/three.js';
 // import createVirtualAudioGraph from 'virtual-audio-graph';
 import _ from 'underscore';
 
-// import OBJLoader from './OBJLoader.js';
+import OBJLoader from './OBJLoader.js';
 // import makeD3DomDriver from './d3DomDriver.js';
 // import makeStateDriver from './stateDriver.js';
 
@@ -52,6 +52,8 @@ const degToRad = d3.scaleLinear()
 main();
 
 function main() {
+  const headObject$ = getHeadObject();
+  const heads$ = heads({ headObject$ });
   const windowSize$ = windowSize();
   const actionSubject = new Rx.ReplaySubject(1);
   const action$ = stream
@@ -163,11 +165,41 @@ function main() {
     });
   const addFloorReducer$ = getAddFloorReducer();
   const joinObjectsReducer$ = getJoinObjectsReducer(mainSceneModel$);
+  const joinHeadsReducer$ = heads$
+    .startWith([])
+    .map(heads => scene => {
+      const sceneSelection = d3.select(scene);
+      const join = sceneSelection
+        .selectAll()
+        .filter(function(d) {
+          if (typeof d === 'undefined') return false;
+          return d.type === 'head';
+        })
+        .data(heads);
+      const enter = join
+        .enter()
+        .append(d => {
+  				const head = d.object;
+  				head.rotation.y += Math.PI;
+  				const HEAD_SCALE = 0.5;
+  				head.children[0].castShadow = true;
+  				head.scale.set(HEAD_SCALE, HEAD_SCALE, HEAD_SCALE);
+  				return head;
+  			});
+  		const headSelection = join
+  		  .merge(enter)
+  		  .each(function(d) {
+  		    this.position.copy(d.position);
+  		    this.lookAt(d.lookAt);
+  		  });
+  		return scene;
+    });
   const sceneReducer$ = stream
     .merge( 
       addLightsReducer$, 
       addFloorReducer$, 
-      joinObjectsReducer$ 
+      joinObjectsReducer$,
+      joinHeadsReducer$
     );
   const mainScene$ = stream
     .just(new THREE.Scene())
@@ -197,6 +229,34 @@ function main() {
   const editorDomReducer$ = getEditorDomReducer({ editorDomModel$, actionSubject });
   const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
   updateDom(domReducer$);
+}
+
+function heads({ headObject$ }) {
+	const heads$ = headObject$
+		.map(head => ({
+			type: 'head',
+			position: {
+				x: -1,
+				y: 1,
+				z: 2
+			},
+			lookAt: {
+				x: 1,
+				y: 3,
+				z: 1
+			},
+			object: head
+		}))
+		.map(h => [h]);
+	return heads$;
+}
+
+function getHeadObject() {
+	OBJLoader(THREE);
+	const loader = new THREE.OBJLoader();
+	return stream.create(observer => {
+		loader.load('assets/head.obj', d => observer.onNext(d));
+	});
 }
 
 function compose(second) {
@@ -588,11 +648,9 @@ function polarToVector({ radius, theta, phi }) {
  
 function mainCamera(windowSize$) {
   const latitude$ = stream
-    .just(45)
-    .shareReplay(1);
+    .just(45);
   const longitude$ = stream
-    .just(45)
-    .shareReplay(1);
+    .just(45);
   const theta$ = latitude$
     .map(latitude_to_theta);
   const phi$ = longitude$
