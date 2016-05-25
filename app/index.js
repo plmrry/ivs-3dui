@@ -65,6 +65,22 @@ function main() {
     .merge(
       actionSubject
     );
+    
+  const updateSelectedConeVolume$ = action$
+    .filter(d => d.actionType === 'update-selected-cone-volume')
+    .map(({ dx }) => model => {
+      const selectedObject = getSelected(model.objects.values());
+      const selectedCone = getSelected(selectedObject.cones);
+      if (typeof selectedCone !== 'undefined') {
+        const DRAG_SENSITIVITY = 0.01;
+        const newVolume = selectedCone.volume + dx * DRAG_SENSITIVITY;
+        const MAX_VOLUME = 1;
+        const MIN_VOLUME = 0.1;
+        if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
+          selectedCone.volume = newVolume;
+      }
+      return model;
+    });
 
   const tweenObjectVolume$ = tweenObjectVolume({ action$ });
   
@@ -108,7 +124,7 @@ function main() {
         key,
         latitude: Math.random() * 180 - 90,
         longitude: Math.random() * 360 - 180,
-        volume: 2,
+        volume: 1,
         spread: 0.5,
         type: 'cone',
         selected: true
@@ -128,7 +144,8 @@ function main() {
       tweenObjectVolume$,
       updateSelectedObjectVolume$,
       updateParentObjectPosition$,
-      addConeToSelected$
+      addConeToSelected$,
+      updateSelectedConeVolume$
     )
     .map(compose(model => {
       model.objects.values().forEach(object => {
@@ -157,6 +174,7 @@ function main() {
     
   const selected$ = mainSceneModel$
     .pluck('objects')
+    .map(o => o.values())
     .map(getSelected);
 
   const editorDomModel$ = getEditorDomModel$(selected$);
@@ -223,8 +241,8 @@ function main() {
   updateDom(domReducer$);
 }
 
-function getSelected(objects) {
-  return objects.values().filter(d => d.selected)[0];
+function getSelected(array) {
+  return array.filter(d => d.selected)[0];
 }
 
 function getAddObjectReducer(actionSubject) {
@@ -274,13 +292,10 @@ function getEditorDomModel$(selected$) {
   const editorDomModel$ = selected$
     .map(selected => {
       if (typeof selected === 'undefined') return { cards: [] };
-      // const parentKey = selected.key;
-      // const { key } = selected;
       if (selected.type === 'object-parent') {
         const parentKey = selected.key;
-        const parent = selected;
-        const { cones } = parent;
-        const hasCones = parent.cones.length > 0;
+        const { cones } = selected;
+        const hasCones = cones.length > 0;
         let coneCardBlock = [];
         if (hasCones) {
           const selectedCone = cones.filter(d => d.selected)[0];
@@ -288,37 +303,27 @@ function getEditorDomModel$(selected$) {
             coneCardBlock = [
               {
                 id: 'cone-info-card-block',
-                header: `Cone ${parentKey}.${selectedCone.key}`
+                header: `Cone ${parentKey}.${selectedCone.key}`,
+                rows: getConeInfoRows(selectedCone)
               }
-            ]
+            ];
           }
         }
-        // const coneCardBlock = hasCones ? [
-        //   {
-        //     id: 'cone-info-card-block',
-        //     header: `
-        //   }
-        // ]
         const objectCardBlock = [
           {
             id: 'object-info-card-block',
             header: `Object ${parentKey}`,
-            rows: getObjectInfoRows(parent)
+            rows: getObjectInfoRows(selected)
           }
         ];
+        
+        const card_blocks = coneCardBlock.concat(objectCardBlock);
         
         return {
           cards: [
             {
               id: 'selected-info-card',
-              card_blocks: coneCardBlock.concat(objectCardBlock)
-              // card_blocks: [
-              //   {
-              //     id: 'object-info-card-block',
-              //     header: `Object ${parentKey}`,
-              //     rows: getObjectInfoRows(parent)
-              //   }
-              // ]
+              card_blocks
             }
           ]
         };
@@ -329,46 +334,52 @@ function getEditorDomModel$(selected$) {
   return editorDomModel$;
 }
 
+function column(klass, span_class, text, cursor, actionType) {
+  return {
+    class: klass,
+    span_class,
+    text,
+    span_styles: cursor ? { cursor } : undefined,
+    registerAction: actionType ? registerTextDragAction(actionType) : undefined
+  };
+}
+
+function getConeInfoRows(selected) {
+  const volumeText = `${d3.format(".1f")(selected.volume)} dB` || 'Error!';
+  return [
+    { /** New row */
+      columns: [
+        column('col-xs-3', 'key', 'File'),
+        column('col-xs-3', 'value', selected.file || 'None', 'pointer'),
+        column('col-xs-3', 'key', 'Volume'),
+        column('col-xs-3', 'value', volumeText, 'ew-resize', 'update-selected-cone-volume')
+      ]
+    }
+  ];
+}
+
 /**
  * Get all of the textual key and value rows and columns for an Object Parent.
  * TODO: Still needs a lot of DRY-ing
  */
-function getObjectInfoRows(parent) {
+function getObjectInfoRows(selected) {
   return [
     { /** New row */
       columns: [
+        column('col-xs-3', 'key', 'File'),
+        column('col-xs-3', 'value', selected.file || 'None', 'pointer'),
+        column('col-xs-3', 'key', 'Volume'),
         {
           class: 'col-xs-3',
-          span_class: 'key',
-          text: 'File'
-        },
-        {
-          class: 'col-xs-3',
-          span_class: 'value set-object-file',
-          span_styles: {
-            cursor: 'pointer'
-          },
-          text: parent.file || 'None',
-          id: 'set-object-file'
-        },
-        {
-          class: 'col-xs-3',
-          span_class: 'key',
-          text: 'Volume'
-        },
-        {
-          class: 'col-xs-3',
-          span_class: 'value set-object-volume',
+          span_class: 'value',
           span_styles: {
             cursor: 'ew-resize'
           },
-          parent,
-          text: `${d3.format(".1f")(parent.volume)} dB` || '0 dB',
-          id: 'set-object-volume',
+          text: `${d3.format(".1f")(selected.volume)} dB` || 'Error!',
           registerAction: registerTextDragAction(
             'update-selected-object-volume',
             dx => model => {
-              const object = getSelected(model.objects);
+              const object = getSelected(model.objects.values());
               if (object.type === 'object-parent') {
                 const newVolume = object.volume + dx * 0.01;
                 const MAX_VOLUME = 1;
@@ -390,13 +401,12 @@ function getObjectInfoRows(parent) {
           text: 'x'
         },
         {
-          parent,
           class: 'col-xs-3',
           span_class: 'value set-object-x',
           span_styles: {
             cursor: 'ew-resize'
           },
-          text: d3.format(".1f")(parent.position.x),
+          text: d3.format(".1f")(selected.position.x),
           id: 'set-object-x',
           registerAction: registerTextDragAction(
             'update-selected-parent-object-position',
@@ -420,13 +430,12 @@ function getObjectInfoRows(parent) {
           text: 'y'
         },
         {
-          parent,
           class: 'col-xs-3',
           span_class: 'value',
           span_styles: {
             cursor: 'ew-resize'
           },
-          text: d3.format(".1f")(parent.position.y),
+          text: d3.format(".1f")(selected.position.y),
           registerAction: registerTextDragAction(
             'update-selected-parent-object-position',
             dx => model => {
@@ -449,13 +458,12 @@ function getObjectInfoRows(parent) {
           text: 'z'
         },
         {
-          parent,
           class: 'col-xs-3',
           span_class: 'value',
           span_styles: {
             cursor: 'ew-resize'
           },
-          text: d3.format(".1f")(parent.position.z),
+          text: d3.format(".1f")(selected.position.z),
           registerAction: registerTextDragAction(
             'update-selected-parent-object-position',
             dx => model => {
@@ -474,12 +482,11 @@ function getObjectInfoRows(parent) {
       columns: [
         {
           class: 'col-xs-6',
-          span_class: 'value delete-object',
+          span_class: 'value',
           span_styles: {
             cursor: 'pointer'
           },
-          text: 'Delete',
-          id: 'delete-object'
+          text: 'Delete'
         }
       ]
     },
@@ -508,10 +515,10 @@ function getObjectInfoRows(parent) {
 function registerTextDragAction(actionType, getModelReducer) {
   return function({ node, actionSubject }) {
     const dragAction$ = getTextDragAction$(node)
-      .map(getModelReducer)
-      .map(modelReducer => ({
+      .map(dx => ({
         actionType,
-        modelReducer
+        dx,
+        modelReducer: getModelReducer ? getModelReducer(dx) : undefined
       }));
     dragAction$.subscribe(actionSubject);
   };
