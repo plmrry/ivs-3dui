@@ -66,14 +66,14 @@ function main() {
       actionSubject
     );
     
-  const updateSelectedConeVolume$ = action$
+  const coneVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-cone-volume')
-    .map(({ dx }) => model => {
+    .map(({ value }) => model => {
       const selectedObject = getSelected(model.objects.values());
       const selectedCone = getSelected(selectedObject.cones);
       if (typeof selectedCone !== 'undefined') {
         const DRAG_SENSITIVITY = 0.01;
-        const newVolume = selectedCone.volume + dx * DRAG_SENSITIVITY;
+        const newVolume = selectedCone.volume + value * DRAG_SENSITIVITY;
         const MAX_VOLUME = 1;
         const MIN_VOLUME = 0.1;
         if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
@@ -84,7 +84,19 @@ function main() {
 
   const tweenObjectVolume$ = tweenObjectVolume({ action$ });
   
-  const updateSelectedObjectVolume$ = updateSelectedObjectVolume({ action$ });
+  const objectVolumeReducer$ = action$
+    .filter(d => d.actionType === 'update-selected-object-volume')
+    .map(({ value }) => model => {
+      const object = getSelected(model.objects.values());
+      if (object.type === 'object-parent') {
+        const newVolume = object.volume + value * 0.01;
+        const MAX_VOLUME = 1;
+        const MIN_VOLUME = 0.1;
+        if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
+          object.volume = newVolume;
+      }
+      return model;
+    });
 
   const newObjectAction$ = key$
     .filter(code => code === 'O')
@@ -93,28 +105,21 @@ function main() {
       1.5,
       Math.random() * 10 - 5
     ))
-    .map(getAddObjectReducer(actionSubject))
-    .map(compose(updateSelected));
+    .map(getAddObjectReducer(actionSubject));
     
   function compose(second) {
     return function(first) {
       return _.compose(second, first);
     };
   }
-    
-  function updateSelected(model) {
-    const selectedArray = model.objects.values().filter(d => d.selected);
-    model.selected = selectedArray[0];
-    return model;
-  }
   
-  const addConeToSelected$ = action$
+  const addConeReducer$ = action$
     .filter(d => d.actionType === 'add-cone-to-selected')
     .map(addConeToSelected);
     
   function addConeToSelected() {
     return function(model) {
-      const { selected } = model;
+      const selected = getSelected(model.objects.values());
       selected.cones = selected.cones || [];
       /** NOTE: Un-select all */
       selected.cones.forEach(d => d.selected = false);
@@ -134,7 +139,7 @@ function main() {
     };
   }
     
-  const updateParentObjectPosition$ = action$
+  const objectPositionReducer$ = action$
     .filter(d => d.actionType === 'update-selected-parent-object-position')
     .map(({ value }) => model => {
       const selected = getSelected(model.objects.values());
@@ -150,10 +155,10 @@ function main() {
     .merge(
       newObjectAction$,
       tweenObjectVolume$,
-      updateSelectedObjectVolume$,
-      updateParentObjectPosition$,
-      addConeToSelected$,
-      updateSelectedConeVolume$
+      objectVolumeReducer$,
+      objectPositionReducer$,
+      addConeReducer$,
+      coneVolumeReducer$
     )
     .map(compose(model => {
       model.objects.values().forEach(object => {
@@ -342,16 +347,6 @@ function getEditorDomModel$(selected$) {
   return editorDomModel$;
 }
 
-function column(klass, span_class, text, cursor, actionType, mapper) {
-  return {
-    class: klass,
-    span_class,
-    text,
-    span_styles: cursor ? { cursor } : undefined,
-    registerAction: actionType ? registerTextDragAction(actionType, mapper) : undefined
-  };
-}
-
 function getConeInfoRows(selected) {
   const volumeText = `${d3.format(".1f")(selected.volume)} dB` || 'Error!';
   return [
@@ -375,31 +370,12 @@ function getObjectInfoRows(selected) {
     { /** New row */
       columns: [
         column('col-xs-3', 'key', 'File'),
-        column('col-xs-3', 'value', selected.file || 'None', 'pointer'),
-        column('col-xs-3', 'key', 'Volume'),
-        {
-          class: 'col-xs-3',
-          span_class: 'value',
-          span_styles: {
-            cursor: 'ew-resize'
-          },
-          text: `${d3.format(".1f")(selected.volume)} dB` || 'Error!',
-          registerAction: registerTextDragAction(
-            'update-selected-object-volume',
-            dx => model => {
-              const object = getSelected(model.objects.values());
-              if (object.type === 'object-parent') {
-                const newVolume = object.volume + dx * 0.01;
-                const MAX_VOLUME = 1;
-                const MIN_VOLUME = 0.1;
-                if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
-                  object.volume = newVolume;
-              }
-              return model;
-            }
-          )
-        }
-      ]
+        column('col-xs-3', 'value', selected.file || 'None', 'pointer')
+      ].concat(draggableKeyValue(
+        'Volume', 
+        d => `${d3.format(".1f")(d.volume)} dB` || 'Error!',
+        'update-selected-object-volume'
+      )(selected))
     },
     { /** New row */
       columns: draggableKeyValue(
@@ -459,49 +435,32 @@ function getObjectInfoRows(selected) {
   ];
 }
 
+function column(klass, span_class, text, cursor, actionType, mapper) {
+  return {
+    class: klass,
+    span_class,
+    text,
+    span_styles: cursor ? { cursor } : undefined,
+    registerAction: actionType ? registerTextDragAction(actionType, mapper) : undefined
+  };
+}
+
 function draggableKeyValue(keyText, valueText, actionType, actionMap) {
   return function(selected) {
     return [
-      {
-        class: 'col-xs-3',
-        span_class: 'key',
-        text: keyText
-      },
-      {
-        class: 'col-xs-3',
-        span_class: 'value',
-        span_styles: {
-          cursor: 'ew-resize'
-        },
-        text: valueText(selected),
-        registerAction: registerTextDragAction2(
-          actionType,
-          actionMap
-        )
-      }
+      column('col-xs-3', 'key', keyText),
+      column('col-xs-3', 'value', valueText(selected), 'ew-resize', actionType, actionMap)
     ];
   };
 }
 
-function registerTextDragAction2(actionType, mapper) {
+function registerTextDragAction(actionType, mapper) {
   return function({ node, actionSubject }) {
     const dragAction$ = getTextDragAction$(node)
-      .map(mapper)
+      .map(mapper ? mapper : x => x)
       .map(value => ({
         actionType,
         value
-      }));
-    dragAction$.subscribe(actionSubject);
-  };
-}
-
-function registerTextDragAction(actionType, getModelReducer) {
-  return function({ node, actionSubject }) {
-    const dragAction$ = getTextDragAction$(node)
-      .map(dx => ({
-        actionType,
-        dx,
-        modelReducer: getModelReducer ? getModelReducer(dx) : undefined
       }));
     dragAction$.subscribe(actionSubject);
   };
