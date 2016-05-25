@@ -53,19 +53,11 @@ main();
 
 function main() {
   const windowSize$ = windowSize();
-
-  const key$ = stream
-    .fromEvent(document, 'keydown')
-    .pluck('code')
-    .map(code => code.replace('Key', ''));
-
   const actionSubject = new Rx.ReplaySubject(1);
-
   const action$ = stream
     .merge(
       actionSubject
     );
-    
   const coneVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-cone-volume')
     .map(({ value }) => model => {
@@ -81,9 +73,7 @@ function main() {
       }
       return model;
     });
-
   const tweenObjectVolume$ = tweenObjectVolume({ action$ });
-  
   const objectVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-object-volume')
     .map(({ value }) => model => {
@@ -97,7 +87,10 @@ function main() {
       }
       return model;
     });
-
+  const key$ = stream
+    .fromEvent(document, 'keydown')
+    .pluck('code')
+    .map(code => code.replace('Key', ''));
   const newObjectAction$ = key$
     .filter(code => code === 'O')
     .map(() => new THREE.Vector3(
@@ -106,39 +99,9 @@ function main() {
       Math.random() * 10 - 5
     ))
     .map(getAddObjectReducer(actionSubject));
-    
-  function compose(second) {
-    return function(first) {
-      return _.compose(second, first);
-    };
-  }
-  
   const addConeReducer$ = action$
     .filter(d => d.actionType === 'add-cone-to-selected')
     .map(addConeToSelected);
-    
-  function addConeToSelected() {
-    return function(model) {
-      const selected = getSelected(model.objects.values());
-      selected.cones = selected.cones || [];
-      /** NOTE: Un-select all */
-      selected.cones.forEach(d => d.selected = false);
-      const maxKey = d3.max(selected.cones, d => d.key) || 0;
-      const key = maxKey + 1;
-      const newCone = {
-        key,
-        latitude: Math.random() * 180 - 90,
-        longitude: Math.random() * 360 - 180,
-        volume: 1,
-        spread: 0.5,
-        type: 'cone',
-        selected: true
-      };
-      selected.cones.push(newCone);
-      return model;
-    };
-  }
-    
   const objectPositionReducer$ = action$
     .filter(d => d.actionType === 'update-selected-parent-object-position')
     .map(({ value }) => model => {
@@ -150,7 +113,6 @@ function main() {
       }
       return model;
     });
-
   const modelReducer$ = stream
     .merge(
       newObjectAction$,
@@ -167,31 +129,13 @@ function main() {
       });
       return model;
     }));
-    
-  function setConeLookAt(cone) {
-    const { latitude, longitude } = cone;
-    const theta = latitudeToTheta(latitude);
-    const phi = longitudeToPhi(longitude);
-    const radius = 1;
-    const lookAt = polarToVector({ radius, theta, phi });
-    cone.lookAt = lookAt;
-    return cone;
-  }
-
   const mainSceneModel$ = stream
     .just({ objects: d3.map() })
     .concat(modelReducer$)
     .scan(apply)
     .shareReplay(1);
     /** NOTE: shareReplay */
-    
-  const selected$ = mainSceneModel$
-    .pluck('objects')
-    .map(o => o.values())
-    .map(getSelected);
-
-  const editorDomModel$ = getEditorDomModel$(selected$);
-
+  /** RENDERER */
   const updateRendererSize$ = windowSize$
     .map(size => renderer => {
       const currentSize = renderer.getSize();
@@ -202,29 +146,14 @@ function main() {
       }
       return renderer;
     });
-
   const rendererUpdate$ = stream
     .merge(
       updateRendererSize$
     );
-
   const mainRenderer$ = stream
     .just(getFirstRenderer())
     .concat(rendererUpdate$)
     .scan(apply);
-  
-  const setMainCanvas$ = mainRenderer$
-    .first()
-    .pluck('domElement')
-    .map(canvas => dom => {
-      const canvasSelection = dom
-        .select('main')
-        .append(() => canvas)
-        .attr('id', 'main-canvas');
-      getMainDomAction$(canvasSelection).subscribe(actionSubject);
-      return dom;
-    });
-
   /** SCENE */
   const addLightsReducer$ = stream
     .just(scene => {
@@ -249,9 +178,63 @@ function main() {
   /** RENDER */
   combineAndRender(mainRenderer$, mainScene$, mainCamera$);
   /** DOM */
+  const setMainCanvas$ = mainRenderer$
+    .first()
+    .pluck('domElement')
+    .map(canvas => dom => {
+      const canvasSelection = dom
+        .select('main')
+        .append(() => canvas)
+        .attr('id', 'main-canvas');
+      getMainDomAction$(canvasSelection).subscribe(actionSubject);
+      return dom;
+    });
+  const selected$ = mainSceneModel$
+    .pluck('objects')
+    .map(o => o.values())
+    .map(getSelected);
+  const editorDomModel$ = getEditorDomModel$(selected$);
   const editorDomReducer$ = getEditorDomReducer({ editorDomModel$, actionSubject });
   const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
   updateDom(domReducer$);
+}
+
+function compose(second) {
+  return function(first) {
+    return _.compose(second, first);
+  };
+}
+
+function addConeToSelected() {
+  return function(model) {
+    const selected = getSelected(model.objects.values());
+    selected.cones = selected.cones || [];
+    /** NOTE: Un-select all */
+    selected.cones.forEach(d => d.selected = false);
+    const maxKey = d3.max(selected.cones, d => d.key) || 0;
+    const key = maxKey + 1;
+    const newCone = {
+      key,
+      latitude: Math.random() * 180 - 90,
+      longitude: Math.random() * 360 - 180,
+      volume: 1,
+      spread: 0.5,
+      type: 'cone',
+      selected: true
+    };
+    selected.cones.push(newCone);
+    return model;
+  };
+}
+
+function setConeLookAt(cone) {
+  const { latitude, longitude } = cone;
+  const theta = latitudeToTheta(latitude);
+  const phi = longitudeToPhi(longitude);
+  const radius = 1;
+  const lookAt = polarToVector({ radius, theta, phi });
+  cone.lookAt = lookAt;
+  return cone;
 }
 
 function getSelected(array) {
