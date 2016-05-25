@@ -1005,6 +1005,9 @@ function getNewObject() {
     opacity: 0.1,
     side: THREE.DoubleSide
   });
+  // material.blending = THREE.NormalBlending;
+  material.depthTest = false;
+  // material.alphaTest = 0.10;
   const newObject = new THREE.Mesh(geometry, material);
   newObject.castShadow = true;
   newObject.receiveShadow = true;
