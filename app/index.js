@@ -136,7 +136,15 @@ function main() {
     
   const updateParentObjectPosition$ = action$
     .filter(d => d.actionType === 'update-selected-parent-object-position')
-    .pluck('modelReducer');
+    .map(({ value }) => model => {
+      const selected = getSelected(model.objects.values());
+      if (selected.type === 'object-parent') {
+        const DRAG_SENSITIVITY = 0.01;
+        const delta = value.multiplyScalar(DRAG_SENSITIVITY);
+        selected.position.add(delta);
+      }
+      return model;
+    });
 
   const modelReducer$ = stream
     .merge(
@@ -334,13 +342,13 @@ function getEditorDomModel$(selected$) {
   return editorDomModel$;
 }
 
-function column(klass, span_class, text, cursor, actionType) {
+function column(klass, span_class, text, cursor, actionType, mapper) {
   return {
     class: klass,
     span_class,
     text,
     span_styles: cursor ? { cursor } : undefined,
-    registerAction: actionType ? registerTextDragAction(actionType) : undefined
+    registerAction: actionType ? registerTextDragAction(actionType, mapper) : undefined
   };
 }
 
@@ -394,89 +402,28 @@ function getObjectInfoRows(selected) {
       ]
     },
     { /** New row */
-      columns: [
-        {
-          class: 'col-xs-3',
-          span_class: 'key',
-          text: 'x'
-        },
-        {
-          class: 'col-xs-3',
-          span_class: 'value set-object-x',
-          span_styles: {
-            cursor: 'ew-resize'
-          },
-          text: d3.format(".1f")(selected.position.x),
-          id: 'set-object-x',
-          registerAction: registerTextDragAction(
-            'update-selected-parent-object-position',
-            dx => model => {
-              const object = model.selected;
-              if (object.type === 'object-parent') {
-                const delta = dx * 0.01;
-                object.position.x += delta;
-              }
-              return model;
-            }
-          )
-        }
-      ]
+      columns: draggableKeyValue(
+        'x', 
+        d => d3.format(".1f")(d.position.x),
+        'update-selected-parent-object-position',
+        dx => new THREE.Vector3(dx, 0, 0)
+      )(selected)
     },
     { /** New row */
-      columns: [
-        {
-          class: 'col-xs-3',
-          span_class: 'key',
-          text: 'y'
-        },
-        {
-          class: 'col-xs-3',
-          span_class: 'value',
-          span_styles: {
-            cursor: 'ew-resize'
-          },
-          text: d3.format(".1f")(selected.position.y),
-          registerAction: registerTextDragAction(
-            'update-selected-parent-object-position',
-            dx => model => {
-              const object = model.selected;
-              if (object.type === 'object-parent') {
-                const delta = dx * 0.01;
-                object.position.y += delta;
-              }
-              return model;
-            }
-          )
-        }
-      ]
+      columns: draggableKeyValue(
+        'y', 
+        d => d3.format(".1f")(d.position.y),
+        'update-selected-parent-object-position',
+        dx => new THREE.Vector3(0, dx, 0)
+      )(selected)
     },
     { /** New row */
-      columns: [
-        {
-          class: 'col-xs-3',
-          span_class: 'key',
-          text: 'z'
-        },
-        {
-          class: 'col-xs-3',
-          span_class: 'value',
-          span_styles: {
-            cursor: 'ew-resize'
-          },
-          text: d3.format(".1f")(selected.position.z),
-          registerAction: registerTextDragAction(
-            'update-selected-parent-object-position',
-            dx => model => {
-              const object = model.selected;
-              if (object.type === 'object-parent') {
-                const delta = dx * 0.01;
-                object.position.z += delta;
-              }
-              return model;
-            }
-          )
-        }
-      ]
+      columns: draggableKeyValue(
+        'z', 
+        d => d3.format(".1f")(d.position.z),
+        'update-selected-parent-object-position',
+        dx => new THREE.Vector3(0, 0, dx)
+      )(selected)
     },
     { /** New row */
       columns: [
@@ -510,6 +457,42 @@ function getObjectInfoRows(selected) {
       ]
     }
   ];
+}
+
+function draggableKeyValue(keyText, valueText, actionType, actionMap) {
+  return function(selected) {
+    return [
+      {
+        class: 'col-xs-3',
+        span_class: 'key',
+        text: keyText
+      },
+      {
+        class: 'col-xs-3',
+        span_class: 'value',
+        span_styles: {
+          cursor: 'ew-resize'
+        },
+        text: valueText(selected),
+        registerAction: registerTextDragAction2(
+          actionType,
+          actionMap
+        )
+      }
+    ];
+  };
+}
+
+function registerTextDragAction2(actionType, mapper) {
+  return function({ node, actionSubject }) {
+    const dragAction$ = getTextDragAction$(node)
+      .map(mapper)
+      .map(value => ({
+        actionType,
+        value
+      }));
+    dragAction$.subscribe(actionSubject);
+  };
 }
 
 function registerTextDragAction(actionType, getModelReducer) {
