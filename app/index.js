@@ -130,7 +130,13 @@ function main() {
         object.cones.forEach(setConeLookAt);
       });
       return model;
-    }));
+    }))
+    // .map(compose(model => {
+    //   model.objects.values().forEach(object => {
+    //     console.log(object.curve);
+    //   });
+    //   return model;
+    // }));
   const mainSceneModel$ = stream
     .just({ objects: d3.map() })
     .concat(modelReducer$)
@@ -308,31 +314,23 @@ function getAddObjectReducer(actionSubject) {
     objects.each(d => d.selected = false);
     model.maxId = d3.max(objects.values(), d => d.key) || 0;
     const key = model.maxId + 1;
+    const splineType = 'CatmullRomCurve3';
+    const vectors = [
+      [+0,+0,+0],
+			[+2,+1,-2], 
+			[+5,-1,-2]
+		].map(([x,y,z]) => new THREE.Vector3(x, y, z));
+    const curve = new THREE[splineType](vectors);
+    curve.closed = true;
     const newObject = {
       position,
       key,
       type: 'object-parent',
       selected: true,
       volume: 0.1,
-      children: [
-        {
-          // type: 'object',
-          // key,
-          // volume: 0.1,
-          // name: `object-${key}`
-        }
-      ],
-      trajectoryPoints: [
-				[+0,+0,+0], 
-				[+2,+1,-2], 
-				[+5,-1,-2], 
-				[+8,+2,+3], 
-				[+3,-1,+6]
-			].map(([x,y,z]) => ({x,y,z})),
-			closedTrajectory: true,
+      curve,
 			velocity: 1
     };
-    newObject.childObject = newObject.children[0];
     model.objects.set(key, newObject);
     actionSubject.onNext({
       actionType: 'tween-object-volume',
@@ -459,7 +457,7 @@ function getObjectInfoRows(selected) {
     { /** New row */
       columns: [
         {
-          class: 'col-xs-6',
+          class: 'col-xs-3',
           span_class: 'value',
           span_styles: {
             cursor: 'pointer'
@@ -472,7 +470,22 @@ function getObjectInfoRows(selected) {
               }))
               .subscribe(actionSubject);
           }
-        }
+        },
+        {
+          class: 'col-xs-3',
+          span_class: 'value',
+          span_styles: {
+            cursor: 'pointer'
+          },
+          text: 'Add Trajectory',
+          registerAction: ({ node, actionSubject }) => {
+            observableFromD3Event(d3.select(node))('click')
+              .map(() => ({
+                actionType: 'add-trajectory'
+              }))
+              .subscribe(actionSubject);
+          }
+        },
       ]
     }
   ];
@@ -793,6 +806,8 @@ function getJoinObjectsReducer(model$) {
     .map(objects => scene => {
       const sceneSelection = d3.select(scene);
       const parents = joinObjectParents({ objects, sceneSelection });
+      const trajectories = joinTrajectories(parents);
+      // console.log(scene.children);
       // const _objects = joinChildObjects(parents);
       // const cones = joinCones(parents);
       // parents.each(function(parent) {
@@ -803,9 +818,39 @@ function getJoinObjectsReducer(model$) {
     });
 }
 
+function joinTrajectories(parents) {
+  if (parents.size() > 0) {
+    const join = parents
+      .selectAll()
+      .filter(function(d) {
+        return d.type === 'trajectory';
+      })
+      /** NOTE: Key function is important! */
+      .data(({ curve }) => [curve], d => d.type); 
+    const enter = join
+      .enter()
+      .append(function(curve) {
+        debug('reducer:curve')('enter curve');
+        const geometry = new THREE.TubeGeometry(curve, 100, 0.05, 8, true);
+  			const material = new THREE.MeshPhongMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.5
+        });
+        const trajectory = new THREE.Mesh(geometry, material);
+        trajectory.castShadow = true;
+        return trajectory;
+      })
+      .each(d => d.type = 'trajectory');
+  }
+}
+
 function joinCones(objects) {
   let join = objects
 		.selectAll()
+		.filter(function(d) {
+		  return d.type === 'cone_parent';
+		})
 		.data(function(d) { return d.cones || [] });
 	join
 		.exit()
@@ -815,7 +860,8 @@ function joinCones(objects) {
 		});
 	const enter = join
 	  .enter()
-	  .append(getNewCone);
+	  .append(getNewCone)
+	  .each(d => d.type = 'cone_parent');
 	const cones = enter
     .merge(join)
 	  .each(updateOneCone);
@@ -850,6 +896,7 @@ function getNewCone(d) {
 	d3.select(cone).datum(d);
 	let coneParent = new THREE.Object3D();
 	coneParent.name = 'cone_parent';
+	coneParent._type = 'cone_parent';
 	coneParent.add(cone);
 	return coneParent;	
 }
