@@ -250,39 +250,16 @@ function main() {
   /** NOTE: ShareReplay */
   
   const listenerReducer$ = head$
-    .map(head => {
+    .map(head => virtualAudioGraph => {
+      const { audioContext: { listener } } = virtualAudioGraph;
       const or = new THREE.Vector3();
 			or.copy(head.lookAt);
 			or.normalize();
-      theAudioContext.listener.setOrientation(or.x, or.y, or.z, 0, 1, 0);
+      listener.setOrientation(or.x, or.y, or.z, 0, 1, 0);
       const p = head.position;
-      theAudioContext.listener.setPosition(p.x, p.y, p.z);
-    })
-    .subscribe();
-  
-  // const audioContext$ = stream
-  //   .just(theAudioContext)
-  //   .concat(listenerReducer$)
-  //   .scan(apply)
-  //   .subscribe();
-  
-  // const listenerReducer$ = head$
-  //   .map(head => context => {
-  //     const or = new THREE.Vector3();
-		// 	or.copy(head.lookAt);
-		// 	or.normalize();
-  //     // context.listener.setOrientation(or.x, or.y, or.z, 0, 1, 0);
-  //     const p = head.position;
-  //     context.listener.setPosition(p.x, p.y, p.z);
-  //     console.log(p);
-  //     return context;
-  //   });
-  
-  // const audioContext$ = stream
-  //   .just(theAudioContext)
-  //   .concat(listenerReducer$)
-  //   .scan(apply)
-  //   .subscribe();
+      listener.setPosition(p.x, p.y, p.z);
+      return virtualAudioGraph;
+    });
   
   const panners$ = mainSceneModel$
     .flatMap(model => {
@@ -364,11 +341,15 @@ function main() {
       return virtualAudioGraph;
     });
     
-  // const audioGraph$ = audioContext$
-  //   .map(context => createVirtualAudioGraph({ context }))
+  const audioGraphReducer$ = stream
+    .merge(
+      listenerReducer$,
+      graphReducer$
+    );
+    
   const audioGraph$ = stream
     .just(createVirtualAudioGraph({ theAudioContext }))
-    .concat(graphReducer$)
+    .concat(audioGraphReducer$)
     .scan(apply)
     .subscribe();
   
