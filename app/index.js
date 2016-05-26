@@ -9,7 +9,7 @@ import Rx, { Observable as stream } from 'rx';
 import combineLatestObj from 'rx-combine-latest-obj';
 import d3 from 'd3';
 import THREE from 'three/three.js';
-// import createVirtualAudioGraph from 'virtual-audio-graph';
+import createVirtualAudioGraph from 'virtual-audio-graph';
 import _ from 'underscore';
 
 import OBJLoader from './OBJLoader.js';
@@ -52,8 +52,6 @@ const degToRad = d3.scaleLinear()
 main();
 
 function main() {
-  const headObject$ = getHeadObject();
-  const heads$ = heads({ headObject$ });
   const windowSize$ = windowSize();
   const actionSubject = new Rx.ReplaySubject(1);
   const action$ = stream
@@ -165,7 +163,146 @@ function main() {
       return model;
     })
     .shareReplay(1);
-    /** NOTE: shareReplay */
+  /** NOTE: shareReplay */
+  
+  const files$ = stream.just(['wetShort.wav']);
+  
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  const context = new AudioContext();
+  
+  const audioBuffers$ = files$
+    .flatMap(arr => arr)
+    .flatMap(fileName => {
+			var request = new XMLHttpRequest();
+			request.open("GET", `assets/${fileName}`, true);
+      request.responseType = "arraybuffer";
+      const response$ = stream.create(observer => {
+      	request.onload = function() {
+      		observer.onNext({
+      			fileName,
+      			arrayBuffer: request.response
+      		});
+      	};
+      });
+      request.send();
+			return response$;
+		})
+		.flatMap(({ fileName, arrayBuffer }) => {
+		  return stream.create(observer => {
+				context.decodeAudioData(arrayBuffer, function(audioBuffer) {
+					observer.onNext({
+					  fileName,
+					  audioBuffer
+					});
+				});
+			});
+		})
+		.scan((a,b) => a.concat(b), []);
+		
+  const headMesh$ = getHeadMesh();
+  const heads$ = heads({ headMesh$ });
+  
+  const audioContext$ = stream
+    .just(context);
+    
+  // const graphReducer$ = combineLatestObj
+  //   ({
+  //     audioBuffers$,
+  //     mainSceneModel$: mainSceneModel$.startWith({})
+  //   })
+  
+  // const graphReducer$ = mainSceneModel$
+  //   .withLatestFrom(audioBuffers$)
+  //   .map(model => virtualAudioGraph => {
+  //     const foo = model;
+  //     debugger
+  //   });
+  
+  const panners$ = mainSceneModel$
+    .flatMap(model => {
+      const objects = model.objects.values();
+      return stream
+        .from(objects)
+        .flatMap(parent => {
+          return stream
+            .from(parent.cones)
+            .map(cone => {
+              const { position, trajectoryOffset } = parent;
+              const pannerPosition = position.clone().add(trajectoryOffset);
+              const orientation = new THREE.Vector3();
+  						orientation.copy(cone.lookAt);
+  						orientation.normalize();
+              return {
+                file: cone.file,
+                position: pannerPosition.toArray(),
+                orientation: orientation.toArray()
+              };
+            });
+        })
+        .map((obj, index) => {
+          obj.key = `panner${index}`;
+          return obj;
+        })
+        .toArray();
+    })
+    .startWith({});
+  
+  const graphReducer$ = combineLatestObj({
+      audioBuffers$,
+      panners$
+    })
+    .map(({ audioBuffers, panners }) => virtualAudioGraph => {
+      const bufferGraph = audioBuffers
+        .map((bufferObj, index) => {
+          const outputKeys = panners
+            .filter(panner => panner.file === bufferObj.fileName)
+            .map(panner => panner.key);
+          const value = ['bufferSource', outputKeys, { 
+            buffer: bufferObj.audioBuffer, 
+            loop: true
+          }];
+          return {
+            key: `buffer${index}`,
+            value
+          };
+        })
+        .reduce((a, { key, value }) => {
+          a[key] = value;
+          return a;
+        }, {});
+      const pannerGraph = panners
+        .map(panner => {
+          const value = ['panner', 0, {
+            position: panner.position,
+            orientation: panner.orientation,
+            panningModel: 'HRTF',
+				  	coneInnerAngle: 0.01*180/Math.PI,
+				  	coneOuterAngle: 1*180/Math.PI,
+				  	coneOuterGain: 0.03
+          }];
+          return {
+            key: panner.key,
+            value
+          };
+        })
+        .reduce((a, { key, value }) => {
+          a[key] = value;
+          return a;
+        }, {});
+      const baseGraph = {
+        0: ['gain', 'output', { gain: 0.2 }]
+      };
+      const graph = Object.assign(baseGraph, pannerGraph, bufferGraph);
+      virtualAudioGraph.update(graph);
+      return virtualAudioGraph;
+    });
+    
+  const audioGraph$ = audioContext$
+    .map(context => createVirtualAudioGraph({ context }))
+    .concat(graphReducer$)
+    .scan(apply)
+    .subscribe();
+  
   /** RENDERER */
   const updateRendererSize$ = windowSize$
     .map(size => renderer => {
@@ -260,8 +397,8 @@ function main() {
   updateDom(domReducer$);
 }
 
-function heads({ headObject$ }) {
-	const heads$ = headObject$
+function heads({ headMesh$ }) {
+	const heads$ = headMesh$
 		.map(head => ({
 			type: 'head',
 			position: {
@@ -280,7 +417,7 @@ function heads({ headObject$ }) {
 	return heads$;
 }
 
-function getHeadObject() {
+function getHeadMesh() {
 	OBJLoader(THREE);
 	const loader = new THREE.OBJLoader();
 	return stream.create(observer => {
@@ -309,6 +446,7 @@ function addConeToSelected() {
       volume: 1,
       spread: 0.5,
       type: 'cone',
+      file: 'wetShort.wav',
       selected: true
     };
     selected.cones.push(newCone);
@@ -1005,9 +1143,7 @@ function getNewObject() {
     opacity: 0.1,
     side: THREE.DoubleSide
   });
-  // material.blending = THREE.NormalBlending;
   material.depthTest = false;
-  // material.alphaTest = 0.10;
   const newObject = new THREE.Mesh(geometry, material);
   newObject.castShadow = true;
   newObject.receiveShadow = true;
