@@ -58,6 +58,49 @@ function main() {
     .merge(
       actionSubject
     );
+    
+  function getSelectedCone(model) {
+    const selectedObject = getSelected(model.objects.values());
+    if (typeof selectedObject === 'undefined')
+      throw new Error('No object is selected.');
+    const selectedCone = getSelected(selectedObject.cones);
+    if (typeof selectedCone === 'undefined')
+      throw new Error('No cone is selected.');
+    return selectedCone;
+  }
+  
+  const coneLatitudeReducer$ = action$
+    .filter(d => d.actionType === 'update-cone-latitude')
+    .map(({ value }) => model => {
+      const selectedObject = getSelected(model.objects.values());
+      const selectedCone = getSelected(selectedObject.cones);
+      if (typeof selectedCone !== 'undefined') {
+        const DRAG_SENSITIVITY = 1;
+        const delta = value * DRAG_SENSITIVITY;
+        const test = selectedCone.latitude + delta;
+        const MAX_CONE_LATITUDE = 90;
+        const MIN_CONE_LATITUDE = -90;
+        const newLat = test > MAX_CONE_LATITUDE ? MAX_CONE_LATITUDE :
+          test < MIN_CONE_LATITUDE ? MIN_CONE_LATITUDE :
+          test;
+        selectedCone.latitude = newLat;
+      }
+      return model;
+    });
+    
+  const coneLongitudeReducer$ = action$
+    .filter(d => d.actionType === 'update-cone-longitude')
+    .map(({ value }) => model => {
+      const selectedCone = getSelectedCone(model);
+      if (typeof selectedCone !== 'undefined') {
+        const DRAG_SENSITIVITY = 1;
+        const delta = value * DRAG_SENSITIVITY;
+        const newLong = (selectedCone.longitude + delta) % 360;
+        selectedCone.longitude = newLong;
+      }
+      return model;
+    });
+    
   const coneVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-cone-volume')
     .map(({ value }) => model => {
@@ -136,6 +179,8 @@ function main() {
       objectPositionReducer$,
       addConeReducer$,
       coneVolumeReducer$,
+      coneLatitudeReducer$,
+      coneLongitudeReducer$,
       distanceReducer$
     );
   function setTrajectoryOffset(object) {
@@ -168,7 +213,7 @@ function main() {
   const files$ = stream.just(['wetShort.wav']);
   
   const AudioContext = window.AudioContext || window.webkitAudioContext;
-  const context = new AudioContext();
+  const theAudioContext = new AudioContext();
   
   const audioBuffers$ = files$
     .flatMap(arr => arr)
@@ -189,7 +234,7 @@ function main() {
 		})
 		.flatMap(({ fileName, arrayBuffer }) => {
 		  return stream.create(observer => {
-				context.decodeAudioData(arrayBuffer, function(audioBuffer) {
+				theAudioContext.decodeAudioData(arrayBuffer, function(audioBuffer) {
 					observer.onNext({
 					  fileName,
 					  audioBuffer
@@ -200,23 +245,44 @@ function main() {
 		.scan((a,b) => a.concat(b), []);
 		
   const headMesh$ = getHeadMesh();
-  const heads$ = heads({ headMesh$ });
+  const head$ = head({ headMesh$ })
+    .shareReplay(1);
+  /** NOTE: ShareReplay */
   
-  const audioContext$ = stream
-    .just(context);
-    
-  // const graphReducer$ = combineLatestObj
-  //   ({
-  //     audioBuffers$,
-  //     mainSceneModel$: mainSceneModel$.startWith({})
-  //   })
+  const listenerReducer$ = head$
+    .map(head => {
+      const or = new THREE.Vector3();
+			or.copy(head.lookAt);
+			or.normalize();
+      theAudioContext.listener.setOrientation(or.x, or.y, or.z, 0, 1, 0);
+      const p = head.position;
+      theAudioContext.listener.setPosition(p.x, p.y, p.z);
+    })
+    .subscribe();
   
-  // const graphReducer$ = mainSceneModel$
-  //   .withLatestFrom(audioBuffers$)
-  //   .map(model => virtualAudioGraph => {
-  //     const foo = model;
-  //     debugger
+  // const audioContext$ = stream
+  //   .just(theAudioContext)
+  //   .concat(listenerReducer$)
+  //   .scan(apply)
+  //   .subscribe();
+  
+  // const listenerReducer$ = head$
+  //   .map(head => context => {
+  //     const or = new THREE.Vector3();
+		// 	or.copy(head.lookAt);
+		// 	or.normalize();
+  //     // context.listener.setOrientation(or.x, or.y, or.z, 0, 1, 0);
+  //     const p = head.position;
+  //     context.listener.setPosition(p.x, p.y, p.z);
+  //     console.log(p);
+  //     return context;
   //   });
+  
+  // const audioContext$ = stream
+  //   .just(theAudioContext)
+  //   .concat(listenerReducer$)
+  //   .scan(apply)
+  //   .subscribe();
   
   const panners$ = mainSceneModel$
     .flatMap(model => {
@@ -272,6 +338,7 @@ function main() {
         }, {});
       const pannerGraph = panners
         .map(panner => {
+          // console.log(panner.position);
           const value = ['panner', 0, {
             position: panner.position,
             orientation: panner.orientation,
@@ -297,8 +364,10 @@ function main() {
       return virtualAudioGraph;
     });
     
-  const audioGraph$ = audioContext$
-    .map(context => createVirtualAudioGraph({ context }))
+  // const audioGraph$ = audioContext$
+  //   .map(context => createVirtualAudioGraph({ context }))
+  const audioGraph$ = stream
+    .just(createVirtualAudioGraph({ theAudioContext }))
     .concat(graphReducer$)
     .scan(apply)
     .subscribe();
@@ -331,7 +400,8 @@ function main() {
     });
   const addFloorReducer$ = getAddFloorReducer();
   const joinObjectsReducer$ = getJoinObjectsReducer(mainSceneModel$);
-  const joinHeadsReducer$ = heads$
+  const joinHeadsReducer$ = head$
+    .map(h => [h])
     .startWith([])
     .map(heads => scene => {
       const sceneSelection = d3.select(scene);
@@ -397,14 +467,14 @@ function main() {
   updateDom(domReducer$);
 }
 
-function heads({ headMesh$ }) {
+function head({ headMesh$ }) {
 	const heads$ = headMesh$
 		.map(head => ({
 			type: 'head',
 			position: {
-				x: -1,
+				x: 5,
 				y: 1,
-				z: 2
+				z: 4
 			},
 			lookAt: {
 				x: 1,
@@ -412,8 +482,7 @@ function heads({ headMesh$ }) {
 				z: 1
 			},
 			object: head
-		}))
-		.map(h => [h]);
+		}));
 	return heads$;
 }
 
@@ -490,7 +559,8 @@ function getAddObjectReducer(actionSubject) {
       selected: true,
       volume: 0.1,
       curve,
-			velocity: 0.05, /** NOTE: per tick */
+		// 	velocity: 0.05, /** NOTE: per tick */
+		  // velocity: 0, /** NOTE: per tick */
 			distance: 0
     };
     model.objects.set(key, newObject);
@@ -552,16 +622,35 @@ function getEditorDomModel$(selected$) {
 
 function getConeInfoRows(selected) {
   const volumeText = `${d3.format(".1f")(selected.volume)} dB` || 'Error!';
-  return [
-    { /** New row */
+  function degreesText(d) {
+    return `${d3.format(".1f")(d)}°`;
+  }
+  const rows = [
+    { /** row */
       columns: [
         column('col-xs-3', 'key', 'File'),
         column('col-xs-3', 'value', selected.file || 'None', 'pointer'),
         column('col-xs-3', 'key', 'Volume'),
         column('col-xs-3', 'value', volumeText, 'ew-resize', 'update-selected-cone-volume')
       ]
+    },
+    { /** row */
+      columns: [
+        column('col-xs-3', 'key', 'Spread'),
+        column('col-xs-3', 'value', selected.spread),
+        column('col-xs-3', 'key', 'Latitude'),
+        column('col-xs-3', 'value', degreesText(selected.latitude), 'ew-resize', 'update-cone-latitude'),
+      ]
+    },
+    { /** row */
+      columns: [
+        column('col-xs-6', 'value', 'Delete'),
+        column('col-xs-3', 'key', 'Longitude'),
+        column('col-xs-3', 'value', degreesText(selected.longitude), 'ew-resize', 'update-cone-longitude'),
+      ]
     }
   ];
+  return rows;
 }
 
 /**
@@ -1143,7 +1232,7 @@ function getNewObject() {
     opacity: 0.1,
     side: THREE.DoubleSide
   });
-  material.depthTest = false;
+  // material.depthTest = false;
   const newObject = new THREE.Mesh(geometry, material);
   newObject.castShadow = true;
   newObject.receiveShadow = true;
