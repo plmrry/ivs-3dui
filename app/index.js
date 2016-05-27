@@ -36,16 +36,24 @@ const longitudeToPhi = longitude_to_phi;
 main();
 
 function main() {
+  /** ACTIONS */
   const actionSubject = new Rx.ReplaySubject(1);
   const action$ = actionSubject;
   const windowSize$ = windowSize();
   const keyAction$ = getKeyAction$();
+  const newObjectAction$ = keyAction$
+    .filter(d => d.type === 'keydown')
+    .pluck('code')
+    .filter(code => code === 'o');
   const animation$ = getAnimation$()
 		.shareReplay(1); /** NOTE: shareReplay */
-  
+		
+	/** INTENT / REDUCERS */
   const velocityReducer$ = action$
     .filter(d => d.actionType === 'velocity')
-    .map(({ value }) => model => {
+    .map(velocityReducer);
+  function velocityReducer({ value }) {
+    return model => {
       const selectedObject = getSelectedObject(model);
       if (typeof selectedObject !== 'undefined') {
         const DRAG_SENSITIVITY = 0.01;
@@ -54,11 +62,13 @@ function main() {
         selectedObject.velocity = newVel;
       }
       return model;
-    });
-  
+    };
+  }
   const coneLatitudeReducer$ = action$
     .filter(d => d.actionType === 'update-cone-latitude')
-    .map(({ value }) => model => {
+    .map(coneLatitudeReducer);
+  function coneLatitudeReducer({ value }) {
+    return model => {
       const selectedCone = getSelectedCone(model);
       if (typeof selectedCone !== 'undefined') {
         const DRAG_SENSITIVITY = 1;
@@ -72,11 +82,13 @@ function main() {
         selectedCone.latitude = newLat;
       }
       return model;
-    });
-    
+    };
+  }
   const coneLongitudeReducer$ = action$
     .filter(d => d.actionType === 'update-cone-longitude')
-    .map(({ value }) => model => {
+    .map(coneLongitudeReducer);
+  function coneLongitudeReducer({ value }) {
+    return model => {
       const selectedCone = getSelectedCone(model);
       if (typeof selectedCone !== 'undefined') {
         const DRAG_SENSITIVITY = 1;
@@ -85,11 +97,13 @@ function main() {
         selectedCone.longitude = newLong;
       }
       return model;
-    });
-    
+    };
+  }
   const coneVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-cone-volume')
-    .map(({ value }) => model => {
+    .map(coneVolumeReducer);
+  function coneVolumeReducer({ value }) {
+    return model => {
       const selectedCone = getSelectedCone(model);
       if (typeof selectedCone !== 'undefined') {
         const DRAG_SENSITIVITY = 0.01;
@@ -100,7 +114,8 @@ function main() {
           selectedCone.volume = newVolume;
       }
       return model;
-    });
+    };
+  }
     
   const tweenObjectVolumeReducer$ = action$
     .filter(({ actionType }) => actionType === 'tween-object-volume')
@@ -108,7 +123,9 @@ function main() {
   
   const objectVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-object-volume')
-    .map(({ value }) => model => {
+    .map(objectVolumeReducer);
+  function objectVolumeReducer({ value }) {
+    return model => {
       const object = getSelectedObject(model);
       if (object.type === 'object-parent') {
         const newVolume = object.volume + value * 0.01;
@@ -118,12 +135,10 @@ function main() {
           object.volume = newVolume;
       }
       return model;
-    });
-
-  const newObjectReducer$ = keyAction$
-    .filter(d => d.type === 'keydown')
-    .pluck('code')
-    .filter(code => code === 'o')
+    };
+  }
+    
+  const newObjectReducer$ = newObjectAction$
     .map(() => new THREE.Vector3(
       Math.random() * 10 - 5,
       1.5,
@@ -153,7 +168,7 @@ function main() {
     
 	const distanceReducer$ = getDistanceReducer$(animation$);
 	
-  const modelReducer$ = stream
+	const modelReducer$ = stream
     .merge(
       newObjectReducer$,
       tweenObjectVolumeReducer$,
@@ -166,6 +181,8 @@ function main() {
       coneLongitudeReducer$,
       distanceReducer$
     );
+	
+  // const modelReducer$ = getModelReducer$({ animation$ });
     
   const mainSceneModel$ = getMainSceneModel$(modelReducer$)
     .shareReplay(1); /** NOTE: shareReplay */
@@ -222,6 +239,23 @@ function main() {
     .subscribe(fn => fn());
   accumulateDom(domReducer$)
     .subscribe();
+}
+
+function getModelReducer$({ animation$ }) {
+  const distanceReducer$ = getDistanceReducer$(animation$);
+  return stream
+    .merge(
+      newObjectReducer$,
+      tweenObjectVolumeReducer$,
+      objectVolumeReducer$,
+      objectPositionReducer$,
+      velocityReducer$,
+      addConeReducer$,
+      coneVolumeReducer$,
+      coneLatitudeReducer$,
+      coneLongitudeReducer$,
+      distanceReducer$
+    );
 }
 
 function getKeyAction$() {
