@@ -13,17 +13,9 @@ import createVirtualAudioGraph from 'virtual-audio-graph';
 import _ from 'underscore';
 
 import OBJLoader from './OBJLoader.js';
-// import makeD3DomDriver from './d3DomDriver.js';
-// import makeStateDriver from './stateDriver.js';
-
-// import * as DOM from './dom.js';
-// import * as Renderer from './renderer.js';
-// import * as Camera from './camera.js';
-// import * as Scene from './scene.js';
 
 import log from './utilities/log.js';
 import apply from './utilities/apply.js';
-// import Selectable from './utilities/selectable.js';
 
 selectableTHREEJS(THREE);
 debug.enable('*,-reducer:*');
@@ -31,43 +23,34 @@ Rx.config.longStackSupport = true;
 
 /** GLOBALS */
 const MIN_VOLUME = 0.1;
-
 const latitude_to_theta = d3.scaleLinear()
   .domain([90, 0, -90])
   .range([0, Math.PI/2, Math.PI])
   .clamp(true);
-  
 const latitudeToTheta = latitude_to_theta;
-  
 const longitude_to_phi = d3.scaleLinear()
   .domain([-180, 0, 180])
   .range([0, Math.PI, 2 * Math.PI]);
-  
 const longitudeToPhi = longitude_to_phi;
-  
-const degToRad = d3.scaleLinear()
-  .domain([0, 360])
-  .range([0, 2 * Math.PI]);
 
 main();
 
 function main() {
-  const windowSize$ = windowSize();
   const actionSubject = new Rx.ReplaySubject(1);
-  const action$ = stream
-    .merge(
-      actionSubject
-    );
-    
-  function getSelectedCone(model) {
-    const selectedObject = getSelected(model.objects.values());
-    if (typeof selectedObject === 'undefined')
-      throw new Error('No object is selected.');
-    const selectedCone = getSelected(selectedObject.cones);
-    if (typeof selectedCone === 'undefined')
-      throw new Error('No cone is selected.');
-    return selectedCone;
-  }
+  const action$ = actionSubject;
+  const windowSize$ = windowSize();
+  const keyDown$ = stream.fromEvent(document, 'keydown');
+  const keyUp$ = stream.fromEvent(document, 'keyup');
+  const keyAction$ = keyDown$
+    .merge(keyUp$)
+    .map(({ code, type }) => {
+      return {
+        code: code.replace('Key', '').toLowerCase(),
+        type
+      };
+    });
+  const animation$ = getAnimation$()
+		.shareReplay(1); /** NOTE: shareReplay */
   
   const velocityReducer$ = action$
     .filter(d => d.actionType === 'velocity')
@@ -85,8 +68,7 @@ function main() {
   const coneLatitudeReducer$ = action$
     .filter(d => d.actionType === 'update-cone-latitude')
     .map(({ value }) => model => {
-      const selectedObject = getSelected(model.objects.values());
-      const selectedCone = getSelected(selectedObject.cones);
+      const selectedCone = getSelectedCone(model);
       if (typeof selectedCone !== 'undefined') {
         const DRAG_SENSITIVITY = 1;
         const delta = value * DRAG_SENSITIVITY;
@@ -131,6 +113,7 @@ function main() {
     });
     
   const tweenObjectVolume$ = tweenObjectVolume({ action$ });
+  
   const objectVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-object-volume')
     .map(({ value }) => model => {
@@ -144,15 +127,10 @@ function main() {
       }
       return model;
     });
-  const keyDown$ = stream
-    .fromEvent(document, 'keydown');
-    // .pluck('code')
-    // .map(code => code.replace('Key', '').toLowerCase());
-  const keyUp$ = stream
-    .fromEvent(document, 'keyup');
-  const newObjectAction$ = keyDown$
+
+  const newObjectReducer$ = keyAction$
+    .filter(d => d.type === 'keydown')
     .pluck('code')
-    .map(code => code.replace('Key', '').toLowerCase())
     .filter(code => code === 'o')
     .map(() => new THREE.Vector3(
       Math.random() * 10 - 5,
@@ -160,9 +138,11 @@ function main() {
       Math.random() * 10 - 5
     ))
     .map(getAddObjectReducer(actionSubject));
+    
   const addConeReducer$ = action$
     .filter(d => d.actionType === 'add-cone-to-selected')
     .map(addConeToSelected);
+    
   const objectPositionReducer$ = action$
     .filter(d => d.actionType === 'update-selected-parent-object-position')
     .map(({ value }) => model => {
@@ -174,25 +154,12 @@ function main() {
       }
       return model;
     });
-  const animation$ = stream
-		.create(observer => {
-			d3.timer(() => observer.onNext());
-		})
-		.timestamp()
-		.pluck('timestamp')
-		.map(time => time / 1e3)
-		.shareReplay(1);
-	const distanceReducer$ = animation$
-	  .map(() => model => {
-	    const moving = model.objects.values().filter(d => d.velocity !== 0);
-	    moving.forEach(object => {
-	      object.distance += object.velocity;
-	    });
-	    return model;
-	  });
+    
+	const distanceReducer$ = getDistanceReducer$(animation$);
+	
   const modelReducer$ = stream
     .merge(
-      newObjectAction$,
+      newObjectReducer$,
       tweenObjectVolume$,
       objectVolumeReducer$,
       objectPositionReducer$,
@@ -203,13 +170,14 @@ function main() {
       coneLongitudeReducer$,
       distanceReducer$
     );
+    
   const mainSceneModel$ = getMainSceneModel$(modelReducer$)
     .shareReplay(1); /** NOTE: shareReplay */
   const files$ = stream.just(['wetShort.wav']);
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   const theAudioContext = new AudioContext();
   const audioBuffers$ = getAudioBuffers$({ files$, theAudioContext });
-  const headVelocityReducer$ = getHeadVelocityReducer$({ keyDown$, keyUp$ });
+  const headVelocityReducer$ = getHeadVelocityReducer$({ keyAction$ });
   const animateHeadReducer$ = getAnimateHeadReducer$(animation$);
 	const headReducer$ = stream
 	  .merge(
@@ -258,6 +226,38 @@ function main() {
     .subscribe(fn => fn());
   accumulateDom(domReducer$)
     .subscribe();
+}
+
+function getAnimation$() {
+  return stream
+    .create(observer => {
+			d3.timer(() => observer.onNext());
+		})
+		.timestamp()
+		.pluck('timestamp')
+		.map(time => time / 1e3);
+}
+
+function getSelectedCone(model) {
+  const selectedObject = getSelected(model.objects.values());
+  if (typeof selectedObject === 'undefined')
+    throw new Error('No object is selected.');
+  const selectedCone = getSelected(selectedObject.cones);
+  if (typeof selectedCone === 'undefined')
+    throw new Error('No cone is selected.');
+  return selectedCone;
+}
+
+function getDistanceReducer$(animation$) {
+  return animation$
+    .map(() => model => {
+      model.objects.values()
+        .filter(d => d.velocity !== 0)
+        .forEach(object => {
+          object.distance += object.velocity;
+        });
+      return model;
+    });
 }
 
 function getMainSceneModel$(modelReducer$) {
@@ -328,17 +328,9 @@ function getAnimateHeadReducer$(animation$) {
       return head;
     });
 }
-
-function getHeadVelocityReducer$({ keyDown$, keyUp$ }) {
+function getHeadVelocityReducer$({ keyAction$ }) {
   const HEAD_VELOCITY = 0.1;
-  return keyDown$
-    .merge(keyUp$)
-    .map(({ code, type }) => {
-      return {
-        code: code.replace('Key', '').toLowerCase(),
-        type
-      };
-    })
+  return keyAction$
     .distinctUntilChanged()
     .map(({ type, code }) => head => {
       const value = type === 'keydown' ? HEAD_VELOCITY : 0;
@@ -357,6 +349,35 @@ function getHeadVelocityReducer$({ keyDown$, keyUp$ }) {
       return head;
     });
 }
+
+// function getHeadVelocityReducer$({ keyDown$, keyUp$ }) {
+//   const HEAD_VELOCITY = 0.1;
+//   return keyDown$
+//     .merge(keyUp$)
+//     .map(({ code, type }) => {
+//       return {
+//         code: code.replace('Key', '').toLowerCase(),
+//         type
+//       };
+//     })
+//     .distinctUntilChanged()
+//     .map(({ type, code }) => head => {
+//       const value = type === 'keydown' ? HEAD_VELOCITY : 0;
+//       if (code === 'w') {
+//         head.velocity.setZ(+value);
+//       }
+//       if (code === 's') {
+//         head.velocity.setZ(-value);
+//       }
+//       if (code === 'a') {
+//         head.rotationVelocity = +value;
+//       }
+//       if (code === 'd') {
+//         head.rotationVelocity = -value;
+//       }
+//       return head;
+//     });
+// }
 
 function getHeadModel$(headReducer$) {
   return head({ headMesh$: getHeadMesh$() })
