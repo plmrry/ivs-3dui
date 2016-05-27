@@ -80,7 +80,7 @@ function main() {
         selectedObject.velocity = newVel;
       }
       return model;
-    })
+    });
   
   const coneLatitudeReducer$ = action$
     .filter(d => d.actionType === 'update-cone-latitude')
@@ -176,14 +176,14 @@ function main() {
     });
   const animation$ = stream
 		.create(observer => {
-			d3.timer(() => observer.onNext())
+			d3.timer(() => observer.onNext());
 		})
 		.timestamp()
 		.pluck('timestamp')
 		.map(time => time / 1e3)
 		.shareReplay(1);
 	const distanceReducer$ = animation$
-	  .map(seconds => model => {
+	  .map(() => model => {
 	    const moving = model.objects.values().filter(d => d.velocity !== 0);
 	    moving.forEach(object => {
 	      object.distance += object.velocity;
@@ -203,115 +203,22 @@ function main() {
       coneLongitudeReducer$,
       distanceReducer$
     );
-  function setTrajectoryOffset(object) {
-    const { curve, distance } = object;
-    const t = (distance / curve.getLength()) % 1
-    const trajectoryOffset = curve.getPoint(t);
-    object.trajectoryOffset = trajectoryOffset;
-    return object;
-  }
-  function setConesLookAt(object) {
-    object.cones = object.cones || [];
-    object.cones.forEach(setConeLookAt);
-    return object;
-  }
-  const mainSceneModel$ = stream
-    .just({ objects: d3.map() })
-    .concat(modelReducer$)
-    .scan(apply)
-    .map(model => {
-      /** NOTE: This happens every time a model is emitted */
-      model.objects.values().forEach(object => {
-        setConesLookAt(object);
-        setTrajectoryOffset(object);
-      });
-      return model;
-    })
-    .shareReplay(1);
-  /** NOTE: shareReplay */
-  
+  const mainSceneModel$ = getMainSceneModel$(modelReducer$)
+    .shareReplay(1); /** NOTE: shareReplay */
   const files$ = stream.just(['wetShort.wav']);
-  
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   const theAudioContext = new AudioContext();
-  
-  const audioBuffers$ = files$
-    .flatMap(arr => arr)
-    .flatMap(fileName => {
-			var request = new XMLHttpRequest();
-			request.open("GET", `assets/${fileName}`, true);
-      request.responseType = "arraybuffer";
-      const response$ = stream.create(observer => {
-      	request.onload = function() {
-      		observer.onNext({
-      			fileName,
-      			arrayBuffer: request.response
-      		});
-      	};
-      });
-      request.send();
-			return response$;
-		})
-		.flatMap(({ fileName, arrayBuffer }) => {
-		  return stream.create(observer => {
-				theAudioContext.decodeAudioData(arrayBuffer, function(audioBuffer) {
-					observer.onNext({
-					  fileName,
-					  audioBuffer
-					});
-				});
-			});
-		})
-		.scan((a,b) => a.concat(b), []);
-		
-	const HEAD_VELOCITY = 0.1;
-		
-  const moveHeadForward$ = keyDown$
-    .merge(keyUp$)
-    .map(({ code, type }) => {
-      return {
-        code: code.replace('Key', '').toLowerCase(),
-        type
-      };
-    })
-    .distinctUntilChanged()
-    .map(({ type, code }) => head => {
-      const value = type === 'keydown' ? HEAD_VELOCITY : 0;
-      if (code === 'w') {
-        head.velocity.setZ(+value);
-      }
-      if (code === 's') {
-        head.velocity.setZ(-value);
-      }
-      if (code === 'a') {
-        head.rotationVelocity = +value;
-      }
-      if (code === 'd') {
-        head.rotationVelocity = -value;
-      }
-      return head;
-    });
-    
-  const animateHead$ = animation$
-    .map(() => head => {
-      head.object3D.translateZ(head.velocity.z);
-      head.object3D.rotation.y += head.rotationVelocity;
-      return head;
-    });
-		
+  const audioBuffers$ = getAudioBuffers$({ files$, theAudioContext });
+  const headVelocityReducer$ = getHeadVelocityReducer$({ keyDown$, keyUp$ });
+  const animateHeadReducer$ = getAnimateHeadReducer$(animation$);
 	const headReducer$ = stream
 	  .merge(
-	     moveHeadForward$,
-	     animateHead$
+	     headVelocityReducer$,
+	     animateHeadReducer$
 	  );
-		
-  const headMesh$ = getHeadMesh();
-  const head$ = head({ headMesh$ })
-    .concat(headReducer$)
-    .scan(apply)
-    .shareReplay(1);
-  /** NOTE: ShareReplay */
-  
+	const head$ = getHeadModel$(headReducer$)
+	  .shareReplay(1); /** NOTE: shareReplay */
+	/** AUDIO GRAPH */
   const listenerReducer$ = getListenerReducer$(head$);
   const panners$ = getPanners$(mainSceneModel$);
   const graphReducer$ = getAudioGraphReducer$({ audioBuffers$, panners$ });
@@ -351,6 +258,110 @@ function main() {
     .subscribe(fn => fn());
   accumulateDom(domReducer$)
     .subscribe();
+}
+
+function getMainSceneModel$(modelReducer$) {
+  return stream
+    .just({ objects: d3.map() })
+    .concat(modelReducer$)
+    .scan(apply)
+    .map(model => {
+      /** NOTE: This happens every time a model is emitted */
+      model.objects.values().forEach(object => {
+        setConesLookAt(object);
+        setTrajectoryOffset(object);
+      });
+      return model;
+    });
+}
+
+function setTrajectoryOffset(object) {
+  const { curve, distance } = object;
+  const t = (distance / curve.getLength()) % 1
+  const trajectoryOffset = curve.getPoint(t);
+  object.trajectoryOffset = trajectoryOffset;
+  return object;
+}
+
+function setConesLookAt(object) {
+  object.cones = object.cones || [];
+  object.cones.forEach(setConeLookAt);
+  return object;
+}
+
+function getAudioBuffers$({ files$, theAudioContext }) {
+  return files$
+    .flatMap(arr => arr)
+    .flatMap(fileName => {
+			var request = new XMLHttpRequest();
+			request.open("GET", `assets/${fileName}`, true);
+      request.responseType = "arraybuffer";
+      const response$ = stream.create(observer => {
+      	request.onload = function() {
+      		observer.onNext({
+      			fileName,
+      			arrayBuffer: request.response
+      		});
+      	};
+      });
+      request.send();
+			return response$;
+		})
+		.flatMap(({ fileName, arrayBuffer }) => {
+		  return stream.create(observer => {
+				theAudioContext.decodeAudioData(arrayBuffer, function(audioBuffer) {
+					observer.onNext({
+					  fileName,
+					  audioBuffer
+					});
+				});
+			});
+		})
+		.scan((a,b) => a.concat(b), []);
+}
+
+function getAnimateHeadReducer$(animation$) {
+  return animation$
+    .map(() => head => {
+      head.object3D.translateZ(head.velocity.z);
+      head.object3D.rotation.y += head.rotationVelocity;
+      return head;
+    });
+}
+
+function getHeadVelocityReducer$({ keyDown$, keyUp$ }) {
+  const HEAD_VELOCITY = 0.1;
+  return keyDown$
+    .merge(keyUp$)
+    .map(({ code, type }) => {
+      return {
+        code: code.replace('Key', '').toLowerCase(),
+        type
+      };
+    })
+    .distinctUntilChanged()
+    .map(({ type, code }) => head => {
+      const value = type === 'keydown' ? HEAD_VELOCITY : 0;
+      if (code === 'w') {
+        head.velocity.setZ(+value);
+      }
+      if (code === 's') {
+        head.velocity.setZ(-value);
+      }
+      if (code === 'a') {
+        head.rotationVelocity = +value;
+      }
+      if (code === 'd') {
+        head.rotationVelocity = -value;
+      }
+      return head;
+    });
+}
+
+function getHeadModel$(headReducer$) {
+  return head({ headMesh$: getHeadMesh$() })
+    .concat(headReducer$)
+    .scan(apply);
 }
 
 function getListenerReducer$(head$) {
@@ -569,7 +580,7 @@ function head({ headMesh$ }) {
 	return heads$;
 }
 
-function getHeadMesh() {
+function getHeadMesh$() {
 	OBJLoader(THREE);
 	const loader = new THREE.OBJLoader();
 	return stream.create(observer => {
@@ -580,11 +591,11 @@ function getHeadMesh() {
 	});
 }
 
-function compose(second) {
-  return function(first) {
-    return _.compose(second, first);
-  };
-}
+// function compose(second) {
+//   return function(first) {
+//     return _.compose(second, first);
+//   };
+// }
 
 function addConeToSelected() {
   return function(model) {
@@ -701,7 +712,7 @@ function getEditorDomModel$(selected$) {
         };
       }
       /** TODO: If other type of object is selected... */
-      debugger;
+      throw new Error('not implemented');
     });
   return editorDomModel$;
 }
@@ -897,7 +908,7 @@ function getMainDomAction$(canvasSelection) {
       click$
     )
     .map(eventObj => {
-      const { event: { x, y }, node } = eventObj;
+      const { node } = eventObj;
       const { width, height } = node;
       const mouse = d3.mouse(node);
       const ndcScale = {
@@ -1286,7 +1297,7 @@ function joinObjectParents({ objects, sceneSelection }) {
       return d.type === 'object-parent';
     })
     .data(objects, d => d.key);
-  const exit = join
+  join
     .exit()
     .remove();
   const enter = join
@@ -1295,7 +1306,7 @@ function joinObjectParents({ objects, sceneSelection }) {
   /** Add child object, i.e. the sphere */
   enter
     .append(getNewObject)
-    .each(function(d) {
+    .each(function() {
       this._type = 'object';
     });
   const parents = enter
@@ -1304,12 +1315,12 @@ function joinObjectParents({ objects, sceneSelection }) {
       this.position.copy(parent.position);
     });
   const childObjects = parents
-    .select(function(d) {
+    .select(function() {
       return this.getObjectByProperty('_type', 'object');
     })
     .each(updateObjectRadius)
     .each(updateObjectOpacity)
-    .each(updateObjectPosition)
+    .each(updateObjectPosition);
   joinCones(childObjects);
   return parents;
 }
