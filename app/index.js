@@ -39,23 +39,14 @@ function main() {
   const actionSubject = new Rx.ReplaySubject(1);
   const action$ = actionSubject;
   const windowSize$ = windowSize();
-  const keyDown$ = stream.fromEvent(document, 'keydown');
-  const keyUp$ = stream.fromEvent(document, 'keyup');
-  const keyAction$ = keyDown$
-    .merge(keyUp$)
-    .map(({ code, type }) => {
-      return {
-        code: code.replace('Key', '').toLowerCase(),
-        type
-      };
-    });
+  const keyAction$ = getKeyAction$();
   const animation$ = getAnimation$()
 		.shareReplay(1); /** NOTE: shareReplay */
   
   const velocityReducer$ = action$
     .filter(d => d.actionType === 'velocity')
     .map(({ value }) => model => {
-      const selectedObject = getSelected(model.objects.values());
+      const selectedObject = getSelectedObject(model);
       if (typeof selectedObject !== 'undefined') {
         const DRAG_SENSITIVITY = 0.01;
         const delta = value * DRAG_SENSITIVITY;
@@ -99,8 +90,7 @@ function main() {
   const coneVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-cone-volume')
     .map(({ value }) => model => {
-      const selectedObject = getSelected(model.objects.values());
-      const selectedCone = getSelected(selectedObject.cones);
+      const selectedCone = getSelectedCone(model);
       if (typeof selectedCone !== 'undefined') {
         const DRAG_SENSITIVITY = 0.01;
         const newVolume = selectedCone.volume + value * DRAG_SENSITIVITY;
@@ -112,12 +102,14 @@ function main() {
       return model;
     });
     
-  const tweenObjectVolume$ = tweenObjectVolume({ action$ });
+  const tweenObjectVolumeReducer$ = action$
+    .filter(({ actionType }) => actionType === 'tween-object-volume')
+    .flatMap(tweenObjectVolume);
   
   const objectVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-object-volume')
     .map(({ value }) => model => {
-      const object = getSelected(model.objects.values());
+      const object = getSelectedObject(model);
       if (object.type === 'object-parent') {
         const newVolume = object.volume + value * 0.01;
         const MAX_VOLUME = 1;
@@ -141,26 +133,30 @@ function main() {
     
   const addConeReducer$ = action$
     .filter(d => d.actionType === 'add-cone-to-selected')
-    .map(addConeToSelected);
+    .map(addConeReducer);
     
   const objectPositionReducer$ = action$
     .filter(d => d.actionType === 'update-selected-parent-object-position')
-    .map(({ value }) => model => {
-      const selected = getSelected(model.objects.values());
-      if (selected.type === 'object-parent') {
+    .map(objectPositionReducer);
+    
+  function objectPositionReducer({ value }) {
+    return model => {
+      const selectedObject = getSelectedObject(model);
+      if (selectedObject.type === 'object-parent') {
         const DRAG_SENSITIVITY = 0.01;
         const delta = value.multiplyScalar(DRAG_SENSITIVITY);
-        selected.position.add(delta);
+        selectedObject.position.add(delta);
       }
       return model;
-    });
+    };
+  }
     
 	const distanceReducer$ = getDistanceReducer$(animation$);
 	
   const modelReducer$ = stream
     .merge(
       newObjectReducer$,
-      tweenObjectVolume$,
+      tweenObjectVolumeReducer$,
       objectVolumeReducer$,
       objectPositionReducer$,
       velocityReducer$,
@@ -228,6 +224,18 @@ function main() {
     .subscribe();
 }
 
+function getKeyAction$() {
+  return ['keydown', 'keyup']
+    .map(k => stream.fromEvent(document, k))
+    .reduce((a,b) => a.merge(b))
+    .map(({ code, type }) => {
+      return {
+        code: code.replace('Key', '').toLowerCase(),
+        type
+      };
+    });
+}
+
 function getAnimation$() {
   return stream
     .create(observer => {
@@ -239,13 +247,17 @@ function getAnimation$() {
 }
 
 function getSelectedCone(model) {
-  const selectedObject = getSelected(model.objects.values());
+  const selectedObject = getSelectedObject(model);
   if (typeof selectedObject === 'undefined')
     throw new Error('No object is selected.');
   const selectedCone = getSelected(selectedObject.cones);
   if (typeof selectedCone === 'undefined')
     throw new Error('No cone is selected.');
   return selectedCone;
+}
+
+function getSelectedObject(model) {
+  return getSelected(model.objects.values());
 }
 
 function getDistanceReducer$(animation$) {
@@ -349,35 +361,6 @@ function getHeadVelocityReducer$({ keyAction$ }) {
       return head;
     });
 }
-
-// function getHeadVelocityReducer$({ keyDown$, keyUp$ }) {
-//   const HEAD_VELOCITY = 0.1;
-//   return keyDown$
-//     .merge(keyUp$)
-//     .map(({ code, type }) => {
-//       return {
-//         code: code.replace('Key', '').toLowerCase(),
-//         type
-//       };
-//     })
-//     .distinctUntilChanged()
-//     .map(({ type, code }) => head => {
-//       const value = type === 'keydown' ? HEAD_VELOCITY : 0;
-//       if (code === 'w') {
-//         head.velocity.setZ(+value);
-//       }
-//       if (code === 's') {
-//         head.velocity.setZ(-value);
-//       }
-//       if (code === 'a') {
-//         head.rotationVelocity = +value;
-//       }
-//       if (code === 'd') {
-//         head.rotationVelocity = -value;
-//       }
-//       return head;
-//     });
-// }
 
 function getHeadModel$(headReducer$) {
   return head({ headMesh$: getHeadMesh$() })
@@ -612,15 +595,9 @@ function getHeadMesh$() {
 	});
 }
 
-// function compose(second) {
-//   return function(first) {
-//     return _.compose(second, first);
-//   };
-// }
-
-function addConeToSelected() {
+function addConeReducer() {
   return function(model) {
-    const selected = getSelected(model.objects.values());
+    const selected = getSelectedObject(model);
     selected.cones = selected.cones || [];
     /** NOTE: Un-select all */
     selected.cones.forEach(d => d.selected = false);
@@ -1124,23 +1101,19 @@ function combineAndRender(renderer$, scene$, camera$) {
   });
 }
 
-function tweenObjectVolume({ action$ }) {
-  return action$
-    .filter(({ actionType }) => actionType === 'tween-object-volume')
-    .flatMap(({ destination, key, duration }) => {
-      return d3TweenStream(duration)
-        .scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
-        .map(({ t, dt }) => model => {
-          const object = model.objects.get(key);
-          const { volume } = object;
-          if (typeof volume === 'undefined') throw new Error('volume undefined');
-          const current = volume;
-          let speed = (1-t) === 0 ? 0 : (destination - current)/(1 - t);
-          let step = current + dt * speed;
-          let next = t === 1 || step > destination ? destination : step;
-          object.volume = next;
-          return model;
-        });
+function tweenObjectVolume({ destination, key, duration }) {
+  return d3TweenStream(duration)
+    .scan((last, t) => ({ t: t, dt: t - last.t }), { t: 0, dt: 0 })
+    .map(({ t, dt }) => model => {
+      const object = model.objects.get(key);
+      const { volume } = object;
+      if (typeof volume === 'undefined') throw new Error('volume undefined');
+      const current = volume;
+      let speed = (1-t) === 0 ? 0 : (destination - current)/(1 - t);
+      let step = current + dt * speed;
+      let next = t === 1 || step > destination ? destination : step;
+      object.volume = next;
+      return model;
     });
 }
 
