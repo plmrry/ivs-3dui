@@ -69,6 +69,19 @@ function main() {
     return selectedCone;
   }
   
+  const velocityReducer$ = action$
+    .filter(d => d.actionType === 'velocity')
+    .map(({ value }) => model => {
+      const selectedObject = getSelected(model.objects.values());
+      if (typeof selectedObject !== 'undefined') {
+        const DRAG_SENSITIVITY = 0.01;
+        const delta = value * DRAG_SENSITIVITY;
+        const newVel = selectedObject.velocity + delta;
+        selectedObject.velocity = newVel;
+      }
+      return model;
+    })
+  
   const coneLatitudeReducer$ = action$
     .filter(d => d.actionType === 'update-cone-latitude')
     .map(({ value }) => model => {
@@ -165,7 +178,7 @@ function main() {
 		.map(time => time / 1e3);
 	const distanceReducer$ = animation$
 	  .map(seconds => model => {
-	    const moving = model.objects.values().filter(d => d.velocity > 0);
+	    const moving = model.objects.values().filter(d => d.velocity !== 0);
 	    moving.forEach(object => {
 	      object.distance += object.velocity;
 	    });
@@ -177,6 +190,7 @@ function main() {
       tweenObjectVolume$,
       objectVolumeReducer$,
       objectPositionReducer$,
+      velocityReducer$,
       addConeReducer$,
       coneVolumeReducer$,
       coneLatitudeReducer$,
@@ -540,7 +554,7 @@ function getAddObjectReducer(actionSubject) {
       selected: true,
       volume: 0.1,
       curve,
-		// 	velocity: 0.05, /** NOTE: per tick */
+			velocity: 0.05, /** NOTE: per tick */
 		  // velocity: 0, /** NOTE: per tick */
 			distance: 0
     };
@@ -639,6 +653,8 @@ function getConeInfoRows(selected) {
  * TODO: Still needs a lot of DRY-ing
  */
 function getObjectInfoRows(selected) {
+  const { position, cones, velocity } = selected;
+  const fmtNum = d3.format(".1f");
   return [
     { /** New row */
       columns: [
@@ -650,13 +666,29 @@ function getObjectInfoRows(selected) {
         'update-selected-object-volume'
       )(selected))
     },
-    { /** New row */
-      columns: draggableKeyValue(
-        'x', 
-        d => d3.format(".1f")(d.position.x),
-        'update-selected-parent-object-position',
-        dx => new THREE.Vector3(dx, 0, 0)
-      )(selected)
+    { /** row */
+      columns: [
+        column('col-xs-3', 'key', 'x'),
+        column(
+          'col-xs-3', 'value', fmtNum(position.x), 'ew-resize', 
+          'update-selected-parent-object-position', 
+          dx => new THREE.Vector3(dx, 0, 0)
+        ),
+        column('col-xs-3', 'key', 'Cones'),
+        column('col-xs-3', '', cones.length)
+      ]
+    },
+    { /** row */
+      columns: [
+        column('col-xs-3', 'key', 'y'),
+        column(
+          'col-xs-3', 'value', fmtNum(position.y), 'ew-resize', 
+          'update-selected-parent-object-position', 
+          dx => new THREE.Vector3(0, dx, 0)
+        ),
+        column('col-xs-3', 'key', 'Velocity'),
+        column('col-xs-3', 'value', d3.format(".2f")(velocity), 'ew-resize', 'velocity')
+      ]
     },
     { /** New row */
       columns: draggableKeyValue(
