@@ -389,7 +389,6 @@ function main() {
         }, {});
       const pannerGraph = panners
         .map(panner => {
-          // console.log(panner.position);
           const value = ['panner', 0, {
             position: panner.position,
             orientation: panner.orientation,
@@ -408,7 +407,7 @@ function main() {
           return a;
         }, {});
       const baseGraph = {
-        0: ['gain', 'output', { gain: 0.2 }]
+        0: ['gain', 'output', { gain: 1 }]
       };
       const graph = Object.assign(baseGraph, pannerGraph, bufferGraph);
       virtualAudioGraph.update(graph);
@@ -421,14 +420,49 @@ function main() {
       graphReducer$
     );
     
-  const audioGraph$ = stream
-    .just(createVirtualAudioGraph({ theAudioContext }))
-    .concat(audioGraphReducer$)
-    .scan(apply)
+  accumulateAudioGraph({ audioGraphReducer$, theAudioContext })
     .subscribe();
   
   /** RENDERER */
-  const updateRendererSize$ = windowSize$
+  const rendererSizeReducer$ = getRendererSizeReducer$(windowSize$);
+  const mainRenderer$ = getMainRenderer$(rendererSizeReducer$);
+  /** SCENE */
+  const addLightsReducer$ = getAddLightsReducer();
+  const addFloorReducer$ = getAddFloorReducer();
+  const joinObjectsReducer$ = getJoinObjectsReducer(mainSceneModel$);
+  const joinHeadReducer$ = getJoinHeadReducer(head$);
+  const sceneReducer$ = stream
+    .merge( 
+      addLightsReducer$, 
+      addFloorReducer$, 
+      joinObjectsReducer$,
+      joinHeadReducer$
+    );
+  const mainScene$ = mainScene(sceneReducer$);
+  /** CAMERA */
+  const mainCamera$ = mainCamera(windowSize$);
+  /** DOM */
+  const setMainCanvas$ = setMainCanvas({ mainRenderer$, actionSubject });
+  const selected$ = getSelected$(mainSceneModel$);
+  const editorDomModel$ = getEditorDomModel$(selected$);
+  const editorDomReducer$ = getEditorDomReducer({ editorDomModel$, actionSubject });
+  const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
+  /** SUBSCRIPTIONS */
+  combineAndRender(mainRenderer$, mainScene$, mainCamera$)
+    .subscribe(fn => fn());
+  accumulateDom(domReducer$)
+    .subscribe();
+}
+
+function accumulateAudioGraph({ audioGraphReducer$, theAudioContext }) {
+  return stream
+    .just(createVirtualAudioGraph({ theAudioContext }))
+    .concat(audioGraphReducer$)
+    .scan(apply);
+}
+
+function getRendererSizeReducer$(windowSize$) {
+  return windowSize$
     .map(size => renderer => {
       const currentSize = renderer.getSize();
       const diff = _.difference(_.values(currentSize), _.values(size));
@@ -438,24 +472,26 @@ function main() {
       }
       return renderer;
     });
-  const rendererUpdate$ = stream
-    .merge(
-      updateRendererSize$
-    );
-  const mainRenderer$ = stream
+}
+
+function getMainRenderer$(rendererUpdate$) {
+  return stream
     .just(getFirstRenderer())
     .concat(rendererUpdate$)
     .scan(apply);
-  /** SCENE */
-  const addLightsReducer$ = stream
+}
+
+function getAddLightsReducer() {
+  return stream
     .just(scene => {
       scene.add(getSpotlight());
       scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
       return scene;
     });
-  const addFloorReducer$ = getAddFloorReducer();
-  const joinObjectsReducer$ = getJoinObjectsReducer(mainSceneModel$);
-  const joinHeadsReducer$ = head$
+}
+
+function getJoinHeadReducer(head$) {
+  return head$
     .map(h => [h])
     .startWith([])
     .map(heads => scene => {
@@ -467,41 +503,36 @@ function main() {
           return d.type === 'head';
         })
         .data(heads, d => d.type);
-      const enter = join
+      join
         .enter()
         .append(d => {
-  				const head = d.object3D;
-  				head.rotation.y -= Math.PI;
-  				const HEAD_SCALE = 0.5;
-  				head.children[0].castShadow = true;
-  				head.scale.set(HEAD_SCALE, HEAD_SCALE, HEAD_SCALE);
-  				return head;
-  			});
-  		const headSelection = join
-  		  .merge(enter)
-  		  .each(function(d) {
-  		    // this.position.copy(d.position);
-  		    // this.lookAt(d.lookAt);
-  		  });
-  		return scene;
+          const head = d.object3D;
+          head.rotation.y -= Math.PI;
+          const HEAD_SCALE = 0.5;
+          head.children[0].castShadow = true;
+          head.scale.set(HEAD_SCALE, HEAD_SCALE, HEAD_SCALE);
+          return head;
+        });
+      return scene;
     });
-  const sceneReducer$ = stream
-    .merge( 
-      addLightsReducer$, 
-      addFloorReducer$, 
-      joinObjectsReducer$,
-      joinHeadsReducer$
-    );
-  const mainScene$ = stream
+}
+
+function mainScene(sceneReducer$) {
+  return stream
     .just(new THREE.Scene())
     .concat(sceneReducer$)
     .scan(apply);
-  /** CAMERA */
-  const mainCamera$ = mainCamera(windowSize$);
-  /** RENDER */
-  combineAndRender(mainRenderer$, mainScene$, mainCamera$);
-  /** DOM */
-  const setMainCanvas$ = mainRenderer$
+}
+
+function getSelected$(mainSceneModel$) {
+  return mainSceneModel$
+    .pluck('objects')
+    .map(o => o.values())
+    .map(getSelected);
+}
+
+function setMainCanvas({ mainRenderer$, actionSubject }) {
+  return mainRenderer$
     .first()
     .pluck('domElement')
     .map(canvas => dom => {
@@ -509,36 +540,18 @@ function main() {
         .select('main')
         .append(() => canvas)
         .attr('id', 'main-canvas');
-      getMainDomAction$(canvasSelection).subscribe(actionSubject);
+      getMainDomAction$(canvasSelection)
+        .subscribe(actionSubject);
       return dom;
     });
-  const selected$ = mainSceneModel$
-    .pluck('objects')
-    .map(o => o.values())
-    .map(getSelected);
-  const editorDomModel$ = getEditorDomModel$(selected$);
-  const editorDomReducer$ = getEditorDomReducer({ editorDomModel$, actionSubject });
-  const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
-  updateDom(domReducer$);
 }
 
 function head({ headMesh$ }) {
 	const heads$ = headMesh$
 		.map(object3D => {
-		  // const object3D = new THREE.Object3D();
 		  object3D.position.copy({ x: 5, y: 1, z: 4 });
 		  return {
   			type: 'head',
-  			position: {
-  				x: 5,
-  				y: 1,
-  				z: 4
-  			},
-  			lookAt: {
-  				x: 1,
-  				y: 3,
-  				z: 1
-  			},
   			velocity: new THREE.Vector3(),
   			rotationVelocity: 0,
   			object3D
@@ -952,12 +965,11 @@ function getAddFloorReducer() {
     });
 }
 
-function updateDom(domUpdate$) {
-  stream
+function accumulateDom(domUpdate$) {
+  return stream
     .just(getFirstDom())
     .concat(domUpdate$)
-    .scan(apply)
-    .subscribe();
+    .scan(apply);
 }
 
 function getEditorDomReducer({ editorDomModel$, actionSubject }) {
@@ -1061,15 +1073,14 @@ function mainCamera(windowSize$) {
 }
 
 function combineAndRender(renderer$, scene$, camera$) {
-  combineLatestObj({
+  return combineLatestObj({
     renderer$,
     scene$,
     camera$
   })
   .map(({ renderer, scene, camera }) => () => {
     renderer.render(scene, camera);
-  })
-  .subscribe(fn => fn());
+  });
 }
 
 function tweenObjectVolume({ action$ }) {
