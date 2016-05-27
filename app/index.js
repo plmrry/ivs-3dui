@@ -129,6 +129,7 @@ function main() {
       }
       return model;
     });
+    
   const tweenObjectVolume$ = tweenObjectVolume({ action$ });
   const objectVolumeReducer$ = action$
     .filter(d => d.actionType === 'update-selected-object-volume')
@@ -143,12 +144,16 @@ function main() {
       }
       return model;
     });
-  const key$ = stream
-    .fromEvent(document, 'keydown')
+  const keyDown$ = stream
+    .fromEvent(document, 'keydown');
+    // .pluck('code')
+    // .map(code => code.replace('Key', '').toLowerCase());
+  const keyUp$ = stream
+    .fromEvent(document, 'keyup');
+  const newObjectAction$ = keyDown$
     .pluck('code')
-    .map(code => code.replace('Key', ''));
-  const newObjectAction$ = key$
-    .filter(code => code === 'O')
+    .map(code => code.replace('Key', '').toLowerCase())
+    .filter(code => code === 'o')
     .map(() => new THREE.Vector3(
       Math.random() * 10 - 5,
       1.5,
@@ -175,7 +180,8 @@ function main() {
 		})
 		.timestamp()
 		.pluck('timestamp')
-		.map(time => time / 1e3);
+		.map(time => time / 1e3)
+		.shareReplay(1);
 	const distanceReducer$ = animation$
 	  .map(seconds => model => {
 	    const moving = model.objects.values().filter(d => d.velocity !== 0);
@@ -258,19 +264,73 @@ function main() {
 		})
 		.scan((a,b) => a.concat(b), []);
 		
+	const HEAD_VELOCITY = 0.1;
+		
+  const moveHeadForward$ = keyDown$
+    .merge(keyUp$)
+    .map(({ code, type }) => {
+      return {
+        code: code.replace('Key', '').toLowerCase(),
+        type
+      };
+    })
+    .distinctUntilChanged()
+    .map(({ type, code }) => head => {
+      const value = type === 'keydown' ? HEAD_VELOCITY : 0;
+      if (code === 'w') {
+        head.velocity.setZ(+value);
+      }
+      if (code === 's') {
+        head.velocity.setZ(-value);
+      }
+      if (code === 'a') {
+        head.rotationVelocity = +value;
+      }
+      if (code === 'd') {
+        head.rotationVelocity = -value;
+      }
+      return head;
+    });
+    
+  const animateHead$ = animation$
+    .map(() => head => {
+      head.object3D.translateZ(head.velocity.z);
+      head.object3D.rotation.y += head.rotationVelocity;
+      return head;
+    });
+		
+	const headReducer$ = stream
+	  .merge(
+	     moveHeadForward$,
+	     animateHead$
+	  );
+		
   const headMesh$ = getHeadMesh();
   const head$ = head({ headMesh$ })
+    .concat(headReducer$)
+    .scan(apply)
     .shareReplay(1);
   /** NOTE: ShareReplay */
   
   const listenerReducer$ = head$
-    .map(head => virtualAudioGraph => {
+    .map(head => {
+      const orientation = head.object3D.getWorldDirection();
+      const { position } = head.object3D;
+      return { orientation, position };
+    })
+    // .distinctUntilChanged(head => {
+      
+    //   return head.lookAt.toString();
+    // })
+    .map(({ orientation, position }) => virtualAudioGraph => {
+      // console.log(head.object3D.getWorldDirection());
+      // console.log(head.object3D.rotation);
       const { audioContext: { listener } } = virtualAudioGraph;
-      const or = new THREE.Vector3();
-			or.copy(head.lookAt);
-			or.normalize();
+      const or = orientation;
+		// 	or.copy(head.lookAt);
+		// 	or.normalize();
       listener.setOrientation(or.x, or.y, or.z, 0, 1, 0);
-      const p = head.position;
+      const p = position;
       listener.setPosition(p.x, p.y, p.z);
       return virtualAudioGraph;
     });
@@ -406,12 +466,12 @@ function main() {
           if (typeof d === 'undefined') return false;
           return d.type === 'head';
         })
-        .data(heads);
+        .data(heads, d => d.type);
       const enter = join
         .enter()
         .append(d => {
-  				const head = d.object;
-  				head.rotation.y += Math.PI;
+  				const head = d.object3D;
+  				head.rotation.y -= Math.PI;
   				const HEAD_SCALE = 0.5;
   				head.children[0].castShadow = true;
   				head.scale.set(HEAD_SCALE, HEAD_SCALE, HEAD_SCALE);
@@ -420,8 +480,8 @@ function main() {
   		const headSelection = join
   		  .merge(enter)
   		  .each(function(d) {
-  		    this.position.copy(d.position);
-  		    this.lookAt(d.lookAt);
+  		    // this.position.copy(d.position);
+  		    // this.lookAt(d.lookAt);
   		  });
   		return scene;
     });
@@ -464,20 +524,26 @@ function main() {
 
 function head({ headMesh$ }) {
 	const heads$ = headMesh$
-		.map(head => ({
-			type: 'head',
-			position: {
-				x: 5,
-				y: 1,
-				z: 4
-			},
-			lookAt: {
-				x: 1,
-				y: 3,
-				z: 1
-			},
-			object: head
-		}));
+		.map(object3D => {
+		  // const object3D = new THREE.Object3D();
+		  object3D.position.copy({ x: 5, y: 1, z: 4 });
+		  return {
+  			type: 'head',
+  			position: {
+  				x: 5,
+  				y: 1,
+  				z: 4
+  			},
+  			lookAt: {
+  				x: 1,
+  				y: 3,
+  				z: 1
+  			},
+  			velocity: new THREE.Vector3(),
+  			rotationVelocity: 0,
+  			object3D
+  		};
+		});
 	return heads$;
 }
 
@@ -485,7 +551,10 @@ function getHeadMesh() {
 	OBJLoader(THREE);
 	const loader = new THREE.OBJLoader();
 	return stream.create(observer => {
-		loader.load('assets/head.obj', d => observer.onNext(d));
+		loader.load('assets/head.obj', d => {
+		  observer.onNext(d);
+		  observer.onCompleted();
+		});
 	});
 }
 
@@ -689,14 +758,6 @@ function getObjectInfoRows(selected) {
         column('col-xs-3', 'key', 'Velocity'),
         column('col-xs-3', 'value', d3.format(".2f")(velocity), 'ew-resize', 'velocity')
       ]
-    },
-    { /** New row */
-      columns: draggableKeyValue(
-        'y', 
-        d => d3.format(".1f")(d.position.y),
-        'update-selected-parent-object-position',
-        dx => new THREE.Vector3(0, dx, 0)
-      )(selected)
     },
     { /** New row */
       columns: draggableKeyValue(
@@ -927,7 +988,7 @@ function mainCamera(windowSize$) {
   const latitude$ = stream
     .just(45);
   const longitude$ = stream
-    .just(45);
+    .just(-135);
   const theta$ = latitude$
     .map(latitude_to_theta);
   const phi$ = longitude$
