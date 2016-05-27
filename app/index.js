@@ -312,117 +312,14 @@ function main() {
     .shareReplay(1);
   /** NOTE: ShareReplay */
   
-  const listenerReducer$ = head$
-    .map(head => {
-      const orientation = head.object3D.getWorldDirection();
-      const { position } = head.object3D;
-      return { orientation, position };
-    })
-    // .distinctUntilChanged(head => {
-      
-    //   return head.lookAt.toString();
-    // })
-    .map(({ orientation, position }) => virtualAudioGraph => {
-      // console.log(head.object3D.getWorldDirection());
-      // console.log(head.object3D.rotation);
-      const { audioContext: { listener } } = virtualAudioGraph;
-      const or = orientation;
-		// 	or.copy(head.lookAt);
-		// 	or.normalize();
-      listener.setOrientation(or.x, or.y, or.z, 0, 1, 0);
-      const p = position;
-      listener.setPosition(p.x, p.y, p.z);
-      return virtualAudioGraph;
-    });
-  
-  const panners$ = mainSceneModel$
-    .flatMap(model => {
-      const objects = model.objects.values();
-      return stream
-        .from(objects)
-        .flatMap(parent => {
-          return stream
-            .from(parent.cones)
-            .map(cone => {
-              const { position, trajectoryOffset } = parent;
-              const pannerPosition = position.clone().add(trajectoryOffset);
-              const orientation = new THREE.Vector3();
-  						orientation.copy(cone.lookAt);
-  						orientation.normalize();
-              return {
-                file: cone.file,
-                position: pannerPosition.toArray(),
-                orientation: orientation.toArray()
-              };
-            });
-        })
-        .map((obj, index) => {
-          obj.key = `panner${index}`;
-          return obj;
-        })
-        .toArray();
-    })
-    .startWith({});
-  
-  const graphReducer$ = combineLatestObj({
-      audioBuffers$,
-      panners$
-    })
-    .map(({ audioBuffers, panners }) => virtualAudioGraph => {
-      const bufferGraph = audioBuffers
-        .map((bufferObj, index) => {
-          const outputKeys = panners
-            .filter(panner => panner.file === bufferObj.fileName)
-            .map(panner => panner.key);
-          const value = ['bufferSource', outputKeys, { 
-            buffer: bufferObj.audioBuffer, 
-            loop: true
-          }];
-          return {
-            key: `buffer${index}`,
-            value
-          };
-        })
-        .reduce((a, { key, value }) => {
-          a[key] = value;
-          return a;
-        }, {});
-      const pannerGraph = panners
-        .map(panner => {
-          const value = ['panner', 0, {
-            position: panner.position,
-            orientation: panner.orientation,
-            panningModel: 'HRTF',
-				  	coneInnerAngle: 0.01*180/Math.PI,
-				  	coneOuterAngle: 1*180/Math.PI,
-				  	coneOuterGain: 0.03
-          }];
-          return {
-            key: panner.key,
-            value
-          };
-        })
-        .reduce((a, { key, value }) => {
-          a[key] = value;
-          return a;
-        }, {});
-      const baseGraph = {
-        0: ['gain', 'output', { gain: 1 }]
-      };
-      const graph = Object.assign(baseGraph, pannerGraph, bufferGraph);
-      virtualAudioGraph.update(graph);
-      return virtualAudioGraph;
-    });
-    
-  const audioGraphReducer$ = stream
+  const listenerReducer$ = getListenerReducer$(head$);
+  const panners$ = getPanners$(mainSceneModel$);
+  const graphReducer$ = getAudioGraphReducer$({ audioBuffers$, panners$ });
+  const virtualAudioGraphReducer$ = stream
     .merge(
       listenerReducer$,
       graphReducer$
     );
-    
-  accumulateAudioGraph({ audioGraphReducer$, theAudioContext })
-    .subscribe();
-  
   /** RENDERER */
   const rendererSizeReducer$ = getRendererSizeReducer$(windowSize$);
   const mainRenderer$ = getMainRenderer$(rendererSizeReducer$);
@@ -448,16 +345,128 @@ function main() {
   const editorDomReducer$ = getEditorDomReducer({ editorDomModel$, actionSubject });
   const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
   /** SUBSCRIPTIONS */
+  accumulateAudioGraph({ virtualAudioGraphReducer$, theAudioContext })
+    .subscribe();
   combineAndRender(mainRenderer$, mainScene$, mainCamera$)
     .subscribe(fn => fn());
   accumulateDom(domReducer$)
     .subscribe();
 }
 
-function accumulateAudioGraph({ audioGraphReducer$, theAudioContext }) {
+function getListenerReducer$(head$) {
+  return head$
+    .map(({ object3D }) => {
+      const orientation = object3D.getWorldDirection();
+      return { orientation, position: object3D.position };
+    })
+    .distinctUntilChanged(({ orientation, position }) => {
+      const { x: ox, y: oy, z: oz } = orientation;
+      const { x: px, y: py, z: pz } = position;
+      const string = `${ox}${oy}${oz}${px}${py}${pz}`;
+      return string;
+    })
+    .map(({ orientation, position }) => virtualAudioGraph => {
+      const { audioContext: { listener } } = virtualAudioGraph;
+      const { x: ox, y: oy, z: oz } = orientation;
+      const { x: px, y: py, z: pz } = position;
+      listener.setOrientation(ox, oy, oz, 0, 1, 0);
+      listener.setPosition(px, py, pz);
+      return virtualAudioGraph;
+    });
+}
+
+function getPanners$(mainSceneModel$) {
+  return mainSceneModel$
+    .flatMap(model => {
+      const objects = model.objects.values();
+      return stream
+        .from(objects)
+        .flatMap(parent => {
+          return stream
+            .from(parent.cones)
+            .map(cone => {
+              const { position, trajectoryOffset } = parent;
+              const pannerPosition = position.clone().add(trajectoryOffset);
+              const orientation = new THREE.Vector3();
+  						orientation.copy(cone.lookAt);
+  						orientation.normalize();
+              return {
+                file: cone.file,
+                position: pannerPosition.toArray(),
+                orientation: orientation.toArray()
+              };
+            });
+        })
+        .map((obj, index) => {
+          obj.key = `panner${index}`;
+          return obj;
+        })
+        .toArray();
+    });
+}
+
+function getAudioGraphReducer$({ audioBuffers$, panners$ }) {
+  return combineLatestObj({
+      audioBuffers$,
+      panners$: panners$.startWith({})
+    })
+    .map(({ audioBuffers, panners }) => virtualAudioGraph => {
+      const bufferGraph = getBufferGraph({ audioBuffers, panners });
+      const pannerGraph = getPannerGraph(panners);
+      const baseGraph = { 0: ['gain', 'output', { gain: 1 }] };
+      const graph = Object.assign(baseGraph, pannerGraph, bufferGraph);
+      virtualAudioGraph.update(graph);
+      return virtualAudioGraph;
+    });
+}
+
+function getPannerGraph(panners) {
+  return panners
+    .map(panner => {
+      const value = ['panner', 0, {
+        position: panner.position,
+        orientation: panner.orientation,
+        panningModel: 'HRTF',
+		  	coneInnerAngle: 0.01*180/Math.PI,
+		  	coneOuterAngle: 1*180/Math.PI,
+		  	coneOuterGain: 0.03
+      }];
+      return {
+        key: panner.key,
+        value
+      };
+    })
+    .reduce((a, { key, value }) => {
+      a[key] = value;
+      return a;
+    }, {});
+}
+
+function getBufferGraph({ audioBuffers, panners }) {
+  return audioBuffers
+    .map((bufferObj, index) => {
+      const outputKeys = panners
+        .filter(panner => panner.file === bufferObj.fileName)
+        .map(panner => panner.key);
+      const value = ['bufferSource', outputKeys, { 
+        buffer: bufferObj.audioBuffer, 
+        loop: true
+      }];
+      return {
+        key: `buffer${index}`,
+        value
+      };
+    })
+    .reduce((a, { key, value }) => {
+      a[key] = value;
+      return a;
+    }, {});
+}
+
+function accumulateAudioGraph({ virtualAudioGraphReducer$, theAudioContext }) {
   return stream
     .just(createVirtualAudioGraph({ theAudioContext }))
-    .concat(audioGraphReducer$)
+    .concat(virtualAudioGraphReducer$)
     .scan(apply);
 }
 
