@@ -38,152 +38,27 @@ main();
 function main() {
   /** ACTIONS */
   const actionSubject = new Rx.ReplaySubject(1);
-  const action$ = actionSubject;
-  const windowSize$ = windowSize();
   const keyAction$ = getKeyAction$();
   const newObjectAction$ = keyAction$
     .filter(d => d.type === 'keydown')
     .pluck('code')
-    .filter(code => code === 'o');
+    .filter(code => code === 'o')
+    .map(() => ({ actionType: 'add-object' }));
+  const action$ = stream
+    .merge(
+      actionSubject,
+      newObjectAction$
+    );
+  const windowSize$ = windowSize();
   const animation$ = getAnimation$()
 		.shareReplay(1); /** NOTE: shareReplay */
-		
 	/** INTENT / REDUCERS */
-  const velocityReducer$ = action$
-    .filter(d => d.actionType === 'velocity')
-    .map(velocityReducer);
-  function velocityReducer({ value }) {
-    return model => {
-      const selectedObject = getSelectedObject(model);
-      if (typeof selectedObject !== 'undefined') {
-        const DRAG_SENSITIVITY = 0.01;
-        const delta = value * DRAG_SENSITIVITY;
-        const newVel = selectedObject.velocity + delta;
-        selectedObject.velocity = newVel;
-      }
-      return model;
-    };
-  }
-  const coneLatitudeReducer$ = action$
-    .filter(d => d.actionType === 'update-cone-latitude')
-    .map(coneLatitudeReducer);
-  function coneLatitudeReducer({ value }) {
-    return model => {
-      const selectedCone = getSelectedCone(model);
-      if (typeof selectedCone !== 'undefined') {
-        const DRAG_SENSITIVITY = 1;
-        const delta = value * DRAG_SENSITIVITY;
-        const test = selectedCone.latitude + delta;
-        const MAX_CONE_LATITUDE = 90;
-        const MIN_CONE_LATITUDE = -90;
-        const newLat = test > MAX_CONE_LATITUDE ? MAX_CONE_LATITUDE :
-          test < MIN_CONE_LATITUDE ? MIN_CONE_LATITUDE :
-          test;
-        selectedCone.latitude = newLat;
-      }
-      return model;
-    };
-  }
-  const coneLongitudeReducer$ = action$
-    .filter(d => d.actionType === 'update-cone-longitude')
-    .map(coneLongitudeReducer);
-  function coneLongitudeReducer({ value }) {
-    return model => {
-      const selectedCone = getSelectedCone(model);
-      if (typeof selectedCone !== 'undefined') {
-        const DRAG_SENSITIVITY = 1;
-        const delta = value * DRAG_SENSITIVITY;
-        const newLong = (selectedCone.longitude + delta) % 360;
-        selectedCone.longitude = newLong;
-      }
-      return model;
-    };
-  }
-  const coneVolumeReducer$ = action$
-    .filter(d => d.actionType === 'update-selected-cone-volume')
-    .map(coneVolumeReducer);
-  function coneVolumeReducer({ value }) {
-    return model => {
-      const selectedCone = getSelectedCone(model);
-      if (typeof selectedCone !== 'undefined') {
-        const DRAG_SENSITIVITY = 0.01;
-        const newVolume = selectedCone.volume + value * DRAG_SENSITIVITY;
-        const MAX_VOLUME = 1;
-        const MIN_VOLUME = 0.1;
-        if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
-          selectedCone.volume = newVolume;
-      }
-      return model;
-    };
-  }
-    
-  const tweenObjectVolumeReducer$ = action$
-    .filter(({ actionType }) => actionType === 'tween-object-volume')
-    .flatMap(tweenObjectVolume);
-  
-  const objectVolumeReducer$ = action$
-    .filter(d => d.actionType === 'update-selected-object-volume')
-    .map(objectVolumeReducer);
-  function objectVolumeReducer({ value }) {
-    return model => {
-      const object = getSelectedObject(model);
-      if (object.type === 'object-parent') {
-        const newVolume = object.volume + value * 0.01;
-        const MAX_VOLUME = 1;
-        const MIN_VOLUME = 0.1;
-        if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
-          object.volume = newVolume;
-      }
-      return model;
-    };
-  }
-    
-  const newObjectReducer$ = newObjectAction$
-    .map(() => new THREE.Vector3(
-      Math.random() * 10 - 5,
-      1.5,
-      Math.random() * 10 - 5
-    ))
-    .map(getAddObjectReducer(actionSubject));
-    
-  const addConeReducer$ = action$
-    .filter(d => d.actionType === 'add-cone-to-selected')
-    .map(addConeReducer);
-    
-  const objectPositionReducer$ = action$
-    .filter(d => d.actionType === 'update-selected-parent-object-position')
-    .map(objectPositionReducer);
-    
-  function objectPositionReducer({ value }) {
-    return model => {
-      const selectedObject = getSelectedObject(model);
-      if (selectedObject.type === 'object-parent') {
-        const DRAG_SENSITIVITY = 0.01;
-        const delta = value.multiplyScalar(DRAG_SENSITIVITY);
-        selectedObject.position.add(delta);
-      }
-      return model;
-    };
-  }
-    
-	const distanceReducer$ = getDistanceReducer$(animation$);
-	
-	const modelReducer$ = stream
-    .merge(
-      newObjectReducer$,
-      tweenObjectVolumeReducer$,
-      objectVolumeReducer$,
-      objectPositionReducer$,
-      velocityReducer$,
-      addConeReducer$,
-      coneVolumeReducer$,
-      coneLatitudeReducer$,
-      coneLongitudeReducer$,
-      distanceReducer$
-    );
-	
-  // const modelReducer$ = getModelReducer$({ animation$ });
-    
+	const modelAction$ = action$;
+  const modelReducer$ = getModelReducer$({ 
+    animation$, 
+    modelAction$, 
+    actionSubject
+  });
   const mainSceneModel$ = getMainSceneModel$(modelReducer$)
     .shareReplay(1); /** NOTE: shareReplay */
   const files$ = stream.just(['wetShort.wav']);
@@ -241,21 +116,143 @@ function main() {
     .subscribe();
 }
 
-function getModelReducer$({ animation$ }) {
+function getModelReducer$({ animation$, modelAction$, actionSubject }) {
+  const action$ = modelAction$;
+  const velocityReducer$ = action$
+    .filter(d => d.actionType === 'velocity')
+    .map(velocityReducer);
+  const coneLatitudeReducer$ = action$
+    .filter(d => d.actionType === 'update-cone-latitude')
+    .map(coneLatitudeReducer);
+  const coneLongitudeReducer$ = action$
+    .filter(d => d.actionType === 'update-cone-longitude')
+    .map(coneLongitudeReducer);
+  const coneVolumeReducer$ = action$
+    .filter(d => d.actionType === 'update-selected-cone-volume')
+    .map(coneVolumeReducer);
+  const tweenObjectVolumeReducer$ = action$
+    .filter(({ actionType }) => actionType === 'tween-object-volume')
+    .flatMap(tweenObjectVolume);
+  const objectVolumeReducer$ = action$
+    .filter(d => d.actionType === 'update-selected-object-volume')
+    .map(objectVolumeReducer);
+  const addObjectReducer$ = action$
+    .filter(d => d.actionType === 'add-object')
+    .map(randomPosition)
+    .map(getAddObjectReducer(actionSubject));
+  const objectPositionReducer$ = action$
+    .filter(d => d.actionType === 'update-selected-parent-object-position')
+    .map(objectPositionReducer);
+  const objectAddConeReducer$ = action$
+    .filter(d => d.actionType === 'add-cone-to-selected')
+    .map(addConeReducer);
   const distanceReducer$ = getDistanceReducer$(animation$);
   return stream
     .merge(
-      newObjectReducer$,
+      addObjectReducer$,
       tweenObjectVolumeReducer$,
       objectVolumeReducer$,
       objectPositionReducer$,
       velocityReducer$,
-      addConeReducer$,
+      objectAddConeReducer$,
       coneVolumeReducer$,
       coneLatitudeReducer$,
       coneLongitudeReducer$,
       distanceReducer$
     );
+}
+
+function velocityReducer({ value }) {
+  return model => {
+    const selectedObject = getSelectedObject(model);
+    if (typeof selectedObject !== 'undefined') {
+      const DRAG_SENSITIVITY = 0.01;
+      const delta = value * DRAG_SENSITIVITY;
+      const newVel = selectedObject.velocity + delta;
+      selectedObject.velocity = newVel;
+    }
+    return model;
+  };
+}
+
+function coneLatitudeReducer({ value }) {
+  return model => {
+    const selectedCone = getSelectedCone(model);
+    if (typeof selectedCone !== 'undefined') {
+      const DRAG_SENSITIVITY = 1;
+      const delta = value * DRAG_SENSITIVITY;
+      const test = selectedCone.latitude + delta;
+      const MAX_CONE_LATITUDE = 90;
+      const MIN_CONE_LATITUDE = -90;
+      const newLat = test > MAX_CONE_LATITUDE ? MAX_CONE_LATITUDE :
+        test < MIN_CONE_LATITUDE ? MIN_CONE_LATITUDE :
+        test;
+      selectedCone.latitude = newLat;
+    }
+    return model;
+  };
+}
+
+function coneLongitudeReducer({ value }) {
+  return model => {
+    const selectedCone = getSelectedCone(model);
+    if (typeof selectedCone !== 'undefined') {
+      const DRAG_SENSITIVITY = 1;
+      const delta = value * DRAG_SENSITIVITY;
+      const newLong = (selectedCone.longitude + delta) % 360;
+      selectedCone.longitude = newLong;
+    }
+    return model;
+  };
+}
+
+function coneVolumeReducer({ value }) {
+  return model => {
+    const selectedCone = getSelectedCone(model);
+    if (typeof selectedCone !== 'undefined') {
+      const DRAG_SENSITIVITY = 0.01;
+      const newVolume = selectedCone.volume + value * DRAG_SENSITIVITY;
+      const MAX_VOLUME = 1;
+      const MIN_VOLUME = 0.1;
+      if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
+        selectedCone.volume = newVolume;
+    }
+    return model;
+  };
+}
+
+function objectVolumeReducer({ value }) {
+  return model => {
+    const object = getSelectedObject(model);
+    if (object.type === 'object-parent') {
+      const newVolume = object.volume + value * 0.01;
+      const MAX_VOLUME = 1;
+      const MIN_VOLUME = 0.1;
+      if (newVolume <= MAX_VOLUME && newVolume >= MIN_VOLUME)
+        object.volume = newVolume;
+    }
+    return model;
+  };
+}
+
+function randomPosition() {
+  return new THREE.Vector3(
+    Math.random() * 10 - 5,
+    1.5,
+    Math.random() * 10 - 5
+  );
+}
+
+function objectPositionReducer({ value }) {
+  return model => {
+    const selectedObject = getSelectedObject(model);
+    if (selectedObject.type === 'object-parent') {
+      const DRAG_SENSITIVITY = 0.01;
+      const delta = value.multiplyScalar(DRAG_SENSITIVITY);
+      selectedObject.position.add(delta);
+    }
+    return model;
+  };
 }
 
 function getKeyAction$() {
@@ -323,7 +320,7 @@ function getMainSceneModel$(modelReducer$) {
 
 function setTrajectoryOffset(object) {
   const { curve, distance } = object;
-  const t = (distance / curve.getLength()) % 1
+  const t = (distance / curve.getLength()) % 1;
   const trajectoryOffset = curve.getPoint(t);
   object.trajectoryOffset = trajectoryOffset;
   return object;
@@ -374,6 +371,7 @@ function getAnimateHeadReducer$(animation$) {
       return head;
     });
 }
+
 function getHeadVelocityReducer$({ keyAction$ }) {
   const HEAD_VELOCITY = 0.1;
   return keyAction$
