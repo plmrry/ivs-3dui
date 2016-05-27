@@ -1235,7 +1235,7 @@ function joinCones(objects) {
 		.data(function(d) { return d.cones || [] });
 	join
 		.exit()
-		.each(function(d) {
+		.each(function() {
 		  console.warn('exit');
 			this.parent.remove(this);
 		});
@@ -1243,7 +1243,7 @@ function joinCones(objects) {
 	  .enter()
 	  .append(getNewCone)
 	  .each(d => d.type = 'cone_parent');
-	const cones = enter
+	enter
     .merge(join)
 	  .each(updateOneCone);
 }
