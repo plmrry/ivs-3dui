@@ -293,7 +293,7 @@ function getDistanceReducer$(animation$) {
   return animation$
     .map(() => model => {
       model.objects.values()
-        .filter(d => d.velocity !== 0)
+        // .filter(d => d.velocity !== 0)
         .forEach(object => {
           object.distance += object.velocity;
         });
