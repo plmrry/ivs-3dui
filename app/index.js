@@ -81,8 +81,8 @@ function main() {
   const animateHeadReducer$ = getAnimateHeadReducer$(animation$);
 	const headReducer$ = stream
 	  .merge(
-	     headVelocityReducer$
-	    //  animateHeadReducer$
+	     headVelocityReducer$,
+	     animateHeadReducer$
 	  );
 	const head$ = getHeadModel$(headReducer$)
 	  .shareReplay(1); /** NOTE: shareReplay */
@@ -565,7 +565,7 @@ function getJoinHeadReducer(head$) {
     .map(heads => scene => {
       const sceneSelection = d3.select(scene);
       const join = sceneSelection
-        .selectAll()
+        .selectAll({})
         .filter(function(d) {
           if (typeof d === 'undefined') return false;
           return d.type === 'head';
@@ -1215,7 +1215,7 @@ function getJoinObjectsReducer(model$) {
 function joinTrajectories(parents) {
   if (parents.size() > 0) {
     const join = parents
-      .selectAll()
+      .selectAll({})
       .filter(function(d) {
         return d.type === 'trajectory';
       })
@@ -1240,7 +1240,7 @@ function joinTrajectories(parents) {
 
 function joinCones(objects) {
   let join = objects
-		.selectAll()
+		.selectAll({})
 		.filter(function(d) {
 		  return d.type === 'cone_parent';
 		})
@@ -1328,13 +1328,15 @@ function cylinder_geometry_from_params(params) {
 }
 
 function joinObjectParents({ objects, sceneSelection }) {
+  // console.log(sceneSelection.node());
+  const all = sceneSelection.selectAll();
   const join = sceneSelection
-    .selectAll()
+    .selectAll({})
     .filter(function(d) {
       if (typeof d === 'undefined') return false;
       return d.type === 'object-parent';
     })
-    .data(objects, d => d.key);
+    .data(objects, d => { return d.key; });
   join
     .exit()
     .remove();
@@ -1657,6 +1659,7 @@ function selectableTHREEJS(THREE) {
     return this.getObjectByProperty(key, query[key]);
   };
   THREE.Object3D.prototype.querySelectorAll = function (query) {
+    // debugger
     if (typeof query === 'undefined') return this.children;
     return this.children.filter(d => _.isMatch(d, query));
   };
