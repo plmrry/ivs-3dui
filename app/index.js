@@ -1329,7 +1329,7 @@ function cylinder_geometry_from_params(params) {
 
 function joinObjectParents({ objects, sceneSelection }) {
   // console.log(sceneSelection.node());
-  const all = sceneSelection.selectAll();
+  // const all = sceneSelection.selectAll();
   const join = sceneSelection
     .selectAll({})
     .filter(function(d) {
