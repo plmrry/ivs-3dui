@@ -22,6 +22,8 @@ Go to `localhost:9877` to run the main application script. Right now it's nothin
 
 ## Interactions
 
-### Add object: Press the `o` key
+### Add object: 
+Press the `o` key
 
-### Move head: `w a s d`
+### Move head: 
+`w a s d`
