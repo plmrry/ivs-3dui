@@ -2,27 +2,41 @@
 /* jshint unused: true */
 /* jshint undef: true */
 /* jshint -W087 */
-/* global window, document */
+/* global window, document, XMLHttpRequest, console, require */ // jshint ignore:line
 
-import debug from 'debug';
-import Rx, { Observable as stream } from 'rx';
-import combineLatestObj from 'rx-combine-latest-obj';
-import d3 from 'd3';
-import THREE from 'three/three.js';
-import createVirtualAudioGraph from 'virtual-audio-graph';
-import _ from 'underscore';
+// import debug from 'debug';
+// import Rx, { Observable as stream } from 'rx';
+// import combineLatestObj from 'rx-combine-latest-obj';
+// import d3 from 'd3';
+// import THREE from 'three/three.js';
+// import createVirtualAudioGraph from 'virtual-audio-graph';
+// import _ from 'underscore';
+//
+// import OBJLoader from './OBJLoader.js';
+//
+// // import log from './utilities/log.js';
+// import apply from './utilities/apply.js';
 
-import OBJLoader from './OBJLoader.js';
+const debug = require('debug');
+const Rx = require('rx');
+const combineLatestObj = require('rx-combine-latest-obj');
+const d3 = require('d3');
+const THREE = require('THREE');
+const createVirtualAudioGraph = require('virtual-audio-graph');
+const _ = require('underscore');
 
-import log from './utilities/log.js';
-import apply from './utilities/apply.js';
+const OBJLoader = require('./OBJLoader').default;
+
+const apply = require('./utilities/apply').default;
+
+const stream = Rx.Observable;
 
 selectableTHREEJS(THREE);
 debug.enable('*,-reducer:*');
 Rx.config.longStackSupport = true;
 
 /** GLOBALS */
-const MIN_VOLUME = 0.1;
+// const MIN_VOLUME = 0.1;
 const latitudeToTheta = d3.scaleLinear()
   .domain([90, 0, -90])
   .range([0, Math.PI/2, Math.PI])
@@ -52,9 +66,9 @@ function main() {
 		.shareReplay(1); /** NOTE: shareReplay */
 	/** INTENT / REDUCERS */
 	const modelAction$ = action$;
-  const modelReducer$ = getModelReducer$({ 
-    animation$, 
-    modelAction$, 
+  const modelReducer$ = getModelReducer$({
+    animation$,
+    modelAction$,
     actionSubject
   });
   const mainSceneModel$ = getMainSceneModel$(modelReducer$)
@@ -90,9 +104,9 @@ function main() {
   const joinObjectsReducer$ = getJoinObjectsReducer(mainSceneModel$);
   const joinHeadReducer$ = getJoinHeadReducer(head$);
   const sceneReducer$ = stream
-    .merge( 
-      addLightsReducer$, 
-      addFloorReducer$, 
+    .merge(
+      addLightsReducer$,
+      addFloorReducer$,
       joinObjectsReducer$,
       joinHeadReducer$
     );
@@ -493,8 +507,8 @@ function getBufferGraph({ audioBuffers, panners }) {
       const outputKeys = panners
         .filter(panner => panner.file === bufferObj.fileName)
         .map(panner => panner.key);
-      const value = ['bufferSource', outputKeys, { 
-        buffer: bufferObj.audioBuffer, 
+      const value = ['bufferSource', outputKeys, {
+        buffer: bufferObj.audioBuffer,
         loop: true
       }];
       return {
@@ -727,9 +741,9 @@ function getEditorDomModel$(selected$) {
             rows: getObjectInfoRows(selected)
           }
         ];
-        
+
         const card_blocks = coneCardBlock.concat(objectCardBlock);
-        
+
         return {
           cards: [
             {
@@ -791,7 +805,7 @@ function getObjectInfoRows(selected) {
         column('col-xs-3', 'key', 'File'),
         column('col-xs-3', 'value', selected.file || 'None', 'pointer')
       ].concat(draggableKeyValue(
-        'Volume', 
+        'Volume',
         d => `${d3.format(".1f")(d.volume)} dB` || 'Error!',
         'update-selected-object-volume'
       )(selected))
@@ -800,8 +814,8 @@ function getObjectInfoRows(selected) {
       columns: [
         column('col-xs-3', 'key', 'x'),
         column(
-          'col-xs-3', 'value', fmtNum(position.x), 'ew-resize', 
-          'update-selected-parent-object-position', 
+          'col-xs-3', 'value', fmtNum(position.x), 'ew-resize',
+          'update-selected-parent-object-position',
           dx => new THREE.Vector3(dx, 0, 0)
         ),
         column('col-xs-3', 'key', 'Cones'),
@@ -812,8 +826,8 @@ function getObjectInfoRows(selected) {
       columns: [
         column('col-xs-3', 'key', 'y'),
         column(
-          'col-xs-3', 'value', fmtNum(position.y), 'ew-resize', 
-          'update-selected-parent-object-position', 
+          'col-xs-3', 'value', fmtNum(position.y), 'ew-resize',
+          'update-selected-parent-object-position',
           dx => new THREE.Vector3(0, dx, 0)
         ),
         column('col-xs-3', 'key', 'Velocity'),
@@ -822,7 +836,7 @@ function getObjectInfoRows(selected) {
     },
     { /** New row */
       columns: draggableKeyValue(
-        'z', 
+        'z',
         d => d3.format(".1f")(d.position.z),
         'update-selected-parent-object-position',
         dx => new THREE.Vector3(0, 0, dx)
@@ -907,7 +921,7 @@ function registerTextDragAction(actionType, mapper) {
     dragAction$.subscribe(actionSubject);
   };
 }
-  
+
 function getTextDragAction$(node) {
   const dragHandler = getDragHandlerWithSubject();
   d3.select(node).call(dragHandler);
@@ -944,8 +958,8 @@ function getMainDomAction$(canvasSelection) {
         y: d3.scaleLinear().domain([0, height]).range([+1, -1])
       };
       eventObj.ndc = {
-        x: ndcScale.x(mouse[0]), 
-        y: ndcScale.y(mouse[1]) 
+        x: ndcScale.x(mouse[0]),
+        y: ndcScale.y(mouse[1])
       };
       eventObj.actionType = 'main-mouse-action';
       return eventObj;
@@ -1032,10 +1046,10 @@ function getEditorDomReducer({ editorDomModel$, actionSubject }) {
 
 /**
  * CAMERA
- * 
- * 
+ *
+ *
  */
- 
+
 function polarToVector({ radius, theta, phi }) {
   return {
     x: radius * Math.sin(phi) * Math.sin(theta),
@@ -1043,7 +1057,7 @@ function polarToVector({ radius, theta, phi }) {
     y: radius * Math.cos(theta)
   };
 }
- 
+
 function mainCamera(windowSize$) {
   const latitude$ = stream
     .just(45);
@@ -1179,14 +1193,14 @@ function windowSize() {
  *
  *
  */
- 
+
 function getJoinObjectsReducer(model$) {
   return model$
     .map(({ objects }) => objects.values())
     .map(objects => scene => {
       const sceneSelection = d3.select(scene);
       const parents = joinObjectParents({ objects, sceneSelection });
-      const trajectories = joinTrajectories(parents);
+      joinTrajectories(parents);
       // console.log(scene.children);
       // const _objects = joinChildObjects(parents);
       // const cones = joinCones(parents);
@@ -1206,8 +1220,8 @@ function joinTrajectories(parents) {
         return d.type === 'trajectory';
       })
       /** NOTE: Key function is very important! */
-      .data(({ curve }) => [{ type: 'trajectory', curve }], d => d.type); 
-    const enter = join
+      .data(({ curve }) => [{ type: 'trajectory', curve }], d => d.type);
+    join
       .enter()
       .append(function({ curve }) {
         debug('reducer:curve')('enter curve');
@@ -1230,7 +1244,7 @@ function joinCones(objects) {
 		.filter(function(d) {
 		  return d.type === 'cone_parent';
 		})
-		.data(function(d) { return d.cones || [] });
+		.data(function(d) { return d.cones || []; });
 	join
 		.exit()
 		.each(function() {
@@ -1277,7 +1291,7 @@ function getNewCone(d) {
 	coneParent.name = 'cone_parent';
 	coneParent._type = 'cone_parent';
 	coneParent.add(cone);
-	return coneParent;	
+	return coneParent;
 }
 
 function updateOneCone(d) {
@@ -1312,7 +1326,7 @@ function cylinder_geometry_from_params(params) {
 		params.openEnded
 	);
 }
- 
+
 function joinObjectParents({ objects, sceneSelection }) {
   const join = sceneSelection
     .selectAll()
@@ -1352,7 +1366,7 @@ function joinObjectParents({ objects, sceneSelection }) {
 function updateObjectPosition(d) {
   this.position.copy(d.trajectoryOffset);
 }
-  
+
 function getNewObject() {
   const geometry = new THREE.SphereGeometry(0.1, 30, 30);
   const material = new THREE.MeshPhongMaterial({
@@ -1371,7 +1385,7 @@ function getNewObject() {
 function updateObjectOpacity({ selected }) {
   this.material.opacity = selected ? 0.3 : 0.1;
 }
-  
+
 function updateObjectRadius(d) {
   const { volume } = d;
   const object = this;
@@ -1449,7 +1463,7 @@ function getFirstRenderer() {
  *
  *
  */
- 
+
 function joinInfoRowsCols({ cardBlocks, actionSubject }) {
   const rowsJoin = cardBlocks
     .selectAll('.row')
