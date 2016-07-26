@@ -81,8 +81,8 @@ function main() {
   const animateHeadReducer$ = getAnimateHeadReducer$(animation$);
 	const headReducer$ = stream
 	  .merge(
-	     headVelocityReducer$,
-	     animateHeadReducer$
+	     headVelocityReducer$
+	    //  animateHeadReducer$
 	  );
 	const head$ = getHeadModel$(headReducer$)
 	  .shareReplay(1); /** NOTE: shareReplay */
