@@ -14,7 +14,7 @@ import _ from 'underscore';
 
 import OBJLoader from './OBJLoader.js';
 
-import log from './utilities/log.js';
+// import log from './utilities/log.js';
 import apply from './utilities/apply.js';
 
 selectableTHREEJS(THREE);
@@ -30,35 +30,64 @@ const latitudeToTheta = d3.scaleLinear()
 const longitudeToPhi = d3.scaleLinear()
   .domain([-180, 0, 180])
   .range([0, Math.PI, 2 * Math.PI]);
+  
+const g_main_renderer = getFirstRenderer();
+const g_main_scene = new THREE.Scene();
+const g_main_scene_model = { objects: d3.map() };
+
+init(g_main_scene);
+
+function init(scene) {
+  addLights(scene);
+  addFloor(scene);
+}
 
 main();
 
 function main() {
   /** ACTIONS */
   const actionSubject = new Rx.ReplaySubject(1);
+  const mainRenderer$ = new Rx.ReplaySubject(1);
+  const mainScene$ = new Rx.ReplaySubject(1);
+  const mainSceneModel$ = new Rx.ReplaySubject(1);
+  
   const keyAction$ = getKeyAction$();
+  
   const newObjectAction$ = keyAction$
     .filter(d => d.type === 'keydown')
     .pluck('code')
     .filter(code => code === 'o')
     .map(() => ({ actionType: 'add-object' }));
+    
   const action$ = stream
     .merge(
       actionSubject,
       newObjectAction$
     );
-  const windowSize$ = windowSize();
+    
+  const windowSize$ = windowSize()
+    .do(size => {
+      setRendererSize(g_main_renderer)(size);
+      mainRenderer$.onNext(g_main_renderer);
+    });
+    
   const animation$ = getAnimation$()
 		.shareReplay(1); /** NOTE: shareReplay */
 	/** INTENT / REDUCERS */
 	const modelAction$ = action$;
-  const modelReducer$ = getModelReducer$({ 
+  getModelReducer$({ 
     animation$, 
     modelAction$, 
     actionSubject
+  }).subscribe(fn => {
+    fn(g_main_scene_model);
+    g_main_scene_model.objects.values()
+      .forEach(object => {
+        setConesLookAt(object);
+        setTrajectoryOffset(object);
+      });
+    mainSceneModel$.onNext(g_main_scene_model);
   });
-  const mainSceneModel$ = getMainSceneModel$(modelReducer$)
-    .shareReplay(1); /** NOTE: shareReplay */
   const files$ = stream.just(['wetShort.wav']);
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   const theAudioContext = new AudioContext();
@@ -81,22 +110,20 @@ function main() {
       listenerReducer$,
       graphReducer$
     );
-  /** RENDERER */
-  const rendererSizeReducer$ = getRendererSizeReducer$(windowSize$);
-  const mainRenderer$ = getMainRenderer$(rendererSizeReducer$);
+
   /** SCENE */
-  const addLightsReducer$ = getAddLightsReducer();
-  const addFloorReducer$ = getAddFloorReducer();
   const joinObjectsReducer$ = getJoinObjectsReducer(mainSceneModel$);
   const joinHeadReducer$ = getJoinHeadReducer(head$);
-  const sceneReducer$ = stream
+  
+  stream
     .merge( 
-      addLightsReducer$, 
-      addFloorReducer$, 
       joinObjectsReducer$,
       joinHeadReducer$
-    );
-  const mainScene$ = mainScene(sceneReducer$);
+    )
+    .subscribe(fn => {
+      mainScene$.onNext(fn(g_main_scene));
+    });
+    
   /** CAMERA */
   const mainCamera$ = mainCamera(windowSize$);
   /** DOM */
@@ -515,33 +542,22 @@ function accumulateAudioGraph({ virtualAudioGraphReducer$, theAudioContext }) {
     .scan(apply);
 }
 
-function getRendererSizeReducer$(windowSize$) {
-  return windowSize$
-    .map(size => renderer => {
-      const currentSize = renderer.getSize();
-      const diff = _.difference(_.values(currentSize), _.values(size));
-      if (diff.length > 0) {
-        debug('reducer:renderer')('update size');
-        renderer.setSize(size.width, size.height);
-      }
-      return renderer;
-    });
+function setRendererSize(renderer) {
+  return function(size) {
+    const currentSize = renderer.getSize();
+    const diff = _.difference(_.values(currentSize), _.values(size));
+    if (diff.length > 0) {
+      debug('reducer:renderer')('update size');
+      renderer.setSize(size.width, size.height);
+    }
+    return renderer;    
+  };
 }
 
-function getMainRenderer$(rendererUpdate$) {
-  return stream
-    .just(getFirstRenderer())
-    .concat(rendererUpdate$)
-    .scan(apply);
-}
-
-function getAddLightsReducer() {
-  return stream
-    .just(scene => {
-      scene.add(getSpotlight());
-      scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
-      return scene;
-    });
+function addLights(scene) {
+  scene.add(getSpotlight());
+  scene.add(new THREE.HemisphereLight(0, 0xffffff, 0.8));
+  return scene;
 }
 
 function getJoinHeadReducer(head$) {
@@ -1000,17 +1016,13 @@ function observableFromDragEvent(dragHandler) {
   };
 }
 
-function getAddFloorReducer() {
-  return stream
-    .just(scene => {
-      const room_size = {
-        width: 20,
-        length: 18,
-        height: 3
-      };
-      scene.add(getFloor(room_size));
-      return scene;
-    });
+function addFloor(scene) {
+  const room_size = {
+    width: 20,
+    length: 18,
+    height: 3
+  };
+  scene.add(getFloor(room_size));
 }
 
 function accumulateDom(domUpdate$) {
@@ -1186,14 +1198,7 @@ function getJoinObjectsReducer(model$) {
     .map(objects => scene => {
       const sceneSelection = d3.select(scene);
       const parents = joinObjectParents({ objects, sceneSelection });
-      const trajectories = joinTrajectories(parents);
-      // console.log(scene.children);
-      // const _objects = joinChildObjects(parents);
-      // const cones = joinCones(parents);
-      // parents.each(function(parent) {
-      //   d3.select(this)
-      //     .selectAll()
-      // });
+      joinTrajectories(parents);
       return scene;
     });
 }
@@ -1207,7 +1212,7 @@ function joinTrajectories(parents) {
       })
       /** NOTE: Key function is very important! */
       .data(({ curve }) => [{ type: 'trajectory', curve }], d => d.type); 
-    const enter = join
+    join
       .enter()
       .append(function({ curve }) {
         debug('reducer:curve')('enter curve');
