@@ -34,12 +34,15 @@ const longitudeToPhi = d3.scaleLinear()
 const g_main_renderer = getFirstRenderer();
 const g_main_scene = new THREE.Scene();
 const g_main_scene_model = { objects: d3.map() };
+const g_main_camera = new THREE.OrthographicCamera();
+const g_dom = getFirstDom();
 
 init(g_main_scene);
 
 function init(scene) {
   addLights(scene);
   addFloor(scene);
+  addCanvas(g_dom)(g_main_renderer.domElement);
 }
 
 main();
@@ -48,7 +51,6 @@ function main() {
   /** ACTIONS */
   const actionSubject = new Rx.ReplaySubject(1);
   const mainRenderer$ = new Rx.ReplaySubject(1);
-  const mainScene$ = new Rx.ReplaySubject(1);
   const mainSceneModel$ = new Rx.ReplaySubject(1);
   
   const keyAction$ = getKeyAction$();
@@ -65,10 +67,12 @@ function main() {
       newObjectAction$
     );
     
-  const windowSize$ = windowSize()
-    .do(size => {
+  windowSize()
+    .subscribe(size => {
       setRendererSize(g_main_renderer)(size);
+      updateCameraSize(g_main_camera)(size);
       mainRenderer$.onNext(g_main_renderer);
+      g_main_renderer.render(g_main_scene, g_main_camera);
     });
     
   const animation$ = getAnimation$()
@@ -121,23 +125,29 @@ function main() {
       joinHeadReducer$
     )
     .subscribe(fn => {
-      mainScene$.onNext(fn(g_main_scene));
+      fn(g_main_scene);
+      g_main_renderer.render(g_main_scene, g_main_camera);
     });
     
   /** CAMERA */
-  const mainCamera$ = mainCamera(windowSize$);
+  mainCamera()
+    .subscribe(fn => {
+      fn(g_main_camera);
+      g_main_renderer.render(g_main_scene, g_main_camera);
+    });
+    
   /** DOM */
-  const setMainCanvas$ = setMainCanvas({ mainRenderer$, actionSubject });
+  getMainDomAction$(g_dom.select('#main-canvas'))
+    .subscribe(actionSubject);
   const selected$ = getSelected$(mainSceneModel$);
   const editorDomModel$ = getEditorDomModel$(selected$);
   const editorDomReducer$ = getEditorDomReducer({ editorDomModel$, actionSubject });
-  const domReducer$ = stream.merge(setMainCanvas$, editorDomReducer$);
+  editorDomReducer$
+    .subscribe(fn => {
+      fn(g_dom);
+    });
   /** SUBSCRIPTIONS */
   accumulateAudioGraph({ virtualAudioGraphReducer$, theAudioContext })
-    .subscribe();
-  combineAndRender(mainRenderer$, mainScene$, mainCamera$)
-    .subscribe(fn => fn());
-  accumulateDom(domReducer$)
     .subscribe();
 }
 
@@ -328,21 +338,6 @@ function getDistanceReducer$(animation$) {
     });
 }
 
-function getMainSceneModel$(modelReducer$) {
-  return stream
-    .just({ objects: d3.map() })
-    .concat(modelReducer$)
-    .scan(apply)
-    .map(model => {
-      /** NOTE: This happens every time a model is emitted */
-      model.objects.values().forEach(object => {
-        setConesLookAt(object);
-        setTrajectoryOffset(object);
-      });
-      return model;
-    });
-}
-
 function setTrajectoryOffset(object) {
   const { curve, distance } = object;
   const t = (distance / curve.getLength()) % 1;
@@ -480,7 +475,7 @@ function getPanners$(mainSceneModel$) {
 function getAudioGraphReducer$({ audioBuffers$, panners$ }) {
   return combineLatestObj({
       audioBuffers$,
-      panners$: panners$.startWith({})
+      panners$: panners$.startWith([])
     })
     .map(({ audioBuffers, panners }) => virtualAudioGraph => {
       const bufferGraph = getBufferGraph({ audioBuffers, panners });
@@ -587,13 +582,6 @@ function getJoinHeadReducer(head$) {
     });
 }
 
-function mainScene(sceneReducer$) {
-  return stream
-    .just(new THREE.Scene())
-    .concat(sceneReducer$)
-    .scan(apply);
-}
-
 function getSelected$(mainSceneModel$) {
   return mainSceneModel$
     .pluck('objects')
@@ -601,19 +589,14 @@ function getSelected$(mainSceneModel$) {
     .map(getSelected);
 }
 
-function setMainCanvas({ mainRenderer$, actionSubject }) {
-  return mainRenderer$
-    .first()
-    .pluck('domElement')
-    .map(canvas => dom => {
-      const canvasSelection = dom
-        .select('main')
-        .append(() => canvas)
-        .attr('id', 'main-canvas');
-      getMainDomAction$(canvasSelection)
-        .subscribe(actionSubject);
-      return dom;
-    });
+function addCanvas(dom) {
+  return function(canvas) {
+    dom
+      .select('main')
+      .append(() => canvas)
+      .attr('id', 'main-canvas');
+    return dom;
+  };
 }
 
 function head({ headMesh$ }) {
@@ -1025,13 +1008,6 @@ function addFloor(scene) {
   scene.add(getFloor(room_size));
 }
 
-function accumulateDom(domUpdate$) {
-  return stream
-    .just(getFirstDom())
-    .concat(domUpdate$)
-    .scan(apply);
-}
-
 function getEditorDomReducer({ editorDomModel$, actionSubject }) {
   return editorDomModel$
     .map(model => dom => {
@@ -1056,7 +1032,7 @@ function polarToVector({ radius, theta, phi }) {
   };
 }
  
-function mainCamera(windowSize$) {
+function mainCamera() {
   const latitude$ = stream
     .just(45);
   const longitude$ = stream
@@ -1103,14 +1079,8 @@ function mainCamera(windowSize$) {
       }
       return camera;
     });
-  const updateSize$ = windowSize$
-    .map(s => camera => {
-      debug('reducer:camera')('update size', s);
-      [ camera.left, camera.right ] = [-1,+1].map(d => d * s.width * 0.5);
-      [ camera.bottom, camera.top ] = [-1,+1].map(d => d * s.height * 0.5);
-      camera.updateProjectionMatrix();
-      return camera;
-    });
+  // const updateSize$ = windowSize$
+  //   .map(updateCameraSize);
   const updateZoom$ = stream
     .just(50)
     .map(zoom => camera => {
@@ -1120,27 +1090,23 @@ function mainCamera(windowSize$) {
     });
   const mainCameraUpdate$ = stream
     .merge(
-      updateSize$,
+      // updateSize$,
       updatePosition$,
       updateLookAt$,
       updateZoom$
     );
-  const mainCamera$ = stream
-    .just(new THREE.OrthographicCamera())
-    .concat(mainCameraUpdate$)
-    .scan(apply);
-  return mainCamera$;
+  return mainCameraUpdate$;
 }
 
-function combineAndRender(renderer$, scene$, camera$) {
-  return combineLatestObj({
-    renderer$,
-    scene$,
-    camera$
-  })
-  .map(({ renderer, scene, camera }) => () => {
-    renderer.render(scene, camera);
-  });
+function updateCameraSize(camera) {
+  return function(size) {
+    const s = size;
+    debug('reducer:camera')('update size', s);
+    [ camera.left, camera.right ] = [-1,+1].map(d => d * s.width * 0.5);
+    [ camera.bottom, camera.top ] = [-1,+1].map(d => d * s.height * 0.5);
+    camera.updateProjectionMatrix();
+    return camera;
+  };
 }
 
 function tweenObjectVolume({ destination, key, duration }) {
