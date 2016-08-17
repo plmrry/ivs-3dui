@@ -25,7 +25,7 @@
       // if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
 			var audio, listener;
-			var sphere, axisHelper;
+			var visibleSphere, sphere, axisHelper;
 			var container;
       var camera, controls, scene, renderer;
       var mouse, raycaster, isShiftDown = false;
@@ -44,6 +44,7 @@
 
 			var placingCone = false;
 			var replacingCone = false;
+			var movingObject = false;
 
       init();
 			animate();
@@ -54,8 +55,13 @@
 				container = document.createElement('div');
 				document.body.appendChild(container);
 
+				var width = window.innerWidth;
+				var height = window.innerHeight;
+
 				camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
-				camera.position.set(0, 0, 1300);
+				camera.position.set(0, 3800, 3500);
+				camera.rotation.x = -0.7
+				camera.updateProjectionMatrix();
 
 				controls = new THREE.FlyControls(camera);
 				controls.dragToLook = true;
@@ -72,9 +78,11 @@
 
 				var visibleSphereGeometry = new THREE.SphereBufferGeometry(300, 100, 100);
 				var visibleSphereMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.8});
-				var visibleSphere = new THREE.Mesh(visibleSphereGeometry, visibleSphereMaterial);
+				visibleSphere = new THREE.Mesh(visibleSphereGeometry, visibleSphereMaterial);
 				visibleSphere.material.transparent = true;
+				visibleSphere.name = "visibleSphere";
 				scene.add(visibleSphere);
+				objects.push(visibleSphere);
 
 				var addButtonGeo = new THREE.BoxGeometry(100, 100, 0);
 				var addButtonMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.6})
@@ -101,6 +109,21 @@
 
 				axisHelper = new THREE.AxisHelper( 500 );
 				scene.add(axisHelper);
+
+				var lineMaterial = new THREE.LineDashedMaterial({ color: 0x000000, dashSize: 10, gapSize: 5 });
+				var lineGeometry = new THREE.Geometry();
+				lineGeometry.vertices.push(
+						new THREE.Vector3( 0, 0, 0 ),
+						new THREE.Vector3( 0, 2000, 0 )
+					);
+				var line = new THREE.Line( lineGeometry, lineMaterial );
+				scene.add( line );
+
+				var helper = new THREE.GridHelper( 2000, 100 );
+				helper.position.y = 0;
+				helper.material.opacity = 0.25;
+				helper.material.transparent = true;
+				scene.add( helper );
 
 				document.addEventListener('mousemove', onDocumentMouseMove, false);
 				document.addEventListener('mousedown', onDocumentMouseDown, false);
@@ -174,6 +197,7 @@
 				m.elements[12] = mx;
 				m.elements[13] = my;
 				m.elements[14] = mz;
+				setPositionAndVelocity(object, object.sound.panner);
 			}
 
 			function setPositionAndVelocity(object, audioNode){
@@ -231,6 +255,17 @@
 					if(replacingCone){
 						soundCones[interactiveCone].lookAt(intersect.point);
 						setPosition(soundCones[interactiveCone]);
+					}
+					else if(movingObject){
+
+						var posY = mapRange(mouse.y, -1., 1., 0, 2000);
+						visibleSphere.position.y = posY;
+						axisHelper.position.y = posY;
+							for(var i = 0; i < soundCones.length; i++){
+									soundCones[i].position.y = posY;
+									console.log(soundCones[i].position.y);
+									setPosition(soundCones[i]);
+							}
 					}
 					else{
 						var deltaMove = {
@@ -297,12 +332,16 @@
 								replacingCone = true;
 							}
 						break;
+
+						case "visibleSphere":
+						movingObject = true;
 					}
 				}
 				else{
 					previousInteractiveCone = interactiveCone;
 					placingCone = false;
 					replacingCone = false;
+					movingObject = false;
 					interactiveCone = null;
 				}
 				if(previousInteractiveCone != null) soundCones[previousInteractiveCone].material.color = new THREE.Color(unselectedConeColor);
@@ -366,6 +405,11 @@
 				var delta = clock.getDelta();
  				controls.update(delta);
 				setListenerPosition(camera);
+			}
+
+			function mapRange(value, low1, high1, low2, high2) {
+
+			    return low2 + (high2 - low2) * (value - low1) / (high1 - low1);
 			}
 
     </script>

@@ -204,6 +204,8 @@ function Main() {
         }
         isMouseDown = false;
         isAdding = false;
+
+        console.log(soundzones[0].spline);
     }
 
     var onMouseMove = function(e) {
