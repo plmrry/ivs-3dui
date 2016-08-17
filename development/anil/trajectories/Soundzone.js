@@ -140,7 +140,6 @@ Soundzone.prototype = {
 
 	move: function(point, obj, altitudeMode) {
 
-		console.log(altitudeMode);
 		if (!altitudeMode) {
 			// move selected point
 			var i = this.pointObjects.indexOf(this.selectedPoint);

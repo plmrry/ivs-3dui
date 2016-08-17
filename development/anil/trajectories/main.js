@@ -9,7 +9,11 @@ function Main() {
 
     var activeObject = null;       // object to edit/inspect
                                    //   (i.e., last clicked 'parent' object)
-    var floor;
+    var floor, sphere;
+    var counter = 0;
+    var movementSpeed = 5;
+    var increment = 0.01;
+    var direction = 1;
 
     var soundzones = [];
 
@@ -39,7 +43,12 @@ function Main() {
         var geometry = new THREE.PlaneGeometry(width, height);
         var material = new THREE.MeshBasicMaterial( {color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide} );
         floor = new THREE.Mesh( geometry, material );
-        scene.add( floor );
+        //scene.add( floor );
+
+        var sphereGeo = new THREE.SphereGeometry(20);
+        var sphereMat = new THREE.MeshBasicMaterial( {color: 0x00ff00} );
+        sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        scene.add( sphere );
     }
 
     this.appendToContainer = function(container) {
@@ -57,6 +66,31 @@ function Main() {
     }
 
     this.render = function() {
+
+        if (soundzones[0]){
+
+          counter += direction * increment;
+          if ( counter >= 1 ){
+            if( soundzones[0].spline.closed ){
+              counter = 0;
+            }
+            else{
+              direction = - direction;
+              counter = 1;
+            }
+          }
+
+          if ( counter < 0 ){
+            if( soundzones[0].spline.closed ){
+              counter = 1;
+            }
+            else{
+              direction = - direction;
+              counter = 0;
+            }
+          }
+          sphere.position.copy(soundzones[0].spline.getPointAt(counter));
+        }
 
         if (trackballEnabled) controls.update();
         requestAnimationFrame( this.render.bind(this) );
@@ -171,6 +205,7 @@ function Main() {
         isMouseDown = false;
         isAdding = false;
     }
+
     var onMouseMove = function(e) {
         setMousePosition(e);
 
@@ -204,6 +239,8 @@ function Main() {
             }
 
         }
+
+        if(soundzones[0]) increment = movementSpeed / soundzones[0].spline.getLength(10);
     }
 
     // delete an object when pressing delete key
