@@ -59,8 +59,8 @@ var SoundTrajectory = function(points) {
 		geometry.vertices = this.spline.getPoints(200);
 		material = new THREE.LineBasicMaterial({
 			color: 0xff0000,
-			linewidth:2,
-			transparent:true,
+			linewidth:1,
+			//transparent:true,
 			opacity:0.4
 		});
 		this.spline.mesh = new THREE.Line( geometry, material );

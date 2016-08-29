@@ -77,8 +77,11 @@
         container = document.createElement( 'div' );
         document.body.appendChild( container );
 
-        camera = new THREE.OrthographicCamera( width/-2, width/2, height/-2, height/2, 1, 10000 );
-        camera.position.z = 1300;    // <-- depth of room
+        // camera = new THREE.OrthographicCamera( width/-2, width/2, height/-2, height/2, 1, 10000 );
+        // camera.position.z = 1300;
+
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
+        camera.position.set(0, 0, 1300);
 
         controls = new THREE.FlyControls(camera);
         controls.dragToLook = true;
@@ -101,10 +104,10 @@
         zone.setScene(scene);
 
         //Adding floor
-        var geometry = new THREE.PlaneGeometry(width, height);
-        var material = new THREE.MeshBasicMaterial( {color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide} );
+        var geometry = new THREE.PlaneGeometry(window.innerWidth * 10, window.innerHeight * 10);
+        var material = new THREE.MeshBasicMaterial( {color: 0xffff00, side: THREE.DoubleSide} );
         floor = new THREE.Mesh( geometry, material );
-        //scene.add( floor );
+        scene.add( floor );
 
         axisHelper = new THREE.AxisHelper(20);
         axisHelper.rotation.y += Math.PI;
@@ -282,7 +285,6 @@
     }
 
     function updateDummyHead(){
-      console.log("heyoo");
       axisHelper.rotation.z += - yawLeft + yawRight;
       // headModel.rotation.y += - yawLeft + yawRight;
 

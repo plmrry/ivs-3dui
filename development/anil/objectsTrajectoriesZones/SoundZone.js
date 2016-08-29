@@ -15,7 +15,7 @@ var SoundZone = function(points) {
 
 	// cursor indicates which location/obj the mouse is pointed at
 	this.cursor = new THREE.Mesh(
-		new THREE.BoxGeometry(9,9,9),
+		new THREE.SphereGeometry(5),
 		new THREE.MeshBasicMaterial({ color:0x00ccff })
 	);
 	this.cursor.visible = false;
@@ -26,20 +26,21 @@ var SoundZone = function(points) {
 		var points = this.splinePoints;
 		this.pointObjects = (function() {
 			// setup
-			var cube = new THREE.BoxGeometry( 5, 5, 5 );
-			var cubeMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
+			var sphere = new THREE.SphereGeometry(3);
+			var sphereMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
 
 			var collider = new THREE.SphereGeometry(15);
 			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
 			var colliderMesh = new THREE.Mesh( collider, colliderMat );
+			collider.renderOrder = 1;
 
 			// place a meshgroup at each point in array
 			var pointObjects = [];
 			points.forEach(function(point) {
-				var cubeMesh = new THREE.Mesh( cube, cubeMat.clone() );
+				var sphereMesh = new THREE.Mesh( sphere, sphereMat.clone() );
 				var group = new THREE.Object3D();
 
-				group.add(cubeMesh, colliderMesh.clone());
+				group.add(sphereMesh, colliderMesh.clone());
 				group.position.x = point.x,
 				group.position.y = point.y;
 
@@ -74,6 +75,7 @@ var SoundZone = function(points) {
 			side: THREE.DoubleSide,
 			depthWrite: false
 		});
+		shape.renderOrder = 0;
 		this.shape = new THREE.Mesh(geometry,material);
 	}
 	this.renderPath();
