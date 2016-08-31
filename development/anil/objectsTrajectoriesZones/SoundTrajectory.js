@@ -24,11 +24,11 @@ var SoundTrajectory = function(points) {
 		var points = this.splinePoints;
 		this.pointObjects = (function() {
 			// setup
-			var sphere = new THREE.SphereGeometry(3);
-			var sphereMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
+			var sphere = new THREE.SphereGeometry(4);
+			var sphereMat = new THREE.MeshBasicMaterial( { color:0x999999 } );
 
 			var collider = new THREE.SphereGeometry(15);
-			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
+			var colliderMat = new THREE.MeshBasicMaterial( {color:0x999999, transparent:true, opacity:0});
 			var colliderMesh = new THREE.Mesh( collider, colliderMat );
 
 			// place a meshgroup at each point in array
@@ -58,8 +58,8 @@ var SoundTrajectory = function(points) {
 		geometry = new THREE.Geometry();
 		geometry.vertices = this.spline.getPoints(200);
 		material = new THREE.LineBasicMaterial({
-			color: 0xff0000,
-			linewidth:1,
+			color: 0x999999,
+			linewidth:2,
 			//transparent:true,
 			opacity:0.4
 		});
@@ -200,12 +200,12 @@ SoundTrajectory.prototype = {
 	selectPoint: function(obj) {
 		this.deselectPoint();
 		this.selectedPoint = obj;
-		obj.children[0].material.color.set('blue');
+		obj.children[0].material.color.set(0xff0077);
 	},
 
 	deselectPoint: function() {
 		if (this.selectedPoint) {
-			this.selectedPoint.children[0].material.color.set('red');
+			this.selectedPoint.children[0].material.color.set(0xff0055);
 			this.selectedPoint = null;
 		}
 	},
@@ -280,7 +280,8 @@ trajectory = {                   // live drawing by mouse
 		}
 
 		var material = new THREE.LineBasicMaterial({
-			color: 0xff0000
+			linewidth: 2,
+			color: 0x999999
 		});
 		var geometry = new THREE.Geometry();
 		geometry.vertices.push(this.lastPoint, point);

@@ -32,7 +32,7 @@ var SoundZone = function(points) {
 			var collider = new THREE.SphereGeometry(15);
 			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
 			var colliderMesh = new THREE.Mesh( collider, colliderMat );
-			collider.renderOrder = 1;
+			collider.renderOrder = 0;
 
 			// place a meshgroup at each point in array
 			var pointObjects = [];
@@ -75,7 +75,7 @@ var SoundZone = function(points) {
 			side: THREE.DoubleSide,
 			depthWrite: false
 		});
-		shape.renderOrder = 0;
+		shape.renderOrder = 1;
 		this.shape = new THREE.Mesh(geometry,material);
 	}
 	this.renderPath();

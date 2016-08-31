@@ -60,7 +60,7 @@
     var moveLeft = 0, moveRight= 0, moveForward = 0, moveBackwards = 0;
     var pitchUp = 0, pitchDown = 0, yawLeft = 0, yawRight = 0;
     var rotationSpeed = 0.05;
-    var movementSpeed = 2;
+    var movementSpeed = 5;
 
     var clock = new THREE.Clock();
 
@@ -83,19 +83,19 @@
         camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
         camera.position.set(0, 0, 1300);
 
-        controls = new THREE.FlyControls(camera);
-        controls.dragToLook = true;
-        controls.movementSpeed = 1000;
-        controls.domElement = container;
-        controls.rollSpeed = Math.PI/24.;
-        controls.autoForward = false;
-        controls.dragToLook = false;
+        // controls = new THREE.FlyControls(camera);
+        // controls.dragToLook = true;
+        // controls.movementSpeed = 1000;
+        // controls.domElement = container;
+        // controls.rollSpeed = Math.PI/24.;
+        // controls.autoForward = false;
+        // controls.dragToLook = false;
 
         ray.linePrecision = 10;
 
         scene = new THREE.Scene();
         scene.add(camera);
-        scene.add( new THREE.AmbientLight( 0xf0f0f0 ) );
+        scene.add( new THREE.AmbientLight( 0x909090 ) );
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setClearColor( 0xf0f0f0 );
@@ -107,18 +107,34 @@
         var geometry = new THREE.PlaneGeometry(window.innerWidth * 10, window.innerHeight * 10);
         var material = new THREE.MeshBasicMaterial( {color: 0xffff00, side: THREE.DoubleSide} );
         floor = new THREE.Mesh( geometry, material );
-        scene.add( floor );
+        //scene.add( floor );
 
-        axisHelper = new THREE.AxisHelper(20);
-        axisHelper.rotation.y += Math.PI;
-        //scene.add(axisHelper);
+        axisHelper = new THREE.AxisHelper(60);
+        axisHelper.rotation.x += Math.PI/2.;
+        axisHelper.rotation.y += Math.PI/2.;
+        scene.add(axisHelper);
 
         loader = new THREE.OBJLoader();
         loader.load('assets/head.obj', function(object){
           headModel = object;
-          headModel.rotation.y += Math.PI;
+          headModel.rotation.x += Math.PI/2.;
+          headModel.rotation.y += Math.PI/2.;
+          headModel.scale.set(30, 30, 30);
           scene.add(headModel);
         });
+
+        var helper = new THREE.GridHelper( 2000, 100 );
+        helper.position.y = 0;
+        helper.rotateX(Math.PI/2.);
+        helper.material.opacity = 0.25;
+        helper.material.transparent = true;
+        scene.add( helper );
+
+        var dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
+        dirLight.color.setHSL( 0.1, 1, 0.95 );
+        dirLight.position.set( -1, 1.75, 1 );
+        dirLight.position.multiplyScalar( 50 );
+        scene.add( dirLight );
 
         container.appendChild( renderer.domElement );
 
@@ -151,21 +167,16 @@
 
     function setListenerPosition(object) {
 
-      var p = new THREE.Vector3();
       var q = new THREE.Vector3();
-      p.setFromMatrixPosition(object.matrixWorld);
-      var px = p.x, py = p.y, pz = p.z;
-
       object.updateMatrixWorld();
       q.setFromMatrixPosition(object.matrixWorld);
-      var dx = q.x-px, dy = q.y-py, dz = q.z-pz;
       audio.context.listener.setPosition(q.x/1300., q.y/1300., q.z/1300.);
 
       var m = object.matrix;
       var mx = m.elements[12], my = m.elements[13], mz = m.elements[14];
       m.elements[12] = m.elements[13] = m.elements[14] = 0;
 
-      var vec = new THREE.Vector3(0,0,1);
+      var vec = new THREE.Vector3(0,0,-1);
       vec.applyProjection(m);
       vec.normalize();
 
@@ -205,7 +216,7 @@
           }
           if(soundObject){
             soundObject.containerObject.position.copy(soundTrajectories[0].spline.getPointAt(counter));
-            //soundObject.containerObject.rotateX(0.03);
+            soundObject.containerObject.rotateX(0.03);
             if(soundObject.cones[0]){
 
               for(i in soundObject.cones){
@@ -215,9 +226,11 @@
           }
         }
 
- 				controls.update(clock.getDelta());
+ 			// 	controls.update(clock.getDelta());
         updateDummyHead();
-        setListenerPosition(camera);
+        if( headModel ){
+          setListenerPosition(headModel);
+        }
         requestAnimationFrame( this.render.bind(this) );
         renderer.render( scene, camera );
     }
@@ -285,13 +298,15 @@
     }
 
     function updateDummyHead(){
-      axisHelper.rotation.z += - yawLeft + yawRight;
-      // headModel.rotation.y += - yawLeft + yawRight;
+      if(headModel){
+        axisHelper.rotation.y += - yawLeft + yawRight;
+        headModel.rotation.y += - yawLeft + yawRight;
 
-      axisHelper.translateX( - moveLeft + moveRight);
-      axisHelper.translateY( - moveBackwards + moveForward);
-      // headModel.translateX( - moveLeft + moveRight);
-      // headModel.translateZ( - moveBackwards + moveForward);
+        //axisHelper.translateX( - moveLeft + moveRight);
+        axisHelper.translateZ( - moveBackwards + moveForward);
+        //headModel.translateX( - moveLeft + moveRight);
+        headModel.translateZ( - moveBackwards + moveForward);
+      }
     }
 
     //////////////
