@@ -1,11 +1,23 @@
 var SoundObject = function(audio){
 
+  this.type = "SoundObject";
+
   this.containerObject = new THREE.Object3D();
 
   var sphereGeometry = new THREE.SphereBufferGeometry(50, 100, 100);
   var sphereMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, opacity: 0.8, transparent:true});
   this.omniSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
   this.containerObject.add(this.omniSphere);
+
+  var lineMaterial = new THREE.LineDashedMaterial({ color: 0x888888, dashSize: 30, gapSize: 30 });
+  var lineGeometry = new THREE.Geometry();
+  lineGeometry.vertices.push(
+      new THREE.Vector3( 0, 0, 0 ),
+      new THREE.Vector3( 0, 0, 500 )
+    );
+  lineGeometry.computeLineDistances();
+  var line = new THREE.Line( lineGeometry, lineMaterial );
+  this.containerObject.add(line);
 
   this.cones = [];
 

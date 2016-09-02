@@ -14,7 +14,7 @@ var SoundTrajectory = function(points) {
 
 	// cursor indicates which location/obj the mouse is pointed at
 	this.cursor = new THREE.Mesh(
-		new THREE.SphereGeometry(5),
+		new THREE.SphereGeometry(10),
 		new THREE.MeshBasicMaterial({ color:0x00ccff })
 	);
 	this.cursor.visible = false;
@@ -24,10 +24,10 @@ var SoundTrajectory = function(points) {
 		var points = this.splinePoints;
 		this.pointObjects = (function() {
 			// setup
-			var sphere = new THREE.SphereGeometry(4);
+			var sphere = new THREE.SphereGeometry(8);
 			var sphereMat = new THREE.MeshBasicMaterial( { color:0x999999 } );
 
-			var collider = new THREE.SphereGeometry(15);
+			var collider = new THREE.SphereGeometry(20);
 			var colliderMat = new THREE.MeshBasicMaterial( {color:0x999999, transparent:true, opacity:0});
 			var colliderMesh = new THREE.Mesh( collider, colliderMat );
 
@@ -52,7 +52,7 @@ var SoundTrajectory = function(points) {
 
 		var begEndDistance = this.splinePoints[0].distanceTo(this.splinePoints[this.splinePoints.length - 1]);
 
-		if(begEndDistance < 20) this.spline.closed = true;
+		if(begEndDistance < 40) this.spline.closed = true;
 		else this.spline.closed = false;
 
 		geometry = new THREE.Geometry();

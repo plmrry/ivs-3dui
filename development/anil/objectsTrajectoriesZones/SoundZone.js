@@ -26,13 +26,12 @@ var SoundZone = function(points) {
 		var points = this.splinePoints;
 		this.pointObjects = (function() {
 			// setup
-			var sphere = new THREE.SphereGeometry(3);
-			var sphereMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
+			var sphere = new THREE.SphereGeometry(5);
+			var sphereMat = new THREE.MeshBasicMaterial( { color:0xff1169 } );
 
 			var collider = new THREE.SphereGeometry(15);
-			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
+			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff1169, transparent:true, opacity:0, depthWrite: false});
 			var colliderMesh = new THREE.Mesh( collider, colliderMat );
-			collider.renderOrder = 0;
 
 			// place a meshgroup at each point in array
 			var pointObjects = [];
@@ -57,7 +56,7 @@ var SoundZone = function(points) {
 		geometry = new THREE.Geometry();
 		geometry.vertices = this.spline.getPoints(200);
 		material = new THREE.LineBasicMaterial({
-			color: 0xff0000,
+			color: 0xff1169,
 			linewidth:1,
 			transparent:true,
 			opacity:0.4
@@ -69,13 +68,11 @@ var SoundZone = function(points) {
 		shape.fromPoints(geometry.vertices);
 		geometry = new THREE.ShapeGeometry(shape);
 		material = new THREE.MeshPhongMaterial({
-			color: 0xff0000,
+			color: 0xff1169,
 			transparent: true,
 			opacity: 0.2,
 			side: THREE.DoubleSide,
-			depthWrite: false
 		});
-		shape.renderOrder = 1;
 		this.shape = new THREE.Mesh(geometry,material);
 	}
 	this.renderPath();
@@ -129,7 +126,8 @@ SoundZone.prototype = {
 		this.mouseOffsetX = point.x,
 		this.mouseOffsetY = point.y;
 	},
-	move: function(point, obj) {
+
+	move: function(point) {
 		if (this.selectedPoint) {
 			// move selected point
 			var i = this.pointObjects.indexOf(this.selectedPoint);
@@ -288,7 +286,7 @@ zone = {                   // live drawing by mouse
 		}
 
 		var material = new THREE.LineBasicMaterial({
-			color: 0xff0000
+			color: 0xff1169
 		});
 		var geometry = new THREE.Geometry();
 		geometry.vertices.push(this.lastPoint, point);
@@ -309,6 +307,8 @@ zone = {                   // live drawing by mouse
 		}
 		else {
 			soundObject = new SoundObject(audio);
+			soundObject.containerObject.translateX(mouse.x);
+			soundObject.containerObject.translateY(mouse.y);
 			scene.add(soundObject.containerObject);
 		}                       // not enough points = a sound OBJECT
 

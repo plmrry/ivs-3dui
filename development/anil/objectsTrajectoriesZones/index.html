@@ -81,7 +81,10 @@
         // camera.position.z = 1300;
 
         camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
-        camera.position.set(0, 0, 1300);
+        camera.position.set(0, 0, 2000);
+        // camera.position.set(0, -1000, 2000);
+        // camera.rotation.x = 0.5;
+        camera.updateProjectionMatrix();
 
         // controls = new THREE.FlyControls(camera);
         // controls.dragToLook = true;
@@ -111,14 +114,14 @@
 
         axisHelper = new THREE.AxisHelper(60);
         axisHelper.rotation.x += Math.PI/2.;
-        axisHelper.rotation.y += Math.PI/2.;
+        axisHelper.rotation.y += Math.PI;
         scene.add(axisHelper);
 
         loader = new THREE.OBJLoader();
         loader.load('assets/head.obj', function(object){
           headModel = object;
           headModel.rotation.x += Math.PI/2.;
-          headModel.rotation.y += Math.PI/2.;
+          headModel.rotation.y += Math.PI;
           headModel.scale.set(30, 30, 30);
           scene.add(headModel);
         });
@@ -216,7 +219,7 @@
           }
           if(soundObject){
             soundObject.containerObject.position.copy(soundTrajectories[0].spline.getPointAt(counter));
-            soundObject.containerObject.rotateX(0.03);
+            //soundObject.containerObject.rotateX(0.03);
             if(soundObject.cones[0]){
 
               for(i in soundObject.cones){
@@ -320,7 +323,6 @@
             trajectory.beginAt(mouse);
         }
         else if (isAddingZone) {
-
             zone.beginAt(mouse);
         }
         else {
@@ -370,6 +372,8 @@
         }
         isMouseDown = false;
         isAddingTrajectory = false;
+
+        if(soundTrajectories[0]) increment = movementSpeed / soundTrajectories[0].spline.getLength(10);
     }
 
     function onMouseMove(e) {
@@ -409,7 +413,6 @@
                 }
             }
         }
-        if(soundTrajectories[0]) increment = movementSpeed / soundTrajectories[0].spline.getLength(10);
     }
 
     // delete an object when pressing delete key
