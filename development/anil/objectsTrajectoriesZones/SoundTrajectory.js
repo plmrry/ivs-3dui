@@ -28,7 +28,7 @@ var SoundTrajectory = function(points) {
 			var sphereMat = new THREE.MeshBasicMaterial( { color:0x999999 } );
 
 			var collider = new THREE.SphereGeometry(20);
-			var colliderMat = new THREE.MeshBasicMaterial( {color:0x999999, transparent:true, opacity:0});
+			var colliderMat = new THREE.MeshBasicMaterial( {color:0x999999, transparent:true, opacity:0, depthWrite: false});
 			var colliderMesh = new THREE.Mesh( collider, colliderMat );
 
 			// place a meshgroup at each point in array
