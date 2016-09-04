@@ -7,10 +7,11 @@
 import debug from 'debug';
 import Rx, { Observable as stream } from 'rx';
 import combineLatestObj from 'rx-combine-latest-obj';
-import d3 from 'd3';
+import * as d3 from 'd3';
 import THREE from 'three/three.js';
 import createVirtualAudioGraph from 'virtual-audio-graph';
 import _ from 'underscore';
+import xs from 'xstream';
 
 import OBJLoader from './OBJLoader.js';
 
@@ -30,7 +31,7 @@ const latitudeToTheta = d3.scaleLinear()
 const longitudeToPhi = d3.scaleLinear()
   .domain([-180, 0, 180])
   .range([0, Math.PI, 2 * Math.PI]);
-  
+
 const g_main_renderer = getFirstRenderer();
 const g_main_scene = new THREE.Scene();
 const g_main_scene_model = { objects: d3.map() };
@@ -52,21 +53,21 @@ function main() {
   const actionSubject = new Rx.ReplaySubject(1);
   const mainRenderer$ = new Rx.ReplaySubject(1);
   const mainSceneModel$ = new Rx.ReplaySubject(1);
-  
+
   const keyAction$ = getKeyAction$();
-  
+
   const newObjectAction$ = keyAction$
     .filter(d => d.type === 'keydown')
     .pluck('code')
     .filter(code => code === 'o')
     .map(() => ({ actionType: 'add-object' }));
-    
+
   const action$ = stream
     .merge(
       actionSubject,
       newObjectAction$
     );
-    
+
   windowSize()
     .subscribe(size => {
       setRendererSize(g_main_renderer)(size);
@@ -74,7 +75,7 @@ function main() {
       mainRenderer$.onNext(g_main_renderer);
       g_main_renderer.render(g_main_scene, g_main_camera);
     });
-    
+
   const animation$ = getAnimation$()
 		.shareReplay(1); /** NOTE: shareReplay */
 	/** INTENT / REDUCERS */
@@ -129,14 +130,14 @@ function main() {
       fn(g_main_scene);
       g_main_renderer.render(g_main_scene, g_main_camera);
     });
-    
+
   /** CAMERA */
   mainCamera()
     .subscribe(fn => {
       fn(g_main_camera);
       g_main_renderer.render(g_main_scene, g_main_camera);
     });
-    
+
   /** DOM */
   getMainDomAction$(g_dom.select('#main-canvas'))
     .subscribe(actionSubject);
@@ -546,7 +547,7 @@ function setRendererSize(renderer) {
       debug('reducer:renderer')('update size');
       renderer.setSize(size.width, size.height);
     }
-    return renderer;    
+    return renderer;
   };
 }
 

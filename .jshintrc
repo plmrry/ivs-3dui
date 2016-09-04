@@ -1,0 +1,5 @@
+{
+  "predef": [ "__dirname", "require", "module", "console", "window" ],
+  "esversion": 6,
+  "-W097": true
+}

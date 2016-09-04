@@ -1,4 +1,7 @@
 {
+  "jshintConfig": {
+    "globals": "__dirname"
+  },
   "private": true,
   "name": "interactive-virtual-soundscapes-ui",
   "version": "2.0.0",
@@ -6,7 +9,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "nodemon": "nodemon --ignore app/ ."
+    "nodemon": "nodemon --ignore app/ .",
+    "build": "rm -rf build && mkdir build && browserify -t babelify -o build/ivs.js app/index2.js",
+    "browserify": "browserify"
   },
   "repository": {
     "type": "git",
@@ -32,6 +37,8 @@
     "virtual-audio-graph": "^0.17.3"
   },
   "devDependencies": {
-    "babel-preset-es2015": "^6.5.0"
+    "babel-preset-es2015": "^6.5.0",
+    "browserify": "^13.1.0",
+    "xstream": "^6.2.0"
   }
 }
