@@ -38,6 +38,19 @@ const g_main_scene_model = { objects: d3.map() };
 const g_main_camera = new THREE.OrthographicCamera();
 const g_dom = getFirstDom();
 
+g_dom.select('#zoom-in')
+  .on('click', function() {
+    // console.log('zoom in bitch')
+    d3.transition('zoom-in')
+      .tween("camera.zoom-in", function() {
+        return function(t) {
+          g_main_camera.zoom += 1;
+          g_main_camera.updateProjectionMatrix();
+          g_main_renderer.render(g_main_scene, g_main_camera);
+        };
+      });
+  });
+
 init(g_main_scene);
 
 function init(scene) {
@@ -1535,6 +1548,7 @@ function addControlButtons(controls_enter) {
     .data(d => d.buttons || [])
     .enter()
     .append('button')
+    .attr('id', d => d.id)
     .style('background', 'none')
     .style('border', 'none')
     .classed('btn btn-lg btn-secondary', true)

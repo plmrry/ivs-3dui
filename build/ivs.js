@@ -399,6 +399,18 @@ var g_main_scene_model = { objects: d3.map() };
 var g_main_camera = new _three2.default.OrthographicCamera();
 var g_dom = getFirstDom();
 
+g_dom.select('#zoom-in').on('click', function () {
+  // console.log('zoom in bitch')
+  d3.transition('zoom-in').tween("camera.zoom-in", function () {
+    return function (t) {
+      console.log('zoom', t);
+      g_main_camera.zoom += 1;
+      g_main_camera.updateProjectionMatrix();
+      g_main_renderer.render(g_main_scene, g_main_camera);
+    };
+  });
+});
+
 init(g_main_scene);
 
 function init(scene) {
@@ -1845,7 +1857,9 @@ function setStyles(accessor) {
 function addControlButtons(controls_enter) {
   controls_enter.selectAll('button').data(function (d) {
     return d.buttons || [];
-  }).enter().append('button').style('background', 'none').style('border', 'none').classed('btn btn-lg btn-secondary', true).append('i').classed('material-icons', true).style('display', 'block').text(function (d) {
+  }).enter().append('button').attr('id', function (d) {
+    return d.id;
+  }).style('background', 'none').style('border', 'none').classed('btn btn-lg btn-secondary', true).append('i').classed('material-icons', true).style('display', 'block').text(function (d) {
     return d.text;
   });
 }

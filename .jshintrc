@@ -1,5 +1,5 @@
 {
-  "predef": [ "__dirname", "require", "module", "console", "window" ],
+  "predef": [ "__dirname", "require", "module", "console", "window", "XMLHttpRequest" ],
   "esversion": 6,
   "-W097": true
 }
