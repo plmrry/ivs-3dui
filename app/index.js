@@ -38,13 +38,15 @@ const g_main_scene_model = { objects: d3.map() };
 const g_main_camera = new THREE.OrthographicCamera();
 const g_dom = getFirstDom();
 
-g_dom.select('#zoom-in')
+g_dom.selectAll('#zoom-controls button')
   .on('click', function() {
     // console.log('zoom in bitch')
+    const id = d3.select(this).attr('id');
+    const dir = id === 'zoom-in' ? +1 : -1;
     d3.transition('zoom-in')
       .tween("camera.zoom-in", function() {
-        return function(t) {
-          g_main_camera.zoom += 1;
+        return function() {
+          g_main_camera.zoom += 2 * dir;
           g_main_camera.updateProjectionMatrix();
           g_main_renderer.render(g_main_scene, g_main_camera);
         };
