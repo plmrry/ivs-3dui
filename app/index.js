@@ -52,11 +52,12 @@ const longitudeToPhi = d3.scaleLinear()
   .domain([-180, 0, 180])
   .range([0, Math.PI, 2 * Math.PI]);
 
+var f = d3.format(".3f");
 function polarToVector({ radius, theta, phi }) {
   return {
-    x: radius * Math.sin(phi) * Math.sin(theta),
-    z: radius * Math.cos(phi) * Math.sin(theta),
-    y: radius * Math.cos(theta)
+    x: f(radius * Math.sin(phi) * Math.sin(theta)),
+    z: f(radius * Math.cos(phi) * Math.sin(theta)),
+    y: f(radius * Math.cos(theta))
   };
 }
 
@@ -65,7 +66,7 @@ const MAX_LATITUDE = 89;
 const lat_up$ = xs.create({
   start: l => g_dom.select('button.lat-up').on('click', () => l.next()),
   stop: () => {}
-}).mapTo(+2)
+}).mapTo(+1.34)
   .map(x => lat => {
     // console.log('lat', lat);
     if (lat >= MAX_LATITUDE) return MAX_LATITUDE;
@@ -75,7 +76,7 @@ const lat_up$ = xs.create({
 const lat_down$ = xs.create({
   start: l => g_dom.select('button.lat-down').on('click', () => l.next()),
   stop: () => {}
-}).mapTo(-2)
+}).mapTo(-1.34)
   .map(x => lat => {
     // console.log('lat', lat);
     if (lat <= 0) return 0;
@@ -97,7 +98,7 @@ const latest_lat$ = xs.create({
     const i = d3.interpolate(lat, target);
     return xs.create({
       start: l => d3.transition('cam-to-overhead')
-        .duration(5000)
+        .duration(1000)
         .tween('camera.to-overhead', () => {
           return t => {
             l.next(i(t));
@@ -112,7 +113,8 @@ const latest_lat$ = xs.create({
 latitude_proxy$.imitate(latest_lat$);
 
 const longitude$ = xs.of(-135);
-const theta$ = latitude$.map(latitudeToTheta).debug(d => console.log('theta', d))
+const theta$ = latitude$.map(latitudeToTheta)
+  // .debug(d => console.log('theta', d))
 const phi$ = longitude$
   .map(longitudeToPhi)
   .map(phi => phi % (2 * Math.PI))
@@ -140,7 +142,7 @@ const update_look_at$ = look_at$
     // }
     return camera;
   });
-const update_zoom$ = xs.of(50)
+const update_zoom$ = xs.of(40)
   .map(zoom => camera => {
     camera.zoom = zoom;
     camera.updateProjectionMatrix();
@@ -148,11 +150,12 @@ const update_zoom$ = xs.of(50)
   });
 const update_position$ = position$.map(position => camera => {
   camera._lookAt = camera._lookAt || new THREE.Vector3();
-  console.log('LOOK', camera._lookAt);
-  console.log('POSITION', position);
-  camera.lookAt(camera._lookAt);
+  // console.log('LOOK', camera._lookAt);
+  // console.log('POSITION', position);
+  // camera.lookAt(camera._lookAt);
   camera.position.copy(position);
-  camera.updateProjectionMatrix();
+  camera.lookAt(camera._lookAt);
+  // camera.updateProjectionMatrix();
   return camera;
 });
 
