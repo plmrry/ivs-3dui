@@ -80,30 +80,30 @@ function Main() {
         var pointer = new THREE.Vector3();
         pointer.x = 2 * (e.clientX - rect.left) / rect.width - 1;
         pointer.y = 1 - 2 * (e.clientY - rect.top) / rect.height;
-        
-        ray.setFromCamera( pointer, camera );   
+
+        ray.setFromCamera( pointer, camera );
 
         // calculate objects intersecting the picking ray
         var intersects = ray.intersectObject( floor );
         if(intersects.length > 0) {
             mouse = intersects[0].point;
         }
-    
+
 
     }
 
     var setActiveObject = function(obj) {
-        if (activeObject && activeObject.type === 'Soundzone') {
+        if (activeObject && activeObject.type === 'SoundZone') {
             activeObject.setInactive();
         }
         activeObject = obj;
 
-        if (obj && obj.type === 'Soundzone') {
+        if (obj && obj.type === 'SoundZone') {
             obj.setActive();
         }
     }
 
-    var removeSoundzone = function(soundzone) {
+    var removeSoundZone = function(soundzone) {
         soundzone.removeFromScene(scene);
         var i = soundzones.indexOf(soundzone);
         soundzones.splice(i,1);
@@ -147,14 +147,14 @@ function Main() {
             // create a new object
             if (isAdding) {
                 var obj = drawing.createObject();
-                if (obj && obj.type === 'Soundzone') {
+                if (obj && obj.type === 'SoundZone') {
                     soundzones.push(obj);
                     setActiveObject(obj);
                 }
                 toggleAdd();
             }
 
-            // TODO: 
+            // TODO:
             else if (/**/ true) {
 
             }
@@ -203,14 +203,14 @@ function Main() {
         switch(key) {
             case 8: case 46:    // backspace, delete
                 e.preventDefault();
-                if (activeObject && activeObject.type === 'Soundzone') {
+                if (activeObject && activeObject.type === 'SoundZone') {
                     // delete a spline point in the object
                     if (activeObject.selectedPoint && activeObject.splinePoints.length > 3) {
 
                         activeObject.removePoint();
                     }
                     else if (confirm('Delete object?')) {
-                        removeSoundzone(activeObject);
+                        removeSoundZone(activeObject);
                         activeObject = null;
                     }
                 }

@@ -1,6 +1,6 @@
-var Soundzone = function(points) {
+var SoundZone = function(points) {
 
-	this.type = 'Soundzone';
+	this.type = 'SoundZone';
 	this.isActive = true;
 
 	this.splinePoints = points;
@@ -26,9 +26,9 @@ var Soundzone = function(points) {
 		var points = this.splinePoints;
 		this.pointObjects = (function() {
 			// setup
-			var cube = new THREE.BoxGeometry( 5, 5, 5 );		
+			var cube = new THREE.BoxGeometry( 5, 5, 5 );
 			var cubeMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
-			
+
 			var collider = new THREE.SphereGeometry(15);
 			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
 			var colliderMesh = new THREE.Mesh( collider, colliderMat );
@@ -48,7 +48,7 @@ var Soundzone = function(points) {
 
 
 			return pointObjects;
-		
+
 		})();
 
 		// a soundzone is a closed, filled path
@@ -83,9 +83,9 @@ var Soundzone = function(points) {
 }
 
 
-Soundzone.prototype = {
+SoundZone.prototype = {
 
-	constructor: Soundzone,
+	constructor: SoundZone,
 
 	get objects() {
 		return [].concat(this.pointObjects, this.spline.mesh, this.shape);
@@ -300,7 +300,7 @@ drawing = {                   // live drawing by mouse
 		var points = simplify(this.points, 10, true);
 		var object;
 		if (points.length >= 3) {
-			object = new Soundzone(points);
+			object = new SoundZone(points);
 		}
 		// else {}                       // not enough points = a sound OBJECT
 
