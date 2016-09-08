@@ -22,7 +22,7 @@ debug.enable('*,-reducer:*');
 Rx.config.longStackSupport = true;
 
 /** GLOBALS */
-// const MIN_VOLUME = 0.1;
+const MIN_VOLUME = 0.1;
 const latitudeToTheta = d3.scaleLinear()
   .domain([90, 0, -90])
   .range([0, Math.PI/2, Math.PI])
@@ -79,9 +79,9 @@ function main() {
 		.shareReplay(1); /** NOTE: shareReplay */
 	/** INTENT / REDUCERS */
 	const modelAction$ = action$;
-  const modelReducer$ = getModelReducer$({
-    animation$,
-    modelAction$,
+  getModelReducer$({ 
+    animation$, 
+    modelAction$, 
     actionSubject
   }).subscribe(fn => {
     fn(g_main_scene_model);
@@ -118,10 +118,9 @@ function main() {
   /** SCENE */
   const joinObjectsReducer$ = getJoinObjectsReducer(mainSceneModel$);
   const joinHeadReducer$ = getJoinHeadReducer(head$);
-  const sceneReducer$ = stream
-    .merge(
-      // addLightsReducer$,
-      // addFloorReducer$,
+  
+  stream
+    .merge( 
       joinObjectsReducer$,
       joinHeadReducer$
     )
@@ -516,8 +515,8 @@ function getBufferGraph({ audioBuffers, panners }) {
       const outputKeys = panners
         .filter(panner => panner.file === bufferObj.fileName)
         .map(panner => panner.key);
-      const value = ['bufferSource', outputKeys, {
-        buffer: bufferObj.audioBuffer,
+      const value = ['bufferSource', outputKeys, { 
+        buffer: bufferObj.audioBuffer, 
         loop: true
       }];
       return {
@@ -563,7 +562,7 @@ function getJoinHeadReducer(head$) {
     .map(heads => scene => {
       const sceneSelection = d3.select(scene);
       const join = sceneSelection
-        .selectAll({})
+        .selectAll()
         .filter(function(d) {
           if (typeof d === 'undefined') return false;
           return d.type === 'head';
@@ -727,9 +726,9 @@ function getEditorDomModel$(selected$) {
             rows: getObjectInfoRows(selected)
           }
         ];
-
+        
         const card_blocks = coneCardBlock.concat(objectCardBlock);
-
+        
         return {
           cards: [
             {
@@ -791,7 +790,7 @@ function getObjectInfoRows(selected) {
         column('col-xs-3', 'key', 'File'),
         column('col-xs-3', 'value', selected.file || 'None', 'pointer')
       ].concat(draggableKeyValue(
-        'Volume',
+        'Volume', 
         d => `${d3.format(".1f")(d.volume)} dB` || 'Error!',
         'update-selected-object-volume'
       )(selected))
@@ -800,8 +799,8 @@ function getObjectInfoRows(selected) {
       columns: [
         column('col-xs-3', 'key', 'x'),
         column(
-          'col-xs-3', 'value', fmtNum(position.x), 'ew-resize',
-          'update-selected-parent-object-position',
+          'col-xs-3', 'value', fmtNum(position.x), 'ew-resize', 
+          'update-selected-parent-object-position', 
           dx => new THREE.Vector3(dx, 0, 0)
         ),
         column('col-xs-3', 'key', 'Cones'),
@@ -812,8 +811,8 @@ function getObjectInfoRows(selected) {
       columns: [
         column('col-xs-3', 'key', 'y'),
         column(
-          'col-xs-3', 'value', fmtNum(position.y), 'ew-resize',
-          'update-selected-parent-object-position',
+          'col-xs-3', 'value', fmtNum(position.y), 'ew-resize', 
+          'update-selected-parent-object-position', 
           dx => new THREE.Vector3(0, dx, 0)
         ),
         column('col-xs-3', 'key', 'Velocity'),
@@ -822,7 +821,7 @@ function getObjectInfoRows(selected) {
     },
     { /** New row */
       columns: draggableKeyValue(
-        'z',
+        'z', 
         d => d3.format(".1f")(d.position.z),
         'update-selected-parent-object-position',
         dx => new THREE.Vector3(0, 0, dx)
@@ -907,7 +906,7 @@ function registerTextDragAction(actionType, mapper) {
     dragAction$.subscribe(actionSubject);
   };
 }
-
+  
 function getTextDragAction$(node) {
   const dragHandler = getDragHandlerWithSubject();
   d3.select(node).call(dragHandler);
@@ -944,8 +943,8 @@ function getMainDomAction$(canvasSelection) {
         y: d3.scaleLinear().domain([0, height]).range([+1, -1])
       };
       eventObj.ndc = {
-        x: ndcScale.x(mouse[0]),
-        y: ndcScale.y(mouse[1])
+        x: ndcScale.x(mouse[0]), 
+        y: ndcScale.y(mouse[1]) 
       };
       eventObj.actionType = 'main-mouse-action';
       return eventObj;
@@ -1021,10 +1020,10 @@ function getEditorDomReducer({ editorDomModel$, actionSubject }) {
 
 /**
  * CAMERA
- *
- *
+ * 
+ * 
  */
-
+ 
 function polarToVector({ radius, theta, phi }) {
   return {
     x: radius * Math.sin(phi) * Math.sin(theta),
@@ -1032,8 +1031,8 @@ function polarToVector({ radius, theta, phi }) {
     y: radius * Math.cos(theta)
   };
 }
-
-function mainCamera(windowSize$) {
+ 
+function mainCamera() {
   const latitude$ = stream
     .just(45);
   const longitude$ = stream
@@ -1158,7 +1157,7 @@ function windowSize() {
  *
  *
  */
-
+ 
 function getJoinObjectsReducer(model$) {
   return model$
     .map(({ objects }) => objects.values())
@@ -1173,12 +1172,12 @@ function getJoinObjectsReducer(model$) {
 function joinTrajectories(parents) {
   if (parents.size() > 0) {
     const join = parents
-      .selectAll({})
+      .selectAll()
       .filter(function(d) {
         return d.type === 'trajectory';
       })
       /** NOTE: Key function is very important! */
-      .data(({ curve }) => [{ type: 'trajectory', curve }], d => d.type);
+      .data(({ curve }) => [{ type: 'trajectory', curve }], d => d.type); 
     join
       .enter()
       .append(function({ curve }) {
@@ -1198,11 +1197,11 @@ function joinTrajectories(parents) {
 
 function joinCones(objects) {
   let join = objects
-		.selectAll({})
+		.selectAll()
 		.filter(function(d) {
 		  return d.type === 'cone_parent';
 		})
-		.data(function(d) { return d.cones || []; });
+		.data(function(d) { return d.cones || [] });
 	join
 		.exit()
 		.each(function() {
@@ -1249,7 +1248,7 @@ function getNewCone(d) {
 	coneParent.name = 'cone_parent';
 	coneParent._type = 'cone_parent';
 	coneParent.add(cone);
-	return coneParent;
+	return coneParent;	
 }
 
 function updateOneCone(d) {
@@ -1284,17 +1283,15 @@ function cylinder_geometry_from_params(params) {
 		params.openEnded
 	);
 }
-
+ 
 function joinObjectParents({ objects, sceneSelection }) {
-  // console.log(sceneSelection.node());
-  // const all = sceneSelection.selectAll();
   const join = sceneSelection
-    .selectAll({})
+    .selectAll()
     .filter(function(d) {
       if (typeof d === 'undefined') return false;
       return d.type === 'object-parent';
     })
-    .data(objects, d => { return d.key; });
+    .data(objects, d => d.key);
   join
     .exit()
     .remove();
@@ -1326,7 +1323,7 @@ function joinObjectParents({ objects, sceneSelection }) {
 function updateObjectPosition(d) {
   this.position.copy(d.trajectoryOffset);
 }
-
+  
 function getNewObject() {
   const geometry = new THREE.SphereGeometry(0.1, 30, 30);
   const material = new THREE.MeshPhongMaterial({
@@ -1345,7 +1342,7 @@ function getNewObject() {
 function updateObjectOpacity({ selected }) {
   this.material.opacity = selected ? 0.3 : 0.1;
 }
-
+  
 function updateObjectRadius(d) {
   const { volume } = d;
   const object = this;
@@ -1423,7 +1420,7 @@ function getFirstRenderer() {
  *
  *
  */
-
+ 
 function joinInfoRowsCols({ cardBlocks, actionSubject }) {
   const rowsJoin = cardBlocks
     .selectAll('.row')
@@ -1617,7 +1614,6 @@ function selectableTHREEJS(THREE) {
     return this.getObjectByProperty(key, query[key]);
   };
   THREE.Object3D.prototype.querySelectorAll = function (query) {
-    // debugger
     if (typeof query === 'undefined') return this.children;
     return this.children.filter(d => _.isMatch(d, query));
   };
