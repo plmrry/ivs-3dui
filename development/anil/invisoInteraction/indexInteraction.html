@@ -416,15 +416,17 @@
 
     function onKeyDown(e) {
 
-      var walkingRayVector = new THREE.Vector3(0, 0, -1);
-      walkingRay.set(headModel.position, walkingRayVector);
+      if( soundZones.length > 0 ){
+        var walkingRayVector = new THREE.Vector3(0, 0, -1);
+        walkingRay.set(headModel.position, walkingRayVector);
 
-      var intersects = walkingRay.intersectObject( soundZones[0].shape );
-      if(intersects.length > 0) {
-          console.log("IN THE ZOAN");
-      }
-      else {
-          console.log("OUT THE ZOAN");
+        var intersects = walkingRay.intersectObject( soundZones[0].shape );
+        if(intersects.length > 0) {
+            console.log("IN THE ZOAN");
+        }
+        else {
+            console.log("OUT THE ZOAN");
+        }
       }
 
       keyPressed = true;
