@@ -17,8 +17,8 @@
 	<body>
 
 		<script src="js/three.min.js"></script>
-		<script src="js/Detector.js"></script>
-		<script src="js/FlyControlsUpdated.js"></script>
+		<!-- <script src="js/Detector.js"></script> -->
+		<!-- <script src="js/FlyControlsUpdated.js"></script> -->
 		<script src="js/AxisHelper.js"></script>
 		<script src="js/OBJLoader.js"></script>
 
@@ -93,8 +93,6 @@
 			loader.load('assets/head.obj', function(object){
 				headModel = object;
 				headModel.rotation.y += Math.PI;
-				
-				debugger
 
 				//headModel.scale.set(10, 10, 10);
 				scene.add(headModel);

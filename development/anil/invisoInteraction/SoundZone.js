@@ -1,6 +1,6 @@
-var Soundzone = function(points) {
+var SoundZone = function(points) {
 
-	this.type = 'Soundzone';
+	this.type = 'SoundZone';
 	this.isActive = true;
 
 	this.splinePoints = points;
@@ -15,21 +15,22 @@ var Soundzone = function(points) {
 
 	// cursor indicates which location/obj the mouse is pointed at
 	this.cursor = new THREE.Mesh(
-		new THREE.SphereGeometry(5),
+		new THREE.SphereGeometry(10),
 		new THREE.MeshBasicMaterial({ color:0x00ccff })
 	);
 	this.cursor.visible = false;
+
 
 	this.renderPath = function() {
 		// splinePoints control the curve of the path
 		var points = this.splinePoints;
 		this.pointObjects = (function() {
 			// setup
-			var sphere = new THREE.SphereGeometry(3);
-			var sphereMat = new THREE.MeshBasicMaterial( { color:0xff0000 } );
+			var sphere = new THREE.SphereGeometry(10);
+			var sphereMat = new THREE.MeshBasicMaterial( { color:0xff1169 } );
 
 			var collider = new THREE.SphereGeometry(15);
-			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff0000, transparent:true, opacity:0});
+			var colliderMat = new THREE.MeshBasicMaterial( {color:0xff1169, transparent:true, opacity:0, depthWrite: false});
 			var colliderMesh = new THREE.Mesh( collider, colliderMat );
 
 			// place a meshgroup at each point in array
@@ -41,59 +42,52 @@ var Soundzone = function(points) {
 				group.add(sphereMesh, colliderMesh.clone());
 				group.position.x = point.x,
 				group.position.y = point.y;
+				group.position.z = -300;
 
 				pointObjects.push(group);
 			})
-
-
 			return pointObjects;
-
 		})();
 
 		// a soundzone is a closed, filled path
 		// trajectory may need to be modified for this
 		this.spline = new THREE.CatmullRomCurve3(this.splinePoints);
 		this.spline.type = 'centripetal';
-
-		var begEndDistance = this.splinePoints[0].distanceTo(this.splinePoints[this.splinePoints.length - 1]);
-
-		if(begEndDistance < 20) this.spline.closed = true;
-		else this.spline.closed = false;
-
+		this.spline.closed = true;
 		geometry = new THREE.Geometry();
 		geometry.vertices = this.spline.getPoints(200);
 		material = new THREE.LineBasicMaterial({
-			color: 0xff0000,
-			linewidth:2,
+			color: 0xff1169,
+			linewidth:1,
 			transparent:true,
 			opacity:0.4
 		});
 		this.spline.mesh = new THREE.Line( geometry, material );
+		this.spline.mesh.position.z = -300;
 
 		// fill the path
-		// var shape = new THREE.Shape();
-		// shape.fromPoints(geometry.vertices);
-		// geometry = new THREE.ShapeGeometry(shape);
-		// material = new THREE.MeshPhongMaterial({
-		// 	color: 0xff0000,
-		// 	transparent: true,
-		// 	opacity: 0.2,
-		// 	side: THREE.DoubleSide,
-		// 	depthWrite: false
-		// });
-		// this.shape = new THREE.Mesh(geometry,material);
+		var shape = new THREE.Shape();
+		shape.fromPoints(geometry.vertices);
+		geometry = new THREE.ShapeGeometry(shape);
+		material = new THREE.MeshPhongMaterial({
+			color: 0xff1169,
+			transparent: true,
+			opacity: 0.2,
+			side: THREE.DoubleSide,
+		});
+		this.shape = new THREE.Mesh(geometry,material);
+		this.shape.position.z = -300;
 	}
 	this.renderPath();
 }
 
 
-Soundzone.prototype = {
+SoundZone.prototype = {
 
-	constructor: Soundzone,
+	constructor: SoundZone,
 
 	get objects() {
-		//return [].concat(this.pointObjects, this.spline.mesh, this.shape);
-		return [].concat(this.pointObjects, this.spline.mesh);
+		return [].concat(this.pointObjects, this.spline.mesh, this.shape);
 	},
 
 	addToScene: function(scene) {
@@ -111,14 +105,12 @@ Soundzone.prototype = {
 
 	// raycast to this soundzone
 	isUnderMouse: function(raycaster) {
-		// if (this.isActive) {
-
+		if (this.isActive) {
 			return raycaster.intersectObjects( this.objects ).length > 0;
-
-		// }
-		// else {
-			//return raycaster.intersectObject( this.shape ).length > 0;
-		// }
+		}
+		else {
+			return raycaster.intersectObject( this.shape ).length > 0;
+		}
 	},
 	objectUnderMouse: function(raycaster) {
 		var intersects = raycaster.intersectObjects( this.objects, true );
@@ -138,45 +130,48 @@ Soundzone.prototype = {
 		this.mouseOffsetY = point.y;
 	},
 
-	move: function(point, obj, altitudeMode) {
+	move: function() {
 
-		if (!altitudeMode) {
-			// move selected point
-			var i = this.pointObjects.indexOf(this.selectedPoint);
-			if (i > -1) {
-				this.showCursor(false);
-				this.splinePoints[i].copy(point);
-				this.updateShape();
-				this.selectPoint(this.pointObjects[i]);
+		if( !perspectiveView ){
+			if (this.selectedPoint) {
+				// move selected point
+				var i = this.pointObjects.indexOf(this.selectedPoint);
+				if (i > -1) {
+					this.showCursor(false);
+					this.splinePoints[i].copy(mouse);
+					this.updateZone();
+					this.selectPoint(this.pointObjects[i]);
+				}
 			}
-		}
-		else {
-			// move entire shape
-			var dx = point.x - this.mouseOffsetX;
-			var dy = point.y - this.mouseOffsetY;
-			this.mouseOffsetX = point.x, this.mouseOffsetY = point.y;
+			else {
+				// move entire shape
+				var dx = mouse.x - this.mouseOffsetX;
+				var dy = mouse.y - this.mouseOffsetY;
+				this.mouseOffsetX = mouse.x, this.mouseOffsetY = mouse.y;
 
-			this.objects.forEach(function(obj) {
-				obj.position.x += dx;
-				obj.position.y += dy;
-			});
-			this.splinePoints.forEach(function(pt) {
-				pt.x += dx;
-				pt.y += dy;
-			});
+				this.objects.forEach(function(obj) {
+					obj.position.x += dx;
+					obj.position.y += dy;
+				});
+				this.splinePoints.forEach(function(pt) {
+					pt.x += dx;
+					pt.y += dy;
+				});
+			}
 		}
 	},
 
 	setCursor: function(point) {
 		this.cursor.position.copy(point);
 	},
+
 	showCursor: function(bool) {
-		if (bool === undefined)
-			this.cursor.visible = true;
+		if (bool === undefined) this.cursor.visible = true;
 		this.cursor.visible = bool;
 	},
 
 	setActive: function() {
+		this.setMouseOffset(mouse);
 		this.isActive = true;
 		this.pointObjects.forEach(function(obj) {
 			obj.visible = true;
@@ -186,12 +181,12 @@ Soundzone.prototype = {
 
 	setInactive: function() {
 		this.deselectPoint();
-		//this.showCursor(false);
-		//this.isActive = false;
+		this.showCursor(false);
+		this.isActive = false;
 		this.pointObjects.forEach(function(obj) {
-			//obj.visible = false;
+			obj.visible = false;
 		});
-		//this.spline.mesh.visible = false;
+		this.spline.mesh.visible = false;
 	},
 
 	select: function(intersect) {
@@ -219,12 +214,14 @@ Soundzone.prototype = {
 		this.selectedPoint = obj;
 		obj.children[0].material.color.set('blue');
 	},
+
 	deselectPoint: function() {
 		if (this.selectedPoint) {
 			this.selectedPoint.children[0].material.color.set('red');
 			this.selectedPoint = null;
 		}
 	},
+
 	addPoint: function(position) {
 
 		var closestSplinePoint = 0;
@@ -249,20 +246,23 @@ Soundzone.prototype = {
 				minPoint = closestSplinePoint;
 			}
 		}
+//		console.log(minPoint);
 
 		this.splinePoints.splice(minPoint, 0, position);
-		this.updateShape();
+		this.updateZone();
 		this.selectPoint(this.pointObjects[minPoint]);
 
 	},
+
 	removePoint: function() {
 		// find point in array
 		var i = this.pointObjects.indexOf(this.selectedPoint);
 		this.splinePoints.splice(i,1);
 		this.deselectPoint();
-		this.updateShape();
+		this.updateZone();
 	},
-	updateShape: function() {
+
+	updateZone: function() {
 		var scene = this.spline.mesh.parent;
 		this.removeFromScene(scene);
 		this.renderPath();
@@ -271,7 +271,7 @@ Soundzone.prototype = {
 }
 
 
-drawing = {                   // live drawing by mouse
+zone = {                   // live drawing by mouse
 	scene: null,              //    the scene
 	points: [],               //    points on path
 	lines: [],                //    lines on the scene
@@ -280,10 +280,12 @@ drawing = {                   // live drawing by mouse
 	setScene: function(scene) {
 		this.scene = scene;
 	},
+
 	beginAt: function(point, scene) {
 		this.lastPoint = point;
 		this.points = [point];
 	},
+
 	addPoint: function(point) {
 		if (this.scene === null) {
 			console.log('scene not set');
@@ -291,7 +293,7 @@ drawing = {                   // live drawing by mouse
 		}
 
 		var material = new THREE.LineBasicMaterial({
-			color: 0xff0000
+			color: 0xff1169
 		});
 		var geometry = new THREE.Geometry();
 		geometry.vertices.push(this.lastPoint, point);
@@ -308,9 +310,11 @@ drawing = {                   // live drawing by mouse
 		var points = simplify(this.points, 10, true);
 		var object;
 		if (points.length >= 3) {
-			object = new Soundzone(points);
+			object = new SoundZone(points);
 		}
-		// else {}                       // not enough points = a sound OBJECT
+		else {
+			object = new SoundObject(audio);
+		}
 
 		this.clear();
 
@@ -318,6 +322,7 @@ drawing = {                   // live drawing by mouse
 			object.addToScene(this.scene);
 		return object;
 	},
+
 	clear: function() {
 		var scene = this.scene;
 		this.lines.forEach(function(line) {

@@ -1,0 +1,1 @@
+export default function apply(o, fn) { return fn(o); }
