@@ -5,7 +5,7 @@ import xs from 'xstream';
 import pairwise from 'xstream/extra/pairwise';
 import flattenConcurrently from 'xstream/extra/flattenConcurrently';
 import {run} from '@cycle/xstream-run';
-import {makeDOMDriver} from '@cycle/dom';
+import {makeDOMDriver, h1, h4, div, button} from '@cycle/dom';
 import THREE from 'three/three.min.js';
 import * as d3 from 'd3';
 import debug from 'debug';
@@ -21,6 +21,7 @@ export default function kludge({
   camera,
   renderer
 }) {
+
   const stop_adding_proxy$ = xs.create();
 
   const toggle_adding$ = xs
@@ -62,6 +63,69 @@ export default function kludge({
       canvas_mouse_move$
     );
 
+  const mouse_intersects$ = canvas_mouse$
+    .map(event => {
+      const ndc = event_to_ndc(event);
+      const intersects = all_intersects(raycaster, camera, scene)(ndc);
+      return {
+        event,
+        ndc,
+        intersects
+      };
+    });
+
+  const floor_point$ = mouse_intersects$
+    .map(o => o.intersects)
+    .map(arr => arr.filter(d => d.object.name === 'floor'))
+    // TODO: What if floor not found?
+    .map(arr => arr[0].point);
+
+  const mouse_object$ = mouse_intersects$
+    .filter(({ intersects: [{ object: { name } }] }) => name.match(/parent-object/));
+    // .debug(debug('OBJECT'))
+    // .addListener(noopListener());
+
+  const mousedown_object$ = mouse_object$
+    .filter(({ event }) => event.type === 'mousedown')
+    .debug(debug('MOUSEDOWN OBJECT'));
+    // .addListener(noopListener());
+
+  const mousedrag_object$ = mousedown_object$.map(obj => {
+    // return mouse_intersects$
+    //   .startWith(obj)
+    const match = obj.intersects[0].object.name.match(/parent-object-(.+)/);
+    const id = match[1];
+    // console.log('match', match);
+    // console.log('barbar', id);
+    // id = Number(id);
+    // console.log(obj.intersects[0].object.name.match(/parent-object-(.+)/));
+    return floor_point$
+      .compose(pairwise)
+      .endWhen(mouse_intersects$.filter(({ event }) => event.type === 'mouseup' ))
+      .map(arr => (new THREE.Vector3()).subVectors(arr[1], arr[0]))
+      .map(delta => {
+        return {
+          id: Number(id),
+          positionReducer: pos => pos.add(delta)
+        };
+      });
+      // .map(pairs => {
+      //   // pairs.map(o => o.intersects)
+      // })
+  })
+  .flatten()
+  .debug(debug('MOUSE DRAG OBJECT'));
+  // .addListener(errorListener());
+
+  const positionReducer$ = mousedrag_object$;
+
+  // const floor_intersect$ = mouse_intersects$
+  //   .map(arr => arr.filter(d => d.object.name === 'floor'))
+  //   // TODO: What if floor not found?
+  //   .map(arr => arr[0].point)
+    // .debug(debug('FLOOR'))
+    // .addListener(noopListener());
+
   const canvas_click$ = canvas_mouse$
     .compose(pairwise)
     .filter(([a, b]) => a.type === 'mousedown' && b.type === 'mouseup')
@@ -77,6 +141,7 @@ export default function kludge({
   const stop_adding$ = adding_click$.map(() => x => false);
   stop_adding_proxy$.imitate(stop_adding$);
 
+  // const FPS = 30;
   const FPS = 30;
   const MPF = 1000/FPS;
 
@@ -91,6 +156,10 @@ export default function kludge({
     .compose(pairwise)
     .filter(arr => arr[1] > arr[0]);
 
+  const select_proxy$ = xs.create();
+
+  let id = -1;
+
   const add_object$ = adding_click$
     .filter(arr => arr[0] === true)
     .map(([adding, events]) => events[1])
@@ -99,28 +168,77 @@ export default function kludge({
     .map(arr => arr.filter(d => d.object.name === 'floor'))
     // TODO: What if floor not found?
     .map(arr => arr[0].point)
-    .map(point => create_parent_object(point, tick$))
+    .map(point => {
+      // id++;
+      id = id + 1;
+      // console.log('ID', id);
+      const props$ = xs.of({ initial_position: point, id });
+      return create_parent_object({
+        id, initial_position: point, point, props$, tick$, select$: select_proxy$, positionReducer$
+      });
+    })
     .debug(debug('add:parent_object'));
 
-  const parent_objects$ = add_object$.compose(combine_on_tick(tick$));
+  // const differ = jsondiffpatch.create({
+  //   objectHash: obj => obj.id
+  // });
 
-  function next_listener(next) {
-    return {
-      next,
-      error: e => console.error(e),
-      complete: () => {}
-    };
-  }
+  const diff = jsondiffpatch.diff;
 
-  const state$ = xs.combine(
+  const parent_objects$ = add_object$
+    .compose(combine_on_tick(tick$))
+    .startWith([])
+    .compose(pairwise)
+    // .debug(arr => { if (arr[1][0]) debug('barb!')(arr[1][0].position.x); })
+    // .filter(a => typeof diff(a[0], a[1]) !== 'undefined')
+    // .debug(debug('difffffff'))
+    .map(a => a[1]);
+
+  const selected$ = parent_objects$
+    .map(a => a.filter(d => d.selected));
+
+  const secs = xs.periodic(1000);
+
+  const selected_view$ = selected$
+    .map(arr => arr.map(o =>
+      div('.bar', [
+        h4(`p.x:${o.position.x}`),
+        button('.add-trajectory', 'add trajectory')
+      ])
+    ))
+    .startWith([]);
+
+  const view$ = xs.combine(secs, selected_view$)
+    .map(([ secs, selected ]) => {
+      return div('.foo', [
+        h1('' + secs + ' seconds elapsed'),
+        div('.foo', { style: { color: 'red' } },
+          selected //selected.map(o => h4(`p.x:${o.position.x}`))
+        )
+      ]);
+    });
+
+  const selected_controls = dom.select('#scene-controls')
+    .append('div')
+    .classed('selected-controls', true)
+    .node();
+
+  const dom_driver = makeDOMDriver(selected_controls);
+
+  dom_driver(view$);
+
+  const model$ = xs.combine(
     parent_objects$
   )
     .map(([parents]) => {
       return {
         parents
       };
-    })
-    .fold(diff_patch_state, get_initial_state(scene));
+    });
+
+  const state$ = model$.fold(diff_patch_state, get_initial_state(scene));
+
+  // const selected$ = state$.map()
 
   xs.combine(
     state$
@@ -172,8 +290,25 @@ export default function kludge({
       wireframe: true,
       color: 0xff0000
     });
-    const mesh = new THREE.Mesh( geometry, material );
-    return mesh;
+    const parentObject = new THREE.Mesh( geometry, material );
+    parentObject.name = `parent-object-${parent.id}`;
+    parentObject.add(new_object_sphere(parent));
+    return parentObject;
+  }
+
+  function new_object_sphere(props) {
+    const geometry = new THREE.SphereGeometry(1, 30, 30);
+    const material = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(0, 0, 0),
+      transparent: true,
+      opacity: 0.1,
+      side: THREE.DoubleSide
+    });
+    const sphere = new THREE.Mesh(geometry, material);
+    sphere.castShadow = true;
+    sphere.receiveShadow = true;
+    sphere.name = `parent-sphere-${props.id}`;
+    return sphere;
   }
 
   function get_first_state() {
@@ -182,7 +317,25 @@ export default function kludge({
     };
   }
 
-  function create_parent_object(initial_position, tick$) {
+  function create_parent_object({ id, initial_position, props$, tick$, select$, positionReducer$ }) {
+    // const id$ = props$.map(p => p.id);
+    // console.log('idddd', id);
+    const position$ = positionReducer$
+      .filter(o => o.id === id)
+      .map(o => o.positionReducer)
+      .fold((p, fn) => fn(p), initial_position);
+      // .map(o => o.x)
+    // position$
+    //   .map(o => o.x)
+    //   .debug(debug('REDUCE'))
+    //   .addListener(logListener())
+      // .filter(o => o.id === id)
+      // .map(o => o.positionReducer)
+      // .debug(debug('REDUCE'))
+      // .fold((p, fn) => fn(p), initial_position);
+      // .addListener(logListener());
+    const selected$ = select$
+      .fold((acc, fn) => fn(acc), true);
     const INITIAL_PARENT_Y = 0;
     const FPS = 10;
     const animate$ = xs.create({
@@ -190,47 +343,37 @@ export default function kludge({
       stop: () => {}
     });
     const velocity$ = tick$
-      .fold(x => x+0.4, 0)
+      .fold(x => x + 0.4, 0)
       .map(x => Math.sin(x))
       .compose(pairwise)
       .map(arr => arr[1] - arr[0])
+      .mapTo(0)
       .map(dx => { return new THREE.Vector3(dx, 0, 0); });
     const addVelocity$ = velocity$
-      .map(velocity => position => position.add(velocity));
-    const position$ = xs.merge(
-      addVelocity$
-    ).fold((p, fn) => fn(p), initial_position);
+      .map(velocity => position => {
+        return (new THREE.Vector3()).addVectors(velocity, position);
+      });
+    const position2$ = props$.map(({ initial_position }) => {
+      return xs.merge(
+        addVelocity$
+      ).fold((p, fn) => fn(p), initial_position);
+    }).flatten();
     const size$ = xs.of(1);
     return xs.combine(
       position$,
-      velocity$,
-      size$
-      // onTick$
-    ).map(([position, velocity, size, onTick]) => {
+      size$,
+      selected$
+    ).map(([position, size, selected]) => {
       return {
         position,
-        velocity,
         size,
-        onTick
+        id,
+        selected
       };
     });
-    // };
   }
 
   adding_click$.addListener(noopListener());
-
-  canvas_mouse$.map(event => {
-      return {
-        x: ( event.clientX / window.innerWidth ) * 2 - 1,
-	      y: - ( event.clientY / window.innerHeight ) * 2 + 1
-      };
-    })
-    .map(mouse => {
-      raycaster.setFromCamera( mouse, camera );
-      var intersects = raycaster.intersectObjects( scene.children );
-      return intersects;
-    })
-    .addListener(noopListener());
 }
 
 function combine_on_tick(tick$) {
@@ -240,7 +383,10 @@ function combine_on_tick(tick$) {
       next: parent$ => {
         const index = parents.length;
         parent$.addListener({
-          next: obj => parents[index] = obj,
+          next: obj => {
+            // console.log('FOOB', obj.position.x)
+            parents[index] = obj;
+          },
           error: e => console.error(e),
           complete: () => {}
         });
@@ -248,14 +394,14 @@ function combine_on_tick(tick$) {
       error: e => console.error(e),
       complete: () => {}
     });
-    return tick$.map(() => parents);
+    return tick$.map(() => Array.from(parents));
   };
 }
 
 function all_intersects(raycaster, camera, scene) {
   return function(mouse) {
     raycaster.setFromCamera( mouse, camera );
-    var intersects = raycaster.intersectObjects( scene.children );
+    var intersects = raycaster.intersectObjects( scene.children, true );
     return intersects;
   };
 }

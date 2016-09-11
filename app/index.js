@@ -151,7 +151,7 @@ const update_look_at$ = look_at$
     // }
     return camera;
   });
-const update_zoom$ = xs.of(40)
+const update_zoom$ = xs.of(60)
   .map(zoom => camera => {
     camera.zoom = zoom;
     camera.updateProjectionMatrix();
