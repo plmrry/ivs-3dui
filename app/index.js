@@ -29,6 +29,15 @@ init(g_main_scene);
 
 const window_size$ = getWindowSize$();
 
+import kludge from './kludge.js';
+
+kludge({
+  dom: g_dom,
+  renderer: g_main_renderer,
+  camera: g_main_camera,
+  scene: g_main_scene
+});
+
 // const log_listener = {
 //   next: d => console.log(d),
 //   error: e => console.error(e),
