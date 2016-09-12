@@ -8,7 +8,7 @@
 // import Rx, { Observable as stream } from 'rx';
 // import combineLatestObj from 'rx-combine-latest-obj';
 import * as d3 from 'd3';
-import THREE from 'three/three.min.js';
+import * as THREE from 'three/src/Three.js';
 // import createVirtualAudioGraph from 'virtual-audio-graph';
 // import _ from 'underscore';
 import xs from 'xstream';

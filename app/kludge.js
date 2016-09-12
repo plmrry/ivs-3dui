@@ -6,7 +6,7 @@ import pairwise from 'xstream/extra/pairwise';
 import flattenConcurrently from 'xstream/extra/flattenConcurrently';
 import {run} from '@cycle/xstream-run';
 import {makeDOMDriver, h1, h4, div, button} from '@cycle/dom';
-import THREE from 'three/three.min.js';
+import * as THREE from 'three/src/Three.js';
 import * as d3 from 'd3';
 import debug from 'debug';
 import jsondiffpatch from 'jsondiffpatch';

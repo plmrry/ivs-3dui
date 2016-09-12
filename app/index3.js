@@ -1102,7 +1102,7 @@ function mainCamera() {
   // const updateSize$ = windowSize$
   //   .map(updateCameraSize);
   const updateZoom$ = stream
-    .just(50)
+    .just(40)
     .map(zoom => camera => {
       camera.zoom = zoom;
       camera.updateProjectionMatrix();
