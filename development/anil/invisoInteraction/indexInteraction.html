@@ -213,6 +213,7 @@
 
       var x = document.getElementById("myFile");
       if( activeObject.type === 'SoundObject' ) activeObject.createCone('assets/' + x.files[0].name);
+      if( activeObject.type === 'SoundZone' ){ activeObject.loadSound('assets/' + x.files[0].name); }
       if( activeObject.type === 'SoundTrajectory' ) activeObject.parentSoundObject.createCone('assets/' + x.files[0].name);
     }
 
@@ -422,10 +423,10 @@
 
         var intersects = walkingRay.intersectObject( soundZones[0].shape );
         if(intersects.length > 0) {
-            console.log("IN THE ZOAN");
+            soundZones[0].underUser();
         }
         else {
-            console.log("OUT THE ZOAN");
+            soundZones[0].notUnderUser();
         }
       }
 
