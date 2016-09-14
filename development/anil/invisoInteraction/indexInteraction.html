@@ -209,6 +209,22 @@
       renderer.render( scene, camera );
     }
 
+    function checkZones() {
+
+      if( soundZones.length > 0 ){
+        var walkingRayVector = new THREE.Vector3(0, 0, -1);
+        walkingRay.set(headModel.position, walkingRayVector);
+
+        var intersects = walkingRay.intersectObject( soundZones[0].shape );
+        if(intersects.length > 0) {
+            soundZones[0].underUser();
+        }
+        else {
+            soundZones[0].notUnderUser();
+        }
+      }
+    }
+
     function addCone() {
 
       var x = document.getElementById("myFile");
@@ -417,18 +433,7 @@
 
     function onKeyDown(e) {
 
-      if( soundZones.length > 0 ){
-        var walkingRayVector = new THREE.Vector3(0, 0, -1);
-        walkingRay.set(headModel.position, walkingRayVector);
-
-        var intersects = walkingRay.intersectObject( soundZones[0].shape );
-        if(intersects.length > 0) {
-            soundZones[0].underUser();
-        }
-        else {
-            soundZones[0].notUnderUser();
-        }
-      }
+      checkZones();
 
       keyPressed = true;
 

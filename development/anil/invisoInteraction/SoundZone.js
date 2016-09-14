@@ -18,15 +18,16 @@ var SoundZone = function(points) {
 			this.sound.source.loop = true;
 			this.sound.source.connect(this.sound.volume);
 			this.sound.source.buffer = this.buffer;
-			this.sound.source.start(audio.context.currentTime + 0.020);
+			this.sound.source.start(audio.context.currentTime);
+			this.sound.volume.gain.setTargetAtTime(0.3, audio.context.currentTime + 0.1, 0.1);
 			this.isPlaying = true;
 		}
 	}
 
 	this.notUnderUser = function(){
 		if( this.sound && this.isPlaying){
-
-			this.sound.source.stop(audio.context.currentTime + 0.020);
+			this.sound.volume.gain.setTargetAtTime(0.0, audio.context.currentTime, 0.05);
+			this.sound.source.stop(audio.context.currentTime + 0.2);
 			this.isPlaying = false;
 		}
 	}
@@ -58,7 +59,7 @@ var SoundZone = function(points) {
 
 		request.send();
 		console.log(_this.buffer);
-		sound.volume.gain.value = 0.1;
+		sound.volume.gain.value = 0.0;
 		this.sound = sound;
 	},
 
