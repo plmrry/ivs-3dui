@@ -7,7 +7,7 @@ var SoundZone = function(points) {
 	this.pointObjects;
 	this.spline;
 	this.shape;
-	this.sound = null;
+	this.sound;
 	this.isPlaying = false;
 	this.buffer;
 
@@ -36,12 +36,10 @@ var SoundZone = function(points) {
 
 		var context = audio.context;
 		var sound = {};
-
 		var _this = this;
 
 		sound.volume = context.createGain();
 		sound.volume.connect(audio.destination);
-
 
 		var request = new XMLHttpRequest();
 		request.open("GET", soundFileName, true);
@@ -56,9 +54,7 @@ var SoundZone = function(points) {
 			});
 		};
 
-
 		request.send();
-		console.log(_this.buffer);
 		sound.volume.gain.value = 0.0;
 		this.sound = sound;
 	},

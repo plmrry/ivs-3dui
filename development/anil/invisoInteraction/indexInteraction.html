@@ -215,12 +215,14 @@
         var walkingRayVector = new THREE.Vector3(0, 0, -1);
         walkingRay.set(headModel.position, walkingRayVector);
 
-        var intersects = walkingRay.intersectObject( soundZones[0].shape );
-        if(intersects.length > 0) {
-            soundZones[0].underUser();
-        }
-        else {
-            soundZones[0].notUnderUser();
+        for(i in soundZones){
+          var intersects = walkingRay.intersectObject( soundZones[i].shape );
+          if(intersects.length > 0) {
+              soundZones[i].underUser();
+          }
+          else {
+              soundZones[i].notUnderUser();
+          }
         }
       }
     }
