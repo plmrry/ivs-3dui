@@ -204,6 +204,7 @@
       if( camera.rotation.x > 0.2 ) perspectiveView = true; else perspectiveView = false;
 
       controls.update();
+      checkZones();
       updateDummyHead();
       requestAnimationFrame( this.render.bind(this) );
       renderer.render( scene, camera );
@@ -435,8 +436,6 @@
 
     function onKeyDown(e) {
 
-      checkZones();
-
       keyPressed = true;
 
       var key = e.keyCode || e.which;
@@ -446,6 +445,33 @@
         case 68: yawLeft = 1 * rotationSpeed; break; // D
         case 65: yawRight = 1 * rotationSpeed; break; // A
         case 67: controls.enabled = true; break;
+
+        case 8: case 46:    // Backspace & Delete
+          e.preventDefault();
+          if (activeObject && activeObject.type === 'SoundTrajectory') {
+
+            if (activeObject.selectedPoint && activeObject.splinePoints.length > 3) {
+              activeObject.removePoint();
+            }
+          }
+
+          if (activeObject && activeObject.type === 'SoundZone') {
+
+            if (activeObject.selectedPoint && activeObject.splinePoints.length > 3) {
+              activeObject.removePoint();
+            }
+            else {
+              removeSoundZone(activeObject);
+              activeObject = null;
+            }
+          }
+
+          if (activeObject && activeObject.type === 'SoundObject') {
+            removeSoundObject(activeObject);
+            removeSoundTrajectory(activeObject.trajectory);
+            activeObject = null;
+          }
+        break;
       }
     }
 
@@ -462,6 +488,24 @@
         case 67: controls.enabled = false; break; // C
         case 82: controls.reset(); break; // R
       }
+    }
+
+    function removeSoundZone (soundZone) {
+      soundZone.removeFromScene(scene);
+      var i = soundZones.indexOf(soundZone);
+      soundZones.splice(i,1);
+    }
+
+    function removeSoundObject (soundObject) {
+      soundObject.removeFromScene(scene);
+      var i = soundObjects.indexOf(soundObject);
+      soundObjects.splice(i,1);
+    }
+
+    function removeSoundTrajectory (soundTrajectory) {
+      soundTrajectory.removeFromScene(scene);
+      var i = soundTrajectories.indexOf(soundTrajectory);
+      soundTrajectories.splice(i,1);
     }
 
 </script>

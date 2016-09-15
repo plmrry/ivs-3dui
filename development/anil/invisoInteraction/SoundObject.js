@@ -154,17 +154,9 @@ var SoundObject = function(audio){
   }
 
   this.removeFromScene = function() {
-    this.objects.forEach(function(obj) {
-      scene.remove(obj, true);
-    });
-  }
-
-  this.updateObject = function() {
-    this.removeFromScene();
-    this.objects.forEach(function(obj) {
-      obj.position.copy( mouse );
-      scene.add(obj);
-    });
+    scene.remove(this.containerObject, true);
+    scene.remove(this.altitudeHelper, true);
+    scene.remove(this.trajectory, true);
   }
 
   this.followTrajectory = function() {
