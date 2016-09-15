@@ -204,15 +204,35 @@
       if( camera.rotation.x > 0.2 ) perspectiveView = true; else perspectiveView = false;
 
       controls.update();
+      checkZones();
       updateDummyHead();
       requestAnimationFrame( this.render.bind(this) );
       renderer.render( scene, camera );
+    }
+
+    function checkZones() {
+
+      if( soundZones.length > 0 ){
+        var walkingRayVector = new THREE.Vector3(0, 0, -1);
+        walkingRay.set(headModel.position, walkingRayVector);
+
+        for(i in soundZones){
+          var intersects = walkingRay.intersectObject( soundZones[i].shape );
+          if(intersects.length > 0) {
+              soundZones[i].underUser();
+          }
+          else {
+              soundZones[i].notUnderUser();
+          }
+        }
+      }
     }
 
     function addCone() {
 
       var x = document.getElementById("myFile");
       if( activeObject.type === 'SoundObject' ) activeObject.createCone('assets/' + x.files[0].name);
+      if( activeObject.type === 'SoundZone' ){ activeObject.loadSound('assets/' + x.files[0].name); }
       if( activeObject.type === 'SoundTrajectory' ) activeObject.parentSoundObject.createCone('assets/' + x.files[0].name);
     }
 
@@ -416,19 +436,6 @@
 
     function onKeyDown(e) {
 
-      if( soundZones.length > 0 ){
-        var walkingRayVector = new THREE.Vector3(0, 0, -1);
-        walkingRay.set(headModel.position, walkingRayVector);
-
-        var intersects = walkingRay.intersectObject( soundZones[0].shape );
-        if(intersects.length > 0) {
-            console.log("IN THE ZOAN");
-        }
-        else {
-            console.log("OUT THE ZOAN");
-        }
-      }
-
       keyPressed = true;
 
       var key = e.keyCode || e.which;
@@ -438,6 +445,33 @@
         case 68: yawLeft = 1 * rotationSpeed; break; // D
         case 65: yawRight = 1 * rotationSpeed; break; // A
         case 67: controls.enabled = true; break;
+
+        case 8: case 46:    // Backspace & Delete
+          e.preventDefault();
+          if (activeObject && activeObject.type === 'SoundTrajectory') {
+
+            if (activeObject.selectedPoint && activeObject.splinePoints.length > 3) {
+              activeObject.removePoint();
+            }
+          }
+
+          if (activeObject && activeObject.type === 'SoundZone') {
+
+            if (activeObject.selectedPoint && activeObject.splinePoints.length > 3) {
+              activeObject.removePoint();
+            }
+            else {
+              removeSoundZone(activeObject);
+              activeObject = null;
+            }
+          }
+
+          if (activeObject && activeObject.type === 'SoundObject') {
+            removeSoundObject(activeObject);
+            removeSoundTrajectory(activeObject.trajectory);
+            activeObject = null;
+          }
+        break;
       }
     }
 
@@ -454,6 +488,24 @@
         case 67: controls.enabled = false; break; // C
         case 82: controls.reset(); break; // R
       }
+    }
+
+    function removeSoundZone (soundZone) {
+      soundZone.removeFromScene(scene);
+      var i = soundZones.indexOf(soundZone);
+      soundZones.splice(i,1);
+    }
+
+    function removeSoundObject (soundObject) {
+      soundObject.removeFromScene(scene);
+      var i = soundObjects.indexOf(soundObject);
+      soundObjects.splice(i,1);
+    }
+
+    function removeSoundTrajectory (soundTrajectory) {
+      soundTrajectory.removeFromScene(scene);
+      var i = soundTrajectories.indexOf(soundTrajectory);
+      soundTrajectories.splice(i,1);
     }
 
 </script>

@@ -7,6 +7,57 @@ var SoundZone = function(points) {
 	this.pointObjects;
 	this.spline;
 	this.shape;
+	this.sound;
+	this.isPlaying = false;
+	this.buffer;
+
+	this.underUser = function(){
+		if( this.sound && !this.isPlaying){
+
+			this.sound.source = audio.context.createBufferSource();
+			this.sound.source.loop = true;
+			this.sound.source.connect(this.sound.volume);
+			this.sound.source.buffer = this.buffer;
+			this.sound.source.start(audio.context.currentTime);
+			this.sound.volume.gain.setTargetAtTime(0.3, audio.context.currentTime + 0.1, 0.1);
+			this.isPlaying = true;
+		}
+	}
+
+	this.notUnderUser = function(){
+		if( this.sound && this.isPlaying){
+			this.sound.volume.gain.setTargetAtTime(0.0, audio.context.currentTime, 0.05);
+			this.sound.source.stop(audio.context.currentTime + 0.2);
+			this.isPlaying = false;
+		}
+	}
+
+	this.loadSound = function(soundFileName){
+
+		var context = audio.context;
+		var sound = {};
+		var _this = this;
+
+		sound.volume = context.createGain();
+		sound.volume.connect(audio.destination);
+
+		var request = new XMLHttpRequest();
+		request.open("GET", soundFileName, true);
+		request.responseType = "arraybuffer";
+		var context = audio.context;
+		request.onload = function() {
+			context.decodeAudioData(request.response, function(buffer){
+				_this.buffer = buffer;
+
+			}, function() {
+				alert("Decoding the audio buffer failed");
+			});
+		};
+
+		request.send();
+		sound.volume.gain.value = 0.0;
+		this.sound = sound;
+	},
 
 	this.selectedPoint;
 	this.mouseOffsetX = 0, this.mouseOffsetY = 0;
@@ -271,7 +322,7 @@ SoundZone.prototype = {
 }
 
 
-zone = {                   // live drawing by mouse
+zone = {                    //    live drawing by mouse
 	scene: null,              //    the scene
 	points: [],               //    points on path
 	lines: [],                //    lines on the scene
