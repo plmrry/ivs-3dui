@@ -182,7 +182,7 @@ function Camera({ window_size$, dom$, scene$ }) {
       return nu <= 0 ? radius : nu;
     });
 
-  const delta$ = dom$.select('#move-camera')
+  const orbit_delta$ = dom$.select('#move-camera')
     .events('mousedown')
     .map(start => dom$.select(':root')
       .events('mousemove')
@@ -201,7 +201,7 @@ function Camera({ window_size$, dom$, scene$ }) {
 
   const MAX_LATITUDE = 89.9;
   const MIN_LATITUDE = 1;
-  const latitude_change$ = delta$
+  const latitude_change$ = orbit_delta$
     .map(d => -d.y)
     .map(d => lat => {
       return (lat + d > MAX_LATITUDE) ?
@@ -212,7 +212,7 @@ function Camera({ window_size$, dom$, scene$ }) {
     });
   const latitude$ = xs.merge(latitude_change$)
     .fold((l, fn) => fn(l), 45);
-  const longitude_change$ = delta$
+  const longitude_change$ = orbit_delta$
     .map(d => d.x)
     .map(delta => longitude => longitude + delta);
   const longitude$ = xs.merge(longitude_change$)
@@ -259,11 +259,11 @@ function Camera({ window_size$, dom$, scene$ }) {
       camera.lookAt(lookat);
       return camera;
     });
-  const update_lookat$ = lookAt$
-    .map(lookat => camera => {
-      camera.lookAt(lookat);
-      return camera;
-    });
+  // const update_lookat$ = lookAt$
+  //   .map(lookat => camera => {
+  //     camera.lookAt(lookat);
+  //     return camera;
+  //   });
   const update_size$ = window_size$
     .map(size => camera => {
       camera.aspect = size.width / size.height;
@@ -275,9 +275,6 @@ function Camera({ window_size$, dom$, scene$ }) {
       xs.of(c => c),
       update_size$,
       update_lookat_or_position$
-      // update_zoom$
-      // update_position$,
-      // update_lookat$
     )
     .fold((camera, fn) => fn(camera), first_camera());
   // console.log(camera$);
@@ -316,7 +313,9 @@ function _Renderer({ window_size$, dom$ }) {
   return renderer$;
   function first_renderer(canvas) {
     const renderer = new WebGLRenderer({
-      canvas
+      canvas,
+      precision: "lowp",
+      antialias: false
     });
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = PCFSoftShadowMap;
@@ -343,7 +342,7 @@ function _Renderer({ window_size$, dom$ }) {
 
 const dom_view$ = xs.of(
   main([
-    canvas('.main', { style: { border: '1px solid red' } }),
+    canvas('.main'),
     div('.controls.file-controls', { style: { position: 'absolute', left: '0px', top: '0px' } }, [
       button('.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, [
         i('.material-icons', { style: { display: 'block' } }, 'volume_up')
