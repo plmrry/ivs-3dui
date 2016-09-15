@@ -1,1 +1,0 @@
-export default function log(d) { console.log.apply(console, arguments); }
