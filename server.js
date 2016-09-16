@@ -2,15 +2,98 @@
 
 var express = require('express');
 var path = require('path');
-var babelify = require('express-babelify-middleware');
+// var babelify = require('express-babelify-middleware');
 var serveIndex = require('serve-index');
 var rollup = require('rollup-endpoint');
 const cheerio = require('cheerio');
+
+const nodeResolve = require('rollup-plugin-node-resolve');
+const commonjs = require('rollup-plugin-commonjs');
 
 var app = express();
 
 app.set('port', 9877);
 
+app.use('/foo', function(request, response) {
+  const $ = cheerio.load('<html></html>');
+  $('html').append('<body>');
+  $('body').append($('<div>').attr('id', 'app'));
+  const bundle = $('<script>').attr('src', 'bundle.js');
+  const app = $('<script>').attr('src', 'app.js');
+  $('body').append(bundle);
+  $('body').append(app);
+  response.end($.html());
+});
+
+app.use('/app.js', rollup.serve({
+  entry: path.resolve(__dirname, 'app', 'index.js'),
+  external: [
+    'bundle'
+  ],
+  plugins: [
+    nodeResolve(),
+    commonjs({
+      include: 'node_modules/**',
+      exclude: [ 'node_modules/three/**' ]
+    }),
+    glsl()
+  ],
+  generateOptions: {
+    format: 'umd',
+    moduleName: 'ivs',
+    sourceMap: true
+  }
+}));
+
+let cache;
+
+app.use('/bundle.js', rollup.serve({
+  entry: path.resolve(__dirname, 'app', 'bundle.js'),
+  cache: cache,
+  plugins: [
+    nodeResolve(),
+    commonjs({
+      include: 'node_modules/**',
+			exclude: [ 'node_modules/three/**' ]
+    }),
+    glsl()
+  ],
+  generateOptions: {
+    format: 'umd',
+    moduleName: 'bundle'
+  }
+}));
+
+//
+// const nodeResolve = require('rollup-plugin-node-resolve');
+// const commonjs = require('rollup-plugin-commonjs');
+
+function glsl () {
+	return {
+		transform ( code, id ) {
+			if ( !/\.glsl$/.test( id ) ) return;
+
+			return 'export default ' + JSON.stringify(
+				code
+					.replace( /[ \t]*\/\/.*\n/g, '' )
+					.replace( /[ \t]*\/\*[\s\S]*?\*\//g, '' )
+					.replace( /\n{2,}/g, '\n' )
+			) + ';';
+		}
+	};
+}
+//
+// app.use('/ivs2.js', rollup.serve({
+//   entry: path.resolve(__dirname, 'app2', 'index.js'),
+//   plugins: [
+//     nodeResolve(),
+//     commonjs({
+//       include: 'node_modules/**',
+// 			exclude: [ 'node_modules/three/**' ]
+//     }),
+//     glsl()
+//   ]
+// }));
 
 
 //
@@ -37,42 +120,12 @@ app.set('port', 9877);
 // // Development
 // //
 //
-// var devPath = path.resolve(__dirname, 'development');
+var devPath = path.resolve(__dirname, 'development');
 //
-// app.use('/development', serveIndex(devPath));
-// app.use('/development', express.static(devPath));
+app.use('/development', serveIndex(devPath));
+app.use('/development', express.static(devPath));
 //
 // const spawn = require('child_process').spawn;
-//
-// const nodeResolve = require('rollup-plugin-node-resolve');
-// const commonjs = require('rollup-plugin-commonjs');
-
-// function glsl () {
-// 	return {
-// 		transform ( code, id ) {
-// 			if ( !/\.glsl$/.test( id ) ) return;
-//
-// 			return 'export default ' + JSON.stringify(
-// 				code
-// 					.replace( /[ \t]*\/\/.*\n/g, '' )
-// 					.replace( /[ \t]*\/\*[\s\S]*?\*\//g, '' )
-// 					.replace( /\n{2,}/g, '\n' )
-// 			) + ';';
-// 		}
-// 	};
-// }
-//
-// app.use('/ivs2.js', rollup.serve({
-//   entry: path.resolve(__dirname, 'app2', 'index.js'),
-//   plugins: [
-//     nodeResolve(),
-//     commonjs({
-//       include: 'node_modules/**',
-// 			exclude: [ 'node_modules/three/**' ]
-//     }),
-//     glsl()
-//   ]
-// }));
 
 // app.use('/ivs2.js', function(request, response) {
 //   const make = spawn('make', ['build2/ivs.js']);
