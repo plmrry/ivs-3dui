@@ -50,30 +50,6 @@ xs
     complete: () => {}
   });
 
-const dom_view$ = xs.of(
-  main([
-    canvas('.main'),
-    div('.controls#scene-controls', { style: { position: 'absolute', right: '0px', top: '0px'} }, [
-      butt('add', 'add'),
-      butt('select-one', 'select 1'),
-      butt('select-two', 'select 2'),
-      butt('select-none', 'select none')
-    ]),
-    div('.controls.file-controls', { style: { position: 'absolute', left: '0px', top: '0px' } }, [
-      button('.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, [
-        i('.material-icons', { style: { display: 'block' } }, 'volume_up')
-      ])
-    ]),
-    div('.controls.camera-controls', { style: { position: 'absolute', right: '0px', bottom: '10%' } }, [
-      button('#move-camera.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, 'move camera'),
-      button('.zoom.in.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, 'zoom in'),
-      button('.zoom.out.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, 'zoom out')
-    ])
-  ])
-);
-
-dom_proxy$.imitate(dom_view$);
-
 function Soundscape() { }
 
 const stop_adding_proxy$ = xs.create();
@@ -195,18 +171,47 @@ const add_object$ = adding_click$
     // console.log('ID', id);
     // const props$ = xs.of({ initial_position: point, id });
     return create_parent_object({
-      id, initial_position: point, dom$, tick$, select$
+      id, initial_position: point, dom$, tick$, select$, intersects$
     });
   });
 
 const parent_objects$ = add_object$
   .compose(combine_on_tick(tick$));
-  // .debug(p => {
-  //   console.log('parents')
-  //   if (p[0]) console.log(p[0].position);
-  // })
-  // .filter(a => a.length > 0)
-  // .addListener(logListener);
+
+const selected$ = parent_objects$
+  .map(a => a.filter(d => d.selected));
+
+const selected_view$ = selected$
+  .map(arr => arr.map(o => o.dom));
+
+const dom_view$ = xs
+  .merge(
+    selected_view$.startWith([])
+  )
+  .map(selected =>
+    main([
+      canvas('.main'),
+      div('.controls#scene-controls', { style: { position: 'absolute', right: '0px', top: '0px'} }, [
+        butt('add', 'add'),
+        butt('select-one', 'select 1'),
+        butt('select-two', 'select 2'),
+        butt('select-none', 'select none'),
+        div('.selected', selected)
+      ]),
+      div('.controls.file-controls', { style: { position: 'absolute', left: '0px', top: '0px' } }, [
+        button('.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, [
+          i('.material-icons', { style: { display: 'block' } }, 'volume_up')
+        ])
+      ]),
+      div('.controls.camera-controls', { style: { position: 'absolute', right: '0px', bottom: '10%' } }, [
+        button('#move-camera.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, 'move camera'),
+        button('.zoom.in.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, 'zoom in'),
+        button('.zoom.out.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, 'zoom out')
+      ])
+    ])
+  );
+
+dom_proxy$.imitate(dom_view$);
 
 const model$ = xs.combine(
     parent_objects$
@@ -220,18 +225,39 @@ const model$ = xs.combine(
 model_proxy$.imitate(model$);
 
 function create_parent_object({
-  id, initial_position, tick$, select$
+  id, initial_position, tick$, select$,
+  dom$, intersects$
 }) {
   const change_select$ = select$
     .map(target => target === id)
-    .debug(me => console.log('IS IT ME', me))
     .map(is_me => is_me ? (d => true) : (d => false));
+
   const selected$ = change_select$
     .fold((s, fn) => fn(s), false);
-    // .addListener(logListener);
+
   const color$ = selected$
     .map(s => s ? '#66c2ff' : '#aaaaaa')
     .map(c => new Color(c));
+
+  const add_traj_click$ = dom$
+    .select('button.add-trajectory')
+    .events('click');
+
+  intersects$
+    .map(o => o.intersects.map(i => i.object.name))
+    .addListener(logListener);
+
+  const stop_click$ = dom$.select('button.stop-moving')
+    .events('click');
+
+  const is_wobble$ = selected$
+    .map(s => stop_click$.map(stop => [s, stop]))
+    .flatten()
+    .filter(a => a[0] === true)
+    .fold(w => !w, true);
+
+  // const
+    // .map(e => v => new Vector3(0,0,0));
   // const position$ = xs.of(initial_position);
   // const position$ = positionReducer$
   //   .filter(o => o.id === id)
@@ -250,13 +276,39 @@ function create_parent_object({
     // .addListener(logListener());
   // const selected$ = select$
   //   .fold((acc, fn) => fn(acc), true);
+  // const
   const INITIAL_PARENT_Y = 2;
-  const velocity$ = tick$
+  const wobble$ = tick$
     .fold(x => x + 0.4, 0)
     .map(x => Math.sin(x))
     .compose(pairwise)
     .map(arr => arr[1] - arr[0])
-    .map(dx => { return new Vector3(dx, 0, 0); });
+    .map(dx => v => new Vector3(dx, 0, 0));
+
+  const do_wob$ = is_wobble$
+    .map(wob => wobble$.map(update => [wob, update]))
+    .flatten()
+    // .debug(d => console.log('web', d))
+    .filter(a => a[0])
+    .map(a => a[1]);
+    // .compose(up => is_wobble$.map(wob => [wob, up]))
+    // .flatten()
+    // .filter(a => a[0])
+    // .map(a => a[1]);
+  const velocity$ = xs
+    .merge(
+      do_wob$
+      // wobble$
+      // stop_me$
+    )
+    .fold((v, fn) => fn(v), new Vector3(0, 0, 0));
+  // const velocity$ = tick$
+  //   .fold(x => x + 0.4, 0)
+  //   .map(x => Math.sin(x))
+  //   .compose(pairwise)
+  //   .map(arr => arr[1] - arr[0])
+  //   .map(dx => v => new Vector3(dx, 0, 0))
+  //   .map(dx => { return new Vector3(dx, 0, 0); });
   const addVelocity$ = velocity$
     .map(velocity => position => {
       return (new Vector3()).addVectors(velocity, position);
@@ -266,14 +318,30 @@ function create_parent_object({
       addVelocity$
     )
     .fold((p, fn) => fn(p), initial_position.setY(INITIAL_PARENT_Y));
+  const view$ = xs
+    .combine(
+      position$
+    )
+    .map(([ position ]) =>
+      div('.whatever', {}, [
+        h4(`p.x:${position.x}`),
+        button('.add-trajectory', 'add trajectory'),
+        button('.stop-moving', 'stop moving')
+      ])
+    );
   const size$ = xs.of(1);
   return xs.combine(
     position$,
-    color$
-  ).map(([position, color]) => {
+    color$,
+    selected$,
+    view$
+  ).map(([position, color, selected, dom]) => {
     return {
+      id,
       position,
-      color
+      color,
+      selected,
+      dom
     };
   });
 }
@@ -359,6 +427,7 @@ function _Scene({ model$ }) {
     sphere.receiveShadow = true;
     sphere.name = `parent-sphere-${props.id}`;
     sphere._type = 'sphere';
+    sphere._id = props.id;
     return sphere;
   }
   function get_initial_state() {
@@ -632,8 +701,10 @@ function Camera({ window_size$, dom$, scene$ }) {
   }
   // const is_birds_eye$ = latitude$.map(lat => lat > 85);
   const click_add$ = dom$.select('button#add').events('click');
+  const other_add$ = dom$.select('button.add-trajectory').events('click');
+  const add$ = xs.merge(click_add$, other_add$);
   latitude$
-    .map(lat => click_add$.map(event => lat))
+    .map(lat => add$.map(event => lat))
     .flatten()
     .filter(lat => lat < 85)
     .compose(s => to_birds_eye_proxy$.imitate(s));
