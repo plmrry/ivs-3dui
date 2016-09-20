@@ -2,17 +2,19 @@
 /* global console */
 
 import {
-  Scene, xs, pairwise, xstreamAdapter,
-  WebGLRenderer, PCFSoftShadowMap,
+  makeDOMDriver, span, h1, h4, h6, div, button, main, i, canvas
+} from '@cycle/dom';
+import xs from 'xstream';
+import pairwise from 'xstream/extra/pairwise';
+import xstreamAdapter from '@cycle/xstream-adapter';
+import {
+  BoxBufferGeometry, MeshBasicMaterial, SphereGeometry,
+  Object3D, WebGLRenderer, PCFSoftShadowMap,
   PerspectiveCamera, HemisphereLight,
   PlaneGeometry, MeshPhongMaterial,
   Color, DoubleSide, Mesh,
-  GridHelper, SpotLight, Vector3, Raycaster
-} from 'bundle';
-import { makeDOMDriver, h1, h4, div, button, main, i, canvas } from '@cycle/dom';
-import {
-  BoxBufferGeometry, MeshBasicMaterial, SphereGeometry,
-  Object3D
+  GridHelper, SpotLight, Vector3, Raycaster,
+  Scene
 } from 'three/src/Three.js';
 import * as d3 from 'd3';
 
@@ -150,32 +152,25 @@ const tick$ = xs.create({
   }, Date.now())
   .compose(pairwise)
   .filter(arr => arr[1] > arr[0]);
-  // .addListener(logListener);
-
-// const positionReducer
 
 const add_object$ = adding_click$
-//   .filter(arr => arr[0] === true)
   .map(([adding, events]) => events[1])
   .map(o => o.floorArray)
   .filter(a => a.length)
-  .map(a => a[0].point)
-//   .map(event_to_ndc)
-//   // .map(all_intersects(raycaster, camera, scene))
-//   .map(arr => arr.filter(d => d.object.name === 'floor'))
-//   // TODO: What if floor not found?
-//   .map(arr => arr[0].point)
+  .map(a => a[0].point);
+
+const new_object$ = add_object$
   .map(point => {
-    // id++;
     id = id + 1;
-    // console.log('ID', id);
-    // const props$ = xs.of({ initial_position: point, id });
-    return create_parent_object({
-      id, initial_position: point, dom$, tick$, select$, intersects$
-    });
+    return ParentObject({ id, initial_position: point, dom$ });
   });
 
-const parent_objects$ = add_object$
+const parent_objects$ = new_object$
+  .map(o => o.model$)
+  .compose(combine_on_tick(tick$));
+
+const parent_dom$ = new_object$
+  .map(o => o.dom$)
   .compose(combine_on_tick(tick$));
 
 const selected$ = parent_objects$
@@ -186,17 +181,21 @@ const selected_view$ = selected$
 
 const dom_view$ = xs
   .merge(
-    selected_view$.startWith([])
+    // selected_view$.startWith([])
+    parent_dom$.startWith([])
   )
-  .map(selected =>
+  .map(parents =>
     main([
       canvas('.main'),
-      div('.controls#scene-controls', { style: { position: 'absolute', right: '0px', top: '0px'} }, [
-        butt('add', 'add'),
-        butt('select-one', 'select 1'),
-        butt('select-two', 'select 2'),
-        butt('select-none', 'select none'),
-        div('.selected', selected)
+      div('.controls.scene-controls', { style: { position: 'absolute', right: '0px', top: '0px'} }, [
+        div('.row.buttons', [
+          butt('add', 'add'),
+          butt('select-one', 'select 1'),
+          butt('select-two', 'select 2'),
+          butt('select-none', 'select none')
+        ]),
+        div('.selected', parents)
+        // div('.selected', [ h1('whoa'), null, h1('bow'), h1('wow') ])
       ]),
       div('.controls.file-controls', { style: { position: 'absolute', left: '0px', top: '0px' } }, [
         button('.btn.btn-lg.btn-secondary', { style: { border: 'none', background: 'none' } }, [
@@ -224,139 +223,108 @@ const model$ = xs.combine(
 
 model_proxy$.imitate(model$);
 
-function create_parent_object({
-  id, initial_position, tick$, select$,
-  dom$, intersects$
-}) {
-  const change_select$ = select$
-    .map(target => target === id)
-    .map(is_me => is_me ? (d => true) : (d => false));
+function ParentObject({ id, initial_position, tick$, select$, dom$, intersects$ }) {
+  const format_num = d3.format(".1f");
 
-  const selected$ = change_select$
-    .fold((s, fn) => fn(s), false);
+  const selected$ = xs.of(true);
+  const mouse$ = ['mousedown', 'mouseup', 'mousemove']
+    .map(ev => dom$.select('span.value').events(ev))
+    .reduce((a, b) => xs.merge(a,b));
 
-  const color$ = selected$
-    .map(s => s ? '#66c2ff' : '#aaaaaa')
-    .map(c => new Color(c));
-
-  const add_traj_click$ = dom$
-    .select('button.add-trajectory')
-    .events('click');
-
-  intersects$
-    .map(o => o.intersects.map(i => i.object.name))
-    .addListener(logListener);
-
-  const stop_click$ = dom$.select('button.stop-moving')
-    .events('click');
-
-  const is_wobble$ = selected$
-    .map(s => stop_click$.map(stop => [s, stop]))
+  const selected_mouse$ = selected$
+    .map(s => mouse$.map(m => [s,m]))
     .flatten()
-    .filter(a => a[0] === true)
-    .fold(w => !w, true);
-
-  // const
-    // .map(e => v => new Vector3(0,0,0));
-  // const position$ = xs.of(initial_position);
-  // const position$ = positionReducer$
-  //   .filter(o => o.id === id)
-  //   .map(o => o.positionReducer)
-  //   .fold((p, fn) => fn(p), initial_position);
-  // const selected$ = select$
-  //   .fold((acc, fn) => fn(acc), false);
-  // position$
-  //   .map(o => o.x)
-  //   .debug(debug('REDUCE'))
-  //   .addListener(logListener())
-    // .filter(o => o.id === id)
-    // .map(o => o.positionReducer)
-    // .debug(debug('REDUCE'))
-    // .fold((p, fn) => fn(p), initial_position);
-    // .addListener(logListener());
-  // const selected$ = select$
-  //   .fold((acc, fn) => fn(acc), true);
-  // const
-  const INITIAL_PARENT_Y = 2;
-  const wobble$ = tick$
-    .fold(x => x + 0.4, 0)
-    .map(x => Math.sin(x))
-    .compose(pairwise)
-    .map(arr => arr[1] - arr[0])
-    .map(dx => v => new Vector3(dx, 0, 0));
-
-  const do_wob$ = is_wobble$
-    .map(wob => wobble$.map(update => [wob, update]))
-    .flatten()
-    // .debug(d => console.log('web', d))
     .filter(a => a[0])
     .map(a => a[1]);
-    // .compose(up => is_wobble$.map(wob => [wob, up]))
-    // .flatten()
-    // .filter(a => a[0])
-    // .map(a => a[1]);
-  const velocity$ = xs
-    .merge(
-      do_wob$
-      // wobble$
-      // stop_me$
+
+  const value_drag$ = selected_mouse$
+    .filter(e => e.type === 'mousedown')
+    .map(span_event => dom$.select(':root')
+      .events('mousemove')
+      .map(e => e.clientX)
+      .compose(pairwise)
+      .map(a => {
+        return {
+          dx: a[1] - a[0],
+          target: span_event.target
+        };
+      })
+      .endWhen(dom$.select(':root').events('mouseup'))
     )
-    .fold((v, fn) => fn(v), new Vector3(0, 0, 0));
-  // const velocity$ = tick$
-  //   .fold(x => x + 0.4, 0)
-  //   .map(x => Math.sin(x))
-  //   .compose(pairwise)
-  //   .map(arr => arr[1] - arr[0])
-  //   .map(dx => v => new Vector3(dx, 0, 0))
-  //   .map(dx => { return new Vector3(dx, 0, 0); });
-  const addVelocity$ = velocity$
-    .map(velocity => position => {
-      return (new Vector3()).addVectors(velocity, position);
-    });
+    .flatten();
+
+  function position_updater(dim, func) {
+    const setFunc = `set${dim.toUpperCase()}`;
+    return function(input$) {
+      return input$
+        .filter(o => o.target.classList.contains('position'))
+        .filter(o => o.target.classList.contains(dim))
+        .map(o => o.dx)
+        .map(dx => dx * 0.05)
+        .map(d => position => (new Vector3())[setFunc](d).add(position));
+    };
+  }
+
   const position$ = xs
     .merge(
-      addVelocity$
+      value_drag$.compose(position_updater('x')),
+      value_drag$.compose(position_updater('y')),
+      value_drag$.compose(position_updater('z'))
     )
-    .fold((p, fn) => fn(p), initial_position.setY(INITIAL_PARENT_Y));
-  const view$ = xs
-    .combine(
-      position$
-    )
-    .map(([ position ]) =>
-      div('.whatever', {}, [
-        h4(`p.x:${position.x}`),
-        button('.add-trajectory', 'add trajectory'),
-        button('.stop-moving', 'stop moving')
-      ])
-    );
-  const size$ = xs.of(1);
-  return xs.combine(
-    position$,
-    color$,
-    selected$,
-    view$
-  ).map(([position, color, selected, dom]) => {
-    return {
-      id,
+    .fold((p, fn) => fn(p), initial_position);
+
+  const model$ = xs.combine(position$)
+    .map(([ position ]) => ({
       position,
-      color,
-      selected,
-      dom
-    };
-  });
+      _type: 'parent-object',
+      _id: id
+    }));
+
+  function key(k, klass='.column.col-xs-3') {
+    return div(klass, [
+      span('.key', k)
+    ]);
+  }
+
+  function value(
+    spanClass, val, divClass='.column.col-xs-3', style={ cursor: 'ew-resize'}
+  ) {
+    return div(divClass, [
+      span(spanClass, { style }, val)
+    ]);
+  }
+
+  const view$ = xs.combine(selected$, model$)
+    .map(([selected, model]) => {
+      if (selected === false) {
+        return null;
+      }
+      else {
+        return div('.card', [
+          div('.card-block',
+            [h6('.card-title', `Parent ${model._id}`)]
+              .concat(['x','y','z'].map(d => div('.row.parameter', [
+                key(d),
+                value(`.position.${d}.value`, format_num(model.position[d]))
+              ])))
+          )
+        ]);
+      }
+    });
+  return {
+    model$,
+    dom$: view$
+  };
 }
 
 function combine_on_tick(tick$) {
-  return function combine(add_object$) {
+  return function combine(input$) {
     const parents = [];
-    add_object$.addListener({
+    input$.addListener({
       next: parent$ => {
         const index = parents.length;
         parent$.addListener({
-          next: obj => {
-            // console.log('FOOB', obj.position.x)
-            parents[index] = obj;
-          },
+          next: obj => parents[index] = obj,
           error: e => console.error(e),
           complete: () => {}
         });
@@ -388,15 +356,17 @@ function _Scene({ model$ }) {
     new_state.parents.forEach((new_parent, index) => {
       let parent;
       if (state.parents.has(index) === false) {
-        parent = new_parent_object(new_parent);
+        const parent = new_parent_object(new_parent);
         state.parents.set(index, parent);
         state.scene.add(parent);
       }
-      else parent = state.parents.get(index);
+      else {
+        const parent = state.parents.get(index);
+        parent.position.copy(new_parent.position);
+      }
+      // const sphere = parent.getObjectByProperty('_type', 'sphere');
 
-      const sphere = parent.getObjectByProperty('_type', 'sphere');
-      parent.position.copy(new_parent.position);
-      sphere.material.color = new_parent.color;
+      // sphere.material.color = new_parent.color;
 
     });
     return state;
@@ -407,12 +377,15 @@ function _Scene({ model$ }) {
       wireframe: true,
       color: 0xff0000
     });
-    // const parentObject = new Mesh( geometry, material );
+    const parentObject3D = new Mesh( geometry, material );
+    parentObject3D.position.copy(parent.position);
+    parentObject3D._type = parent._type;
+    parentObject3D._id = parent._id;
     // const parentObject = new Mesh();
-    const parentObject = new Object3D();
-    parentObject.name = `parent-object-${parent.id}`;
-    parentObject.add(new_object_sphere(parent));
-    return parentObject;
+    // const parentObject = new Object3D();
+    // parentObject.name = `parent-object-${parent.id}`;
+    // parentObject.add(new_object_sphere(parent));
+    return parentObject3D;
   }
   function new_object_sphere(props) {
     const geometry = new SphereGeometry(1, 30, 30);
@@ -568,6 +541,7 @@ function Camera({ window_size$, dom$, scene$ }) {
       return nu <= 0 ? radius : nu;
     });
 
+  // TODO: Make this into a function
   const orbit_delta$ = dom$.select('#move-camera')
     .events('mousedown')
     .map(start => dom$.select(':root')
@@ -784,7 +758,127 @@ function event_to_ndc(event) {
 }
 
 // console.log(dom$);
-
+// function create_parent_object({
+//   id, initial_position, tick$, select$,
+//   dom$, intersects$
+// }) {
+//   const change_select$ = select$
+//     .map(target => target === id)
+//     .map(is_me => is_me ? (d => true) : (d => false));
+//
+//   const selected$ = change_select$
+//     .fold((s, fn) => fn(s), false);
+//
+//   const color$ = selected$
+//     .map(s => s ? '#66c2ff' : '#aaaaaa')
+//     .map(c => new Color(c));
+//
+//   const add_traj_click$ = dom$
+//     .select('button.add-trajectory')
+//     .events('click');
+//
+//   intersects$
+//     .map(o => o.intersects.map(i => i.object.name))
+//     .addListener(logListener);
+//
+//   const stop_click$ = dom$.select('button.stop-moving')
+//     .events('click');
+//
+//   const is_wobble$ = selected$
+//     .map(s => stop_click$.map(stop => [s, stop]))
+//     .flatten()
+//     .filter(a => a[0] === true)
+//     .fold(w => !w, true);
+//
+//   // const
+//     // .map(e => v => new Vector3(0,0,0));
+//   // const position$ = xs.of(initial_position);
+//   // const position$ = positionReducer$
+//   //   .filter(o => o.id === id)
+//   //   .map(o => o.positionReducer)
+//   //   .fold((p, fn) => fn(p), initial_position);
+//   // const selected$ = select$
+//   //   .fold((acc, fn) => fn(acc), false);
+//   // position$
+//   //   .map(o => o.x)
+//   //   .debug(debug('REDUCE'))
+//   //   .addListener(logListener())
+//     // .filter(o => o.id === id)
+//     // .map(o => o.positionReducer)
+//     // .debug(debug('REDUCE'))
+//     // .fold((p, fn) => fn(p), initial_position);
+//     // .addListener(logListener());
+//   // const selected$ = select$
+//   //   .fold((acc, fn) => fn(acc), true);
+//   // const
+//   const INITIAL_PARENT_Y = 2;
+//   const wobble$ = tick$
+//     .fold(x => x + 0.4, 0)
+//     .map(x => Math.sin(x))
+//     .compose(pairwise)
+//     .map(arr => arr[1] - arr[0])
+//     .map(dx => v => new Vector3(dx, 0, 0));
+//
+//   const do_wob$ = is_wobble$
+//     .map(wob => wobble$.map(update => [wob, update]))
+//     .flatten()
+//     // .debug(d => console.log('web', d))
+//     .filter(a => a[0])
+//     .map(a => a[1]);
+//     // .compose(up => is_wobble$.map(wob => [wob, up]))
+//     // .flatten()
+//     // .filter(a => a[0])
+//     // .map(a => a[1]);
+//   const velocity$ = xs
+//     .merge(
+//       do_wob$
+//       // wobble$
+//       // stop_me$
+//     )
+//     .fold((v, fn) => fn(v), new Vector3(0, 0, 0));
+//   // const velocity$ = tick$
+//   //   .fold(x => x + 0.4, 0)
+//   //   .map(x => Math.sin(x))
+//   //   .compose(pairwise)
+//   //   .map(arr => arr[1] - arr[0])
+//   //   .map(dx => v => new Vector3(dx, 0, 0))
+//   //   .map(dx => { return new Vector3(dx, 0, 0); });
+//   const addVelocity$ = velocity$
+//     .map(velocity => position => {
+//       return (new Vector3()).addVectors(velocity, position);
+//     });
+//   const position$ = xs
+//     .merge(
+//       addVelocity$
+//     )
+//     .fold((p, fn) => fn(p), initial_position.setY(INITIAL_PARENT_Y));
+//   const view$ = xs
+//     .combine(
+//       position$
+//     )
+//     .map(([ position ]) =>
+//       div('.whatever', {}, [
+//         h4(`p.x:${position.x}`),
+//         button('.add-trajectory', 'add trajectory'),
+//         button('.stop-moving', 'stop moving')
+//       ])
+//     );
+//   const size$ = xs.of(1);
+//   return xs.combine(
+//     position$,
+//     color$,
+//     selected$,
+//     view$
+//   ).map(([position, color, selected, dom]) => {
+//     return {
+//       id,
+//       position,
+//       color,
+//       selected,
+//       dom
+//     };
+//   });
+// }
 
 
 // console.log(dom_source$.select('canvas.main').elements().addListener);
